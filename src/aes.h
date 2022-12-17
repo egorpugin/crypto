@@ -241,7 +241,9 @@ struct aes_base : aes_data {
     static inline constexpr unsigned int Nb = 4;
     static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
 
-    void SubBytes(unsigned char state[4][Nb]) {
+    using state_type = unsigned char[4][Nb];
+
+    void SubBytes(state_type state) {
         unsigned int i, j;
         unsigned char t;
         for (i = 0; i < 4; i++) {
@@ -252,14 +254,14 @@ struct aes_base : aes_data {
         }
     }
     // shift row i on n positions
-    void ShiftRow(unsigned char state[4][Nb], unsigned int i, unsigned int n) {
+    void ShiftRow(state_type state, unsigned int i, unsigned int n) {
         unsigned char tmp[Nb];
         for (unsigned int j = 0; j < Nb; j++) {
             tmp[j] = state[i][(j + n) % Nb];
         }
         memcpy(state[i], tmp, Nb * sizeof(unsigned char));
     }
-    void ShiftRows(unsigned char state[4][Nb]) {
+    void ShiftRows(state_type state) {
         ShiftRow(state, 1, 1);
         ShiftRow(state, 2, 2);
         ShiftRow(state, 3, 3);
@@ -267,8 +269,8 @@ struct aes_base : aes_data {
     unsigned char xtime(unsigned char b) {
         return (b << 1) ^ (((b >> 7) & 1) * 0x1b);
     }
-    void MixColumns(unsigned char state[4][Nb]) {
-        unsigned char temp_state[4][Nb]{};
+    void MixColumns(state_type state) {
+        state_type temp_state{};
         for (size_t i = 0; i < 4; ++i) {
             for (size_t k = 0; k < 4; ++k) {
                 for (size_t j = 0; j < 4; ++j) {
@@ -283,7 +285,7 @@ struct aes_base : aes_data {
             memcpy(state[i], temp_state[i], 4);
         }
     }
-    void AddRoundKey(unsigned char state[4][Nb], unsigned char *key) {
+    void AddRoundKey(state_type state, unsigned char *key) {
         unsigned int i, j;
         for (i = 0; i < 4; i++) {
             for (j = 0; j < Nb; j++) {
@@ -318,7 +320,7 @@ struct aes_base : aes_data {
         a[0] = c;
         a[1] = a[2] = a[3] = 0;
     }
-    void InvSubBytes(unsigned char state[4][Nb]) {
+    void InvSubBytes(state_type state) {
         unsigned int i, j;
         unsigned char t;
         for (i = 0; i < 4; i++) {
@@ -328,8 +330,8 @@ struct aes_base : aes_data {
             }
         }
     }
-    void InvMixColumns(unsigned char state[4][Nb]) {
-        unsigned char temp_state[4][Nb]{};
+    void InvMixColumns(state_type state) {
+        state_type temp_state{};
         for (size_t i = 0; i < 4; ++i) {
             for (size_t k = 0; k < 4; ++k) {
                 for (size_t j = 0; j < 4; ++j) {
@@ -341,7 +343,7 @@ struct aes_base : aes_data {
             memcpy(state[i], temp_state[i], 4);
         }
     }
-    void InvShiftRows(unsigned char state[4][Nb]) {
+    void InvShiftRows(state_type state) {
         ShiftRow(state, 1, Nb - 1);
         ShiftRow(state, 2, Nb - 2);
         ShiftRow(state, 3, Nb - 3);
@@ -380,7 +382,7 @@ struct aes_base : aes_data {
         }
     }
     void EncryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) {
-        unsigned char state[4][Nb];
+        state_type state;
         unsigned int i, j, round;
 
         for (i = 0; i < 4; i++) {
@@ -409,7 +411,7 @@ struct aes_base : aes_data {
         }
     }
     void DecryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) {
-        unsigned char state[4][Nb];
+        state_type state;
         unsigned int i, j, round;
 
         for (i = 0; i < 4; i++) {
