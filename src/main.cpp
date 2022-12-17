@@ -60,50 +60,58 @@ int main() {
         }
     }
 
-    auto to_string = [](auto &&digest) {
+    auto to_string = [](auto &&sha) {
+        auto digest = sha.digest();
         std::span<uint8_t> d{(uint8_t*)digest.data(), digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
         std::stringstream s;
         s << std::setfill('0') << std::hex;
         for (auto &&v : d) {
             s << std::setw(2) << (unsigned int)v;
         }
-        std::cout << s.str() << "\n";
+        printf("%s\n", s.str().c_str());
+        //std::cout << s.str() << "\n";
         return s.str();
     };
 
     {
+        sha2<512,224> sha;
+        sha.update(0,0);
+        to_string(sha);
+    }
+
+    {
         sha2<224> sha;
         sha.update(0,0);
-        to_string(sha.digest());
+        to_string(sha);
     }
     {
         sha2<256> sha;
         sha.update(0,0);
-        to_string(sha.digest());
+        to_string(sha);
     }
     {
         sha2<384> sha;
         sha.update(0,0);
-        to_string(sha.digest());
+        to_string(sha);
     }
     {
         sha2<512> sha;
         sha.update(0,0);
-        to_string(sha.digest());
+        to_string(sha);
     }
     {
         sha2<512,224> sha;
         sha.update(0,0);
-        to_string(sha.digest());
+        to_string(sha);
     }
     {
-        /*sha2<512,256> sha;
+        sha2<512,256> sha;
         sha.update(0,0);
-        to_string(sha.digest());*/
+        to_string(sha);
     }
-    {
+    /*{
         sha2<512> sha;
         sha.update((uint8_t*)"abc",3);
-        to_string(sha.digest());
-    }
+        to_string(sha);
+    }*/
 }
