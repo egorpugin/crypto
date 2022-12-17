@@ -252,11 +252,11 @@ enum class AESKeyLength {
     AES_128, AES_192, AES_256
 };
 
-template <auto KeyLength, auto ...>
+template <auto KeyLength, typename Key, auto ...>
 struct aes;
 
-template <auto KeyLength, auto Nk, auto Nr>
-struct aes<KeyLength, Nk, Nr> {
+template <auto KeyLength, typename Key, auto Nk, auto Nr>
+struct aes<KeyLength, Key, Nk, Nr> {
     static inline constexpr unsigned int Nb = 4;
     static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
     static inline constexpr unsigned int key_size_bytes = KeyLength / 8;
@@ -499,32 +499,19 @@ struct aes<KeyLength, Nk, Nr> {
         return a.data();
     }
 
-    key k;
+    Key &k;
     unsigned char roundKeys[4 * Nb * (Nr + 1)];
 
 public:
-    explicit aes(auto &&k) : k{k} {
+    explicit aes(Key &k) : k{k} {
         KeyExpansion(k, roundKeys);
     }
 
-    block EncryptECB(block b) {
-        block out;
-        EncryptBlock(b, out, roundKeys);
-        return out;
+    void EncryptECB(auto &&in, auto &&out) {
+        EncryptBlock(in, out, roundKeys);
     }
-    unsigned char *DecryptECB(const unsigned char in[], unsigned int inLen,
-                              const unsigned char key[]) {
-        check_length(inLen);
-        unsigned char *out = new unsigned char[inLen];
-        unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
-        KeyExpansion(key, roundKeys);
-        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
-            DecryptBlock(in + i, out + i, roundKeys);
-        }
-
-        delete[] roundKeys;
-
-        return out;
+    void DecryptECB(auto &&in, auto &&out) {
+        DecryptBlock(in, out, roundKeys);
     }
     unsigned char *EncryptCBC(const unsigned char in[], unsigned int inLen,
                               const unsigned char key[], const unsigned char *iv) {
@@ -664,11 +651,16 @@ public:
     }
 };
 
-template <>
-struct aes<128> : aes<128,4,10> {};
-template <>
-struct aes<192> : aes<192,6,12> {};
-template <>
-struct aes<256> : aes<256,8,14> {};
+template <typename Key>
+struct aes<128,Key> : aes<128,Key,4,10> {};
+template <typename Key>
+struct aes<192,Key> : aes<192,Key,6,12> {};
+template <typename Key>
+struct aes<256,Key> : aes<256,Key,8,14> {
+    using aes<256,Key,8,14>::aes;
+};
+
+template <typename Key>
+aes(Key&&) -> aes<256,Key>;
 
 } // namespace aes

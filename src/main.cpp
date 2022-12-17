@@ -14,10 +14,14 @@ int main() {
     unsigned char right[] = {0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf,
                              0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49, 0x60, 0x89};
 
-    aes<256> aes{key};
-    auto out = aes.EncryptECB(plain);
-    auto r = memcmp(right, out, BLOCK_BYTES_LENGTH);
-    delete[] out;
+    unsigned char out[16];
+    unsigned char out2[16];
+
+    aes aes{key};
+    aes.EncryptECB(plain, out);
+    auto r = memcmp(right, out, decltype(aes)::block_size_bytes);
+    aes.DecryptECB(out, out2);
+    r |= memcmp(plain, out2, decltype(aes)::block_size_bytes);
 
     return 0;
 }
