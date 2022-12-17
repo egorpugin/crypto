@@ -88,8 +88,8 @@ struct sha2_base {
 
 protected:
     uint8_t m_data[Params.chunk_size_bytes()];
-    uint32_t m_blocklen{};
-    uint64_t m_bitlen{};
+    State m_blocklen{};
+    std::conditional_t<sizeof(State) == 4, uint64_t, unsigned __int128> m_bitlen{};
     std::array<State, 8> h;
 
     static State choose(State e, State f, State g) {
@@ -150,15 +150,15 @@ protected:
         }
     }
     void pad() {
-        uint64_t i = m_blocklen;
+        auto i = m_blocklen;
         constexpr auto padding_size = Params.chunk_size_bytes();
         constexpr auto bigint_size = padding_size / 8;
         constexpr auto padding_minus_bigint = padding_size - bigint_size;
         uint8_t end = m_blocklen < padding_minus_bigint ? padding_minus_bigint : padding_size;
 
-        m_data[i++] = 0x80; // Append a bit 1
+        m_data[i++] = 0x80;
         while (i < end) {
-            m_data[i++] = 0x00; // Pad with zeros
+            m_data[i++] = 0x00;
         }
         if (m_blocklen >= padding_minus_bigint) {
             transform();
@@ -167,11 +167,8 @@ protected:
 
         // Append to the padding the total message's length in bits and transform.
         m_bitlen += m_blocklen * 8;
-        for (int i = 0; i < bigint_size - sizeof(m_bitlen); ++i) {
+        for (int i = 0; i < bigint_size; ++i) {
             m_data[padding_size - i - 1] = m_bitlen >> (i * 8);
-        }
-        for (int i = 8; i < sizeof(m_bitlen) + 8; ++i) {
-            m_data[padding_size - i - 1] = 0;
         }
         transform();
     }
@@ -179,11 +176,6 @@ protected:
         for (uint8_t i = 0; i < len; i++) {
             *(State*)(hash + i * sizeof(State)) = std::byteswap(h[i]);
         }
-        /*for (uint8_t i = 0; i < sizeof(State); i++) {
-            for(uint8_t j = 0; j < len; j++) {
-                hash[i + (j * sizeof(State))] = (h[j] >> (sizeof(State) * 8 - 8 - i * 8)) & 0xff;
-            }
-        }*/
     }
 };
 
