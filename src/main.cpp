@@ -17,11 +17,14 @@ int main() {
     unsigned char out[16];
     unsigned char out2[16];
 
-    aes aes{key};
+    aes<256> aes{key};
     aes.EncryptECB(plain, out);
     auto r = memcmp(right, out, decltype(aes)::block_size_bytes);
     aes.DecryptECB(out, out2);
     r |= memcmp(plain, out2, decltype(aes)::block_size_bytes);
+
+    unsigned char iv[16] = {0};
+    aes.EncryptCBC(plain, iv, out);
 
     return 0;
 }

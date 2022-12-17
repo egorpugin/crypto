@@ -2,8 +2,6 @@
 
 #include <array>
 #include <cstring>
-#include <stdexcept>
-#include <vector>
 
 namespace crypto {
 
@@ -252,19 +250,14 @@ enum class AESKeyLength {
     AES_128, AES_192, AES_256
 };
 
-template <auto KeyLength, typename Key, auto ...>
-struct aes;
-
-template <auto KeyLength, typename Key, auto Nk, auto Nr>
-struct aes<KeyLength, Key, Nk, Nr> {
+template <auto Nk, auto Nr>
+struct aes_base {
     static inline constexpr unsigned int Nb = 4;
     static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
-    static inline constexpr unsigned int key_size_bytes = KeyLength / 8;
 
     // use gnu vec?
-    template <auto N> using array = std::array<unsigned char, N>;
-    using key = array<key_size_bytes>;
-    using block = array<block_size_bytes>;
+    //template <auto N> using array = std::array<unsigned char, N>;
+    //using block = array<block_size_bytes>;
 
     void SubBytes(unsigned char state[4][Nb]){
         unsigned int i, j;
@@ -276,9 +269,9 @@ struct aes<KeyLength, Key, Nk, Nr> {
             }
         }
     }
+    // shift row i on n positions
     void ShiftRow(unsigned char state[4][Nb], unsigned int i,
-                  unsigned int n)  // shift row i on n positions
-    {
+                  unsigned int n) {
         unsigned char tmp[Nb];
         for (unsigned int j = 0; j < Nb; j++) {
             tmp[j] = state[i][(j + n) % Nb];
@@ -337,8 +330,7 @@ struct aes<KeyLength, Key, Nk, Nr> {
         a[3] = c;
     }
     void XorWords(unsigned char *a, unsigned char *b, unsigned char *c) {
-        int i;
-        for (i = 0; i < 4; i++) {
+        for (int i = 0; i < 4; i++) {
             c[i] = a[i] ^ b[i];
         }
     }
@@ -385,12 +377,6 @@ struct aes<KeyLength, Key, Nk, Nr> {
         ShiftRow(state, 1, Nb - 1);
         ShiftRow(state, 2, Nb - 2);
         ShiftRow(state, 3, Nb - 3);
-    }
-    void check_length(unsigned int len) {
-        if (len % block_size_bytes != 0) {
-            throw std::length_error("Plaintext length must be divisible by " +
-                                    std::to_string(block_size_bytes));
-        }
     }
     void KeyExpansion(const unsigned char key[], unsigned char w[]) {
         unsigned char temp[4];
@@ -491,49 +477,32 @@ struct aes<KeyLength, Key, Nk, Nr> {
             c[i] = a[i] ^ b[i];
         }
     }
-    std::vector<unsigned char> ArrayToVector(unsigned char *a, unsigned int len) {
-        std::vector<unsigned char> v(a, a + len * sizeof(unsigned char));
-        return v;
-    }
-    unsigned char *VectorToArray(std::vector<unsigned char> &a) {
-        return a.data();
-    }
 
-    Key &k;
     unsigned char roundKeys[4 * Nb * (Nr + 1)];
+};
 
-public:
-    explicit aes(Key &k) : k{k} {
-        KeyExpansion(k, roundKeys);
+template <auto KeyLength, auto ...>
+struct aes;
+
+template <auto KeyLength, auto Nk, auto Nr>
+struct aes<KeyLength, Nk, Nr> : aes_base<Nk, Nr> {
+    explicit aes(auto &&k) {
+        this->KeyExpansion(k, this->roundKeys);
     }
 
     void EncryptECB(auto &&in, auto &&out) {
-        EncryptBlock(in, out, roundKeys);
+        this->EncryptBlock(in, out, this->roundKeys);
     }
     void DecryptECB(auto &&in, auto &&out) {
-        DecryptBlock(in, out, roundKeys);
+        this->DecryptBlock(in, out, this->roundKeys);
     }
-    unsigned char *EncryptCBC(const unsigned char in[], unsigned int inLen,
-                              const unsigned char key[], const unsigned char *iv) {
-        check_length(inLen);
-        unsigned char *out = new unsigned char[inLen];
-        unsigned char block[block_size_bytes];
-        unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
-        KeyExpansion(key, roundKeys);
-        memcpy(block, iv, block_size_bytes);
-        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
-            XorBlocks(block, in + i, block, block_size_bytes);
-            EncryptBlock(block, out + i, roundKeys);
-            memcpy(block, out + i, block_size_bytes);
-        }
-
-        delete[] roundKeys;
-
-        return out;
+    void EncryptCBC(auto &&in, auto &&iv, auto &&out) {
+        this->XorBlocks(iv, in, iv, this->block_size_bytes);
+        this->EncryptBlock(iv, out, this->roundKeys);
+        //iv = out;
     }
-    unsigned char *DecryptCBC(const unsigned char in[], unsigned int inLen,
+    /*unsigned char *DecryptCBC(const unsigned char in[], unsigned int inLen,
                               const unsigned char key[], const unsigned char *iv) {
-        check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
         unsigned char block[block_size_bytes];
         unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
@@ -551,7 +520,6 @@ public:
     }
     unsigned char *EncryptCFB(const unsigned char in[], unsigned int inLen,
                               const unsigned char key[], const unsigned char *iv) {
-        check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
         unsigned char block[block_size_bytes];
         unsigned char encryptedBlock[block_size_bytes];
@@ -570,7 +538,6 @@ public:
     }
     unsigned char *DecryptCFB(const unsigned char in[], unsigned int inLen,
                               const unsigned char key[], const unsigned char *iv) {
-        check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
         unsigned char block[block_size_bytes];
         unsigned char encryptedBlock[block_size_bytes];
@@ -586,81 +553,20 @@ public:
         delete[] roundKeys;
 
         return out;
-    }
-    std::vector<unsigned char> EncryptECB(std::vector<unsigned char> in,
-                                          std::vector<unsigned char> key) {
-        unsigned char *out = EncryptECB(VectorToArray(in), (unsigned int) in.size(),
-                                        VectorToArray(key));
-        std::vector<unsigned char> v = ArrayToVector(out, in.size());
-        delete[] out;
-        return v;
-    }
-    std::vector<unsigned char> DecryptECB(std::vector<unsigned char> in,
-                                          std::vector<unsigned char> key) {
-        unsigned char *out = DecryptECB(VectorToArray(in), (unsigned int) in.size(),
-                                        VectorToArray(key));
-        std::vector<unsigned char> v = ArrayToVector(out, (unsigned int) in.size());
-        delete[] out;
-        return v;
-    }
-    std::vector<unsigned char> EncryptCBC(std::vector<unsigned char> in,
-                                          std::vector<unsigned char> key,
-                                          std::vector<unsigned char> iv) {
-        unsigned char *out = EncryptCBC(VectorToArray(in), (unsigned int) in.size(),
-                                        VectorToArray(key), VectorToArray(iv));
-        std::vector<unsigned char> v = ArrayToVector(out, in.size());
-        delete[] out;
-        return v;
-    }
-    std::vector<unsigned char> DecryptCBC(std::vector<unsigned char> in,
-                                          std::vector<unsigned char> key,
-                                          std::vector<unsigned char> iv) {
-        unsigned char *out = DecryptCBC(VectorToArray(in), (unsigned int) in.size(),
-                                        VectorToArray(key), VectorToArray(iv));
-        std::vector<unsigned char> v = ArrayToVector(out, (unsigned int) in.size());
-        delete[] out;
-        return v;
-    }
-    std::vector<unsigned char> EncryptCFB(std::vector<unsigned char> in,
-                                          std::vector<unsigned char> key,
-                                          std::vector<unsigned char> iv) {
-        unsigned char *out = EncryptCFB(VectorToArray(in), (unsigned int) in.size(),
-                                        VectorToArray(key), VectorToArray(iv));
-        std::vector<unsigned char> v = ArrayToVector(out, in.size());
-        delete[] out;
-        return v;
-    }
-    std::vector<unsigned char> DecryptCFB(std::vector<unsigned char> in,
-                                          std::vector<unsigned char> key,
-                                          std::vector<unsigned char> iv) {
-        unsigned char *out = DecryptCFB(VectorToArray(in), (unsigned int) in.size(),
-                                        VectorToArray(key), VectorToArray(iv));
-        std::vector<unsigned char> v = ArrayToVector(out, (unsigned int) in.size());
-        delete[] out;
-        return v;
-    }
-    void printHexArray(unsigned char a[], unsigned int n) {
-        for (unsigned int i = 0; i < n; i++) {
-            printf("%02x ", a[i]);
-        }
-    }
-    void printHexVector(std::vector<unsigned char> a) {
-        for (unsigned int i = 0; i < a.size(); i++) {
-            printf("%02x ", a[i]);
-        }
-    }
+    }*/
 };
 
-template <typename Key>
-struct aes<128,Key> : aes<128,Key,4,10> {};
-template <typename Key>
-struct aes<192,Key> : aes<192,Key,6,12> {};
-template <typename Key>
-struct aes<256,Key> : aes<256,Key,8,14> {
-    using aes<256,Key,8,14>::aes;
+template <>
+struct aes<128> : aes<128,4,10> {
+    using aes<128,4,10>::aes;
 };
-
-template <typename Key>
-aes(Key&&) -> aes<256,Key>;
+template <>
+struct aes<192> : aes<192,6,12> {
+    using aes<192,6,12>::aes;
+};
+template <>
+struct aes<256> : aes<256,8,14> {
+    using aes<256,8,14>::aes;
+};
 
 } // namespace aes
