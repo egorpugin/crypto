@@ -1,7 +1,10 @@
 #include "aes.h"
+#include "sha2.h"
 
 #include <array>
 #include <iostream>
+#include <iomanip>
+#include <sstream>
 
 int main() {
     using namespace crypto;
@@ -26,7 +29,7 @@ int main() {
     using v4u = std::array<unsigned char,16>;
     //using v4u = unsigned char[16];
     int n = 10000000;
-    while (n--)
+    //while (n--)
     {
         {
             //v4u out, out2;
@@ -54,5 +57,41 @@ int main() {
             aes.decrypt(out, iv2, out2);
             cmp(plain, &out2);
         }
+    }
+
+    auto to_string = [](auto digest) {
+        std::stringstream s;
+        s << std::setfill('0') << std::hex;
+        for(uint8_t i = 0; i < digest.size(); i++) {
+            s << std::setw(2) << (unsigned int) digest[i];
+        }
+        std::cout << s.str() << "\n";
+        return s.str();
+    };
+
+    {
+        sha2<224> sha;
+        sha.update(0,0);
+        to_string(sha.digest());
+    }
+    {
+        sha2<256> sha;
+        sha.update(0,0);
+        to_string(sha.digest());
+    }
+    {
+        sha2<384> sha;
+        sha.update(0,0);
+        to_string(sha.digest());
+    }
+    {
+        sha2<512> sha;
+        sha.update(0,0);
+        to_string(sha.digest());
+    }
+    {
+        sha2<512> sha;
+        sha.update((uint8_t*)"abc",3);
+        to_string(sha.digest());
     }
 }
