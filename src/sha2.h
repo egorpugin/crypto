@@ -60,6 +60,14 @@ struct sha2_data {
             0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
             0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
     };
+    static inline constexpr std::array<uint64_t, 8> h512_224 = {
+            0x8C3D37C819544DA2, 0x73E1996689DCD4D6, 0x1DFAB7AE32FF9C82, 0x679DD514582F9FCF,
+            0x0F6D2B697BD44DA8, 0x77E36F7304C48942, 0x3F9D85A86A1D36C8, 0x1112E6AD91D692A1,
+    };
+    static inline constexpr std::array<uint64_t, 8> h512_256 = {
+            0x22312194FC2BF72C, 0x9F555FA3C84C64C2, 0x2393B86B6F53B151, 0x963877195940EABD,
+            0x96283EE2A88EFFE3, 0xBE5E1E2553863992, 0x2B0199FC2C85B8AA, 0x0EB72DDC81C52CA2,
+    };
 
     static consteval auto make_h_IV_gen(uint8_t[],int);
     template <auto ShaType, auto Bits> static consteval auto h() {
@@ -73,9 +81,11 @@ struct sha2_data {
         } else if constexpr (ShaType == 512 && Bits == 512) {
             return h512;
         }else if constexpr (ShaType == 512 && Bits == 224) {
+            //return h512_224;
             uint8_t d[] = "SHA-512/224";
             return make_h_IV_gen(d, sizeof(d)-1);
         } else if constexpr (ShaType == 512 && Bits == 256) {
+            //return h512_256;
             uint8_t d[] = "SHA-512/256";
             return make_h_IV_gen(d, sizeof(d)-1);
         }
@@ -114,8 +124,15 @@ struct sha2_base {
     static inline constexpr auto s = sha2_data::sigma<small_sha>();
     static inline constexpr auto S = sha2_data::sum<small_sha>();
 
-    constexpr void update(const uint8_t *data, size_t length) {
-        for (size_t i = 0; i < length; i++) {
+    /*void update(auto &&s) {
+        update((uint8_t*)s, sizeof(s)-1);
+    }*/
+    template <auto N> void update(const char (&s)[N]) {
+        update((uint8_t*)s, N-1);
+    }
+    void update(const uint8_t *data, size_t length) {
+        for (size_t i = 0; i < length; ++i) {
+            //auto len = std::min(chunk_size_bytes - blockpos, length);
             m_data[blockpos++] = data[i];
             if (blockpos == chunk_size_bytes) {
                 transform();
@@ -127,7 +144,6 @@ struct sha2_base {
     }
     auto digest() {
         pad();
-        // reverse
         if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
             decltype(h) swapped;
             for (uint8_t i = 0; i < 8; i++) {
@@ -248,7 +264,9 @@ consteval auto sha2_data::make_h_IV_gen(uint8_t str[], int len) {
     for (auto &&v : sha.h) {
         v ^= 0xa5a5a5a5a5a5a5a5;
     }
-    sha.update(str,len);
+    for (size_t i = 0; i < len; ++i) {
+        sha.m_data[sha.blockpos++] = str[i];
+    }
     sha.pad();
     return sha.h;
 }

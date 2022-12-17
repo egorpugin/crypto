@@ -68,50 +68,54 @@ int main() {
         for (auto &&v : d) {
             s << std::setw(2) << (unsigned int)v;
         }
-        printf("%s\n", s.str().c_str());
+        //printf("%s\n", s.str().c_str());
         //std::cout << s.str() << "\n";
         return s.str();
     };
-
-    {
-        sha2<512,224> sha;
-        sha.update(0,0);
-        to_string(sha);
-    }
+    auto to_string2 = [&](auto &&sha, auto &&s, std::string s2) {
+        sha.update(s);
+        auto r = to_string(sha) == s2;
+        printf("%s\n", r ? "ok" : "false");
+    };
 
     {
         sha2<224> sha;
-        sha.update(0,0);
-        to_string(sha);
+        to_string2(sha, "", "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f");
     }
     {
         sha2<256> sha;
-        sha.update(0,0);
-        to_string(sha);
+        to_string2(sha, "", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
     }
     {
         sha2<384> sha;
-        sha.update(0,0);
-        to_string(sha);
+        to_string2(sha, "", "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b");
     }
     {
         sha2<512> sha;
-        sha.update(0,0);
-        to_string(sha);
+        to_string2(sha, "", "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
     }
     {
         sha2<512,224> sha;
-        sha.update(0,0);
-        to_string(sha);
+        to_string2(sha, "", "6ed0dd02806fa89e25de060c19d3ac86cabb87d6a0ddd05c333b84f4");
     }
     {
         sha2<512,256> sha;
-        sha.update(0,0);
-        to_string(sha);
+        to_string2(sha, "", "c672b8d1ef56ed28ab87c3622c5114069bdd3ad7b8f9737498d0c01ecef0967a");
     }
-    /*{
+    {
         sha2<512> sha;
-        sha.update((uint8_t*)"abc",3);
-        to_string(sha);
-    }*/
+        to_string2(sha, "abc", "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
+    }
+    {
+        sha2<224> sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy dog", "730e109bd7a8a32b1cb9d9a09aa2325d2430587ddbc0c38bad911525");
+    }
+    {
+        sha2<224> sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy dog.", "619cba8e8e05826e9b8c519c0a5c68f4fb653e8a3d8aa04bb2c8cd4c");
+    }
+    {
+        sha2<224> sha;
+        to_string2(sha, "111111111111111111111111111111111111111111111111111111111111111", "00ef5dfeea3023e818bace072aa850098a0f8e852f9b444c14ddb55c");
+    }
 }
