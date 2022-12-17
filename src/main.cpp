@@ -19,8 +19,10 @@ int main() {
         std::cout << r << "\n";
     };
 
+    //using v4u = unsigned __attribute__ ((vector_size (16)));
+    using v4u = std::array<unsigned char,16>;
     {
-        unsigned char out[16], out2[16];
+        v4u out, out2;
         aes_ecb<256> aes{key};
         aes.encrypt(plain, out);
         cmp(right, &out);
@@ -28,9 +30,8 @@ int main() {
         cmp(plain, &out2);
     }
     {
-        typedef unsigned v4si __attribute__ ((vector_size (16)));
-        v4si out, out2;
-        v4si iv{}, iv2{};
+        v4u out, out2;
+        v4u iv{}, iv2{};
         aes_cbc<256> aes{key};
         aes.encrypt(plain, iv, out);
         cmp(right, &out);
@@ -38,9 +39,8 @@ int main() {
         cmp(plain, &out2);
     }
     {
-        typedef unsigned v4si __attribute__ ((vector_size (16)));
-        v4si out, out2;
-        v4si iv{}, iv2{};
+        v4u out, out2;
+        v4u iv{}, iv2{};
         aes_cfb<256> aes{key};
         aes.encrypt(plain, iv, out);
         aes.decrypt(out, iv2, out2);

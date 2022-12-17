@@ -257,9 +257,7 @@ struct aes_base {
     static inline constexpr unsigned int Nb = 4;
     static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
 
-    // use gnu vec?
-    //template <auto N> using array = std::array<unsigned char, N>;
-    unsigned char roundKeys[4 * Nb * (Nr + 1)];
+    unsigned char round_keys[4 * Nb * (Nr + 1)];
 
     void SubBytes(unsigned char state[4][Nb]){
         unsigned int i, j;
@@ -414,7 +412,7 @@ struct aes_base {
         }
     }
     void EncryptBlock(const unsigned char in[], unsigned char out[],
-                      unsigned char *roundKeys) {
+                      unsigned char *round_keys) {
         unsigned char state[4][Nb];
         unsigned int i, j, round;
 
@@ -424,18 +422,18 @@ struct aes_base {
             }
         }
 
-        AddRoundKey(state, roundKeys);
+        AddRoundKey(state, round_keys);
 
         for (round = 1; round <= Nr - 1; round++) {
             SubBytes(state);
             ShiftRows(state);
             MixColumns(state);
-            AddRoundKey(state, roundKeys + round * 4 * Nb);
+            AddRoundKey(state, round_keys + round * 4 * Nb);
         }
 
         SubBytes(state);
         ShiftRows(state);
-        AddRoundKey(state, roundKeys + Nr * 4 * Nb);
+        AddRoundKey(state, round_keys + Nr * 4 * Nb);
 
         for (i = 0; i < 4; i++) {
             for (j = 0; j < Nb; j++) {
@@ -444,7 +442,7 @@ struct aes_base {
         }
     }
     void DecryptBlock(const unsigned char in[], unsigned char out[],
-                      unsigned char *roundKeys) {
+                      unsigned char *round_keys) {
         unsigned char state[4][Nb];
         unsigned int i, j, round;
 
@@ -454,18 +452,18 @@ struct aes_base {
             }
         }
 
-        AddRoundKey(state, roundKeys + Nr * 4 * Nb);
+        AddRoundKey(state, round_keys + Nr * 4 * Nb);
 
         for (round = Nr - 1; round >= 1; round--) {
             InvSubBytes(state);
             InvShiftRows(state);
-            AddRoundKey(state, roundKeys + round * 4 * Nb);
+            AddRoundKey(state, round_keys + round * 4 * Nb);
             InvMixColumns(state);
         }
 
         InvSubBytes(state);
         InvShiftRows(state);
-        AddRoundKey(state, roundKeys);
+        AddRoundKey(state, round_keys);
 
         for (i = 0; i < 4; i++) {
             for (j = 0; j < Nb; j++) {
@@ -474,8 +472,8 @@ struct aes_base {
         }
     }
     void XorBlocks(const unsigned char *a, const unsigned char *b,
-                   unsigned char *c, unsigned int len){
-        for (unsigned int i = 0; i < len; i++) {
+                   unsigned char *c) {
+        for (unsigned int i = 0; i < block_size_bytes; i++) {
             c[i] = a[i] ^ b[i];
         }
     }
@@ -502,42 +500,40 @@ template <auto KeyLength>
 struct aes_ecb : aes_base<aes_parameters(KeyLength)> {
     using base = aes_base<aes_parameters(KeyLength)>;
     explicit aes_ecb(auto &&k) {
-        this->KeyExpansion(k, this->roundKeys);
+        this->KeyExpansion(k, this->round_keys);
     }
     void encrypt(auto &&in, auto &&out) {
-        this->EncryptBlock(in, out, this->roundKeys);
+        this->EncryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->round_keys);
     }
     void decrypt(auto &&in, auto &&out) {
-        this->DecryptBlock(in, out, this->roundKeys);
+        this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->round_keys);
     }
 };
-
 template <auto KeyLength>
 struct aes_cbc : aes_ecb<KeyLength> {
     using aes_ecb<KeyLength>::aes_ecb;
     void encrypt(auto &&in, auto &&iv, auto &&out) {
-        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&in, (unsigned char*)&iv, this->block_size_bytes);
-        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->roundKeys);
+        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&in, (unsigned char*)&iv);
+        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
         iv = out;
     }
     void decrypt(auto &&in, auto &&iv, auto &&out) {
-        this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->roundKeys);
-        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&out, (unsigned char*)&out, this->block_size_bytes);
+        this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->round_keys);
+        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&out, (unsigned char*)&out);
         iv = in;
     }
 };
-
 template <auto KeyLength>
 struct aes_cfb : aes_ecb<KeyLength> {
     using aes_ecb<KeyLength>::aes_ecb;
     void encrypt(auto &&in, auto &&iv, auto &&out) {
-        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->roundKeys);
-        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out, this->block_size_bytes);
+        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
+        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
         iv = out;
     }
     void decrypt(auto &&in, auto &&iv, auto &&out) {
-        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->roundKeys);
-        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out, this->block_size_bytes);
+        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
+        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
         iv = in;
     }
 };
