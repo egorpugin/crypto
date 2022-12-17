@@ -1,5 +1,6 @@
 #include "aes.h"
 
+#include <array>
 #include <iostream>
 
 int main() {
@@ -19,10 +20,12 @@ int main() {
         std::cout << r << "\n";
     };
 
-    //using v4u = unsigned __attribute__ ((vector_size (16)));
-    using v4u = std::array<unsigned char,16>;
+    using v4u = unsigned __attribute__ ((vector_size (16)));
+    //using v4u = std::array<unsigned char,16>;
+    //using v4u = unsigned char[16];
     {
-        v4u out, out2;
+        //v4u out, out2;
+        unsigned char out[16], out2[16];
         aes_ecb<256> aes{key};
         aes.encrypt(plain, out);
         cmp(right, &out);

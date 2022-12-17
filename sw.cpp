@@ -11,5 +11,5 @@ void build(Solution &s) {
     // add deps here
     // example:
     // t += "org.sw.demo.someproject"_dep;
-    
+
 }
