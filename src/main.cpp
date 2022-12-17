@@ -17,36 +17,42 @@ int main() {
 
     auto cmp = [](auto &&left, auto &&right) {
         auto r = memcmp(left, right, 16);
-        std::cout << r << "\n";
+        static int x{};
+        x += r;
+        //std::cout << r << "\n";
     };
 
-    using v4u = unsigned __attribute__ ((vector_size (16)));
-    //using v4u = std::array<unsigned char,16>;
+    //using v4u = unsigned __attribute__ ((vector_size (16)));
+    using v4u = std::array<unsigned char,16>;
     //using v4u = unsigned char[16];
+    int n = 10000000;
+    while (n--)
     {
-        //v4u out, out2;
-        unsigned char out[16], out2[16];
-        aes_ecb<256> aes{key};
-        aes.encrypt(plain, out);
-        cmp(right, &out);
-        aes.decrypt(out, out2);
-        cmp(plain, &out2);
-    }
-    {
-        v4u out, out2;
-        v4u iv{}, iv2{};
-        aes_cbc<256> aes{key};
-        aes.encrypt(plain, iv, out);
-        cmp(right, &out);
-        aes.decrypt(out, iv2, out2);
-        cmp(plain, &out2);
-    }
-    {
-        v4u out, out2;
-        v4u iv{}, iv2{};
-        aes_cfb<256> aes{key};
-        aes.encrypt(plain, iv, out);
-        aes.decrypt(out, iv2, out2);
-        cmp(plain, &out2);
+        {
+            //v4u out, out2;
+            unsigned char out[16], out2[16];
+            aes_ecb<256> aes{key};
+            aes.encrypt(plain, out);
+            cmp(right, &out);
+            aes.decrypt(out, out2);
+            cmp(plain, &out2);
+        }
+        {
+            v4u out, out2;
+            v4u iv{}, iv2{};
+            aes_cbc<256> aes{key};
+            aes.encrypt(plain, iv, out);
+            cmp(right, &out);
+            aes.decrypt(out, iv2, out2);
+            cmp(plain, &out2);
+        }
+        {
+            v4u out, out2;
+            v4u iv{}, iv2{};
+            aes_cfb<256> aes{key};
+            aes.encrypt(plain, iv, out);
+            aes.decrypt(out, iv2, out2);
+            cmp(plain, &out2);
+        }
     }
 }

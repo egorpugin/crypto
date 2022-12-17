@@ -505,4 +505,4 @@ struct aes_cfb : aes_ecb<KeyLength> {
     }
 };
 
-} // namespace aes
+} // namespace crypto
