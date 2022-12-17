@@ -69,6 +69,12 @@ int main() {
         return s.str();
     };
 
+    constexpr auto f = []() {
+        sha2<224> sha;
+        sha.update(0,0);
+        return sha.digest();
+    };
+    constexpr auto x = f();
     {
         sha2<224> sha;
         sha.update(0,0);

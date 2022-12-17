@@ -44,74 +44,115 @@ struct sha2_data {
             0x113f9804bef90dae, 0x1b710b35131c471b, 0x28db77f523047d84, 0x32caab7b40c72493, 0x3c9ebe0a15c9bebc,
             0x431d67c49c100d4c, 0x4cc5d4becb3e42b6, 0x597f299cfc657e2a, 0x5fcb6fab3ad6faec, 0x6c44198c4a475817,
     };
-};
-
-struct sha2_params {
-    struct s {
-        int r1,r2,sh;
+    static inline constexpr std::array<uint32_t, 8> h224 = {
+            0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939,
+            0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4,
     };
-    struct S {
-        int r1,r2,r3;
+    static inline constexpr std::array<uint32_t, 8> h256 = {
+            0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+            0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    };
+    static inline constexpr std::array<uint64_t, 8> h384 = {
+            0xcbbb9d5dc1059ed8, 0x629a292a367cd507, 0x9159015a3070dd17, 0x152fecd8f70e5939,
+            0x67332667ffc00b31, 0x8eb44a8768581511, 0xdb0c2e0d64f98fa7, 0x47b5481dbefa4fa4,
+    };
+    static inline constexpr std::array<uint64_t, 8> h512 = {
+            0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
+            0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
     };
 
-    int rounds;
-    int chunk_size_bits;
-    s s[2];
-    S S[2];
+    template <auto Bits> static consteval auto h() {
+        if (0) {
+        } else if constexpr (Bits == 224) {
+            return h224;
+        } else if constexpr (Bits == 256) {
+            return h256;
+        } else if constexpr (Bits == 384) {
+            return h384;
+        } else if constexpr (Bits == 512) {
+            return h512;
+        }
+    }
+    template <auto small> static consteval auto K() {
+        if constexpr (small) {
+            return K256;
+        } else {
+            return K512;
+        }
+    }
+    template <auto small> static consteval auto sigma() {
+        struct sigma_t {
+            int r1,r2,sh;
+        };
+        return small ? std::array<sigma_t,2>{sigma_t{7,18,3},sigma_t{17,19,10}} : std::array<sigma_t,2>{sigma_t{1,8,7},sigma_t{19,61,6}};
+    }
+    template <auto small> static consteval auto sum() {
+        struct sum_t {
+            int r1,r2,r3;
+        };
+        return small ? std::array<sum_t,2>{sum_t{2,13,22},sum_t{6,11,25}} : std::array<sum_t,2>{sum_t{28,34,39},sum_t{14,18,41}};
+    }
+};
 
-    constexpr auto chunk_size_bytes() const { return chunk_size_bits / 8; }
-};
-constexpr sha2_params sha256_params {
-    64, 512,
-    {{7,18,3},{17,19,10}},
-    {{2,13,22},{6,11,25}},
-};
-constexpr sha2_params sha512_params {
-    80, 1024,
-    {{1,8,7},{19,61,6}},
-    {{28,34,39},{14,18,41}},
-};
-
-template <typename State, auto K, auto Params>
+template <auto ShaType, auto DigestSizeBits = ShaType>
 struct sha2_base {
-    void update(const uint8_t *data, size_t length) {
+    static_assert(ShaType == 256 || ShaType == 512);
+    static inline constexpr auto small_sha = ShaType == 256;
+    static inline constexpr auto rounds = small_sha ? 64 : 80;
+    static inline constexpr auto chunk_size_bits = small_sha ? 512 : 1024;
+    static inline constexpr auto chunk_size_bytes = chunk_size_bits / 8;
+    using state_type = std::conditional_t<small_sha, uint32_t, uint64_t>;
+    using message_length_type = std::conditional_t<small_sha, uint64_t, unsigned __int128>;
+    static inline constexpr auto K = sha2_data::K<small_sha>();
+    static inline constexpr auto s = sha2_data::sigma<small_sha>();
+    static inline constexpr auto S = sha2_data::sum<small_sha>();
+
+    constexpr void update(const uint8_t *data, size_t length) {
         for (size_t i = 0 ; i < length ; i++) {
-            m_data[m_blocklen++] = data[i];
-            if (m_blocklen == Params.chunk_size_bytes()) {
+            m_data[blockpos++] = data[i];
+            if (blockpos == chunk_size_bytes) {
                 transform();
                 // end of the block
-                m_bitlen += Params.chunk_size_bits;
-                m_blocklen = 0;
+                bitlen += chunk_size_bits;
+                blockpos = 0;
             }
         }
     }
+    constexpr auto digest() {
+        pad();
+        // revert
+        std::array<uint8_t, DigestSizeBits / 8> hash;
+        auto base = hash.data();
+        for (uint8_t i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
+            *(state_type*)(base + i * sizeof(state_type)) = std::byteswap(h[i]);
+        }
+        return hash;
+    }
 
-protected:
-    uint8_t m_data[Params.chunk_size_bytes()];
-    State m_blocklen{};
-    std::conditional_t<sizeof(State) == 4, uint64_t, unsigned __int128> m_bitlen{};
-    std::array<State, 8> h;
+private:
+    uint8_t m_data[chunk_size_bytes];
+    std::array<state_type, 8> h{sha2_data::h<DigestSizeBits>()};
+    message_length_type bitlen{};
+    int blockpos{};
 
-    static State choose(State e, State f, State g) {
+    static constexpr auto choose(auto e, auto f, auto g) {
         return (e & f) ^ (~e & g);
     }
-    static State majority(State a, State b, State c) {
+    static constexpr auto majority(auto a, auto b, auto c) {
         return (a & (b | c)) | (b & c);
     }
-    template <auto P>
-    static auto s(State x) {
+    template <auto P> static constexpr auto sigma(auto x) {
         using std::rotr;
         return rotr(x, P.r1) ^ rotr(x, P.r2) ^ (x >> P.sh);
     }
-    template <auto P>
-    static auto S(State x) {
+    template <auto P> static constexpr auto sum(auto x) {
         using std::rotr;
         return rotr(x, P.r1) ^ rotr(x, P.r2) ^ rotr(x, P.r3);
     }
-    void transform() {
-        State w[Params.rounds];
-        for (uint8_t i = 0, j = 0; i < 16; ++i, j += sizeof(State)) {
-            if constexpr (sizeof(State) == 4) {
+    constexpr void transform() {
+        state_type w[rounds];
+        for (uint8_t i = 0, j = 0; i < 16; ++i, j += sizeof(state_type)) {
+            if constexpr (sizeof(state_type) == 4) {
                 w[i] = (m_data[j] << 24) | (m_data[j + 1] << 16) | (m_data[j + 2] << 8) | (m_data[j + 3] << 0);
             } else {
                 w[i] = 0
@@ -126,133 +167,66 @@ protected:
                        ;
             }
         }
-        for (uint8_t k = 16; k < Params.rounds; ++k) {
-            w[k] = s<Params.s[1]>(w[k - 2]) + w[k - 7] + s<Params.s[0]>(w[k - 15]) + w[k - 16];
+        for (uint8_t k = 16; k < rounds; ++k) {
+            w[k] = sigma<s[1]>(w[k - 2]) + w[k - 7] + sigma<s[0]>(w[k - 15]) + w[k - 16];
         }
         auto state = h;
-        for (uint8_t i = 0; i < Params.rounds; ++i) {
+        for (uint8_t i = 0; i < rounds; ++i) {
             auto maj = majority(state[0], state[1], state[2]);
             auto ch = choose(state[4], state[5], state[6]);
-            auto sum = w[i] + K[i] + state[7] + ch + S<Params.S[1]>(state[4]);
+            auto s = w[i] + K[i] + state[7] + ch + sum<S[1]>(state[4]);
 
             state[7] = state[6];
             state[6] = state[5];
             state[5] = state[4];
-            state[4] = state[3] + sum;
+            state[4] = state[3] + s;
             state[3] = state[2];
             state[2] = state[1];
             state[1] = state[0];
-            state[0] = S<Params.S[0]>(state[0]) + maj + sum;
+            state[0] = sum<S[0]>(state[0]) + maj + s;
         }
         auto sz = h.size();
         for (uint8_t i = 0; i < sz; ++i) {
             h[i] += state[i];
         }
     }
-    void pad() {
-        auto i = m_blocklen;
-        constexpr auto padding_size = Params.chunk_size_bytes();
+    constexpr void pad() {
+        auto i = blockpos;
+        constexpr auto padding_size = chunk_size_bytes;
         constexpr auto bigint_size = padding_size / 8;
         constexpr auto padding_minus_bigint = padding_size - bigint_size;
-        uint8_t end = m_blocklen < padding_minus_bigint ? padding_minus_bigint : padding_size;
+        uint8_t end = blockpos < padding_minus_bigint ? padding_minus_bigint : padding_size;
 
         m_data[i++] = 0x80;
         while (i < end) {
             m_data[i++] = 0x00;
         }
-        if (m_blocklen >= padding_minus_bigint) {
+        if (blockpos >= padding_minus_bigint) {
             transform();
             memset(m_data, 0, padding_minus_bigint);
         }
 
         // Append to the padding the total message's length in bits and transform.
-        m_bitlen += m_blocklen * 8;
+        bitlen += blockpos * 8;
         for (int i = 0; i < bigint_size; ++i) {
-            m_data[padding_size - i - 1] = m_bitlen >> (i * 8);
+            m_data[padding_size - i - 1] = bitlen >> (i * 8);
         }
         transform();
     }
-    void revert(uint8_t *hash, int len) {
-        for (uint8_t i = 0; i < len; i++) {
-            *(State*)(hash + i * sizeof(State)) = std::byteswap(h[i]);
-        }
-    }
 };
 
-template <auto Bits>
+template <auto ShaType, auto DigestSizeBits = ShaType>
 struct sha2;
 
 template <>
-struct sha2<224> : sha2_base<uint32_t,sha2_data::K256,sha256_params> {
-    sha2() {
-        h = {
-                0xc1059ed8,
-                0x367cd507,
-                0x3070dd17,
-                0xf70e5939,
-                0xffc00b31,
-                0x68581511,
-                0x64f98fa7,
-                0xbefa4fa4,
-        };
-    }
-    auto digest() {
-        std::array<uint8_t, 28> hash;
-        pad();
-        revert(hash.data(), 7);
-        return hash;
-    }
-};
+struct sha2<224> : sha2_base<256,224> {};
 template <>
-struct sha2<256> : sha2_base<uint32_t,sha2_data::K256,sha256_params> {
-    sha2() {
-        h = {
-                0x6a09e667,
-                0xbb67ae85,
-                0x3c6ef372,
-                0xa54ff53a,
-                0x510e527f,
-                0x9b05688c,
-                0x1f83d9ab,
-                0x5be0cd19,
-        };
-    }
-    auto digest() {
-        std::array<uint8_t, 32> hash;
-        pad();
-        revert(hash.data(), 8);
-        return hash;
-    }
-};
+struct sha2<256> : sha2_base<256> {};
 template <>
-struct sha2<384> : sha2_base<uint64_t,sha2_data::K512,sha512_params> {
-    sha2() {
-        h = {
-                0xcbbb9d5dc1059ed8, 0x629a292a367cd507, 0x9159015a3070dd17, 0x152fecd8f70e5939,
-                0x67332667ffc00b31, 0x8eb44a8768581511, 0xdb0c2e0d64f98fa7, 0x47b5481dbefa4fa4,
-        };
-    }
-    auto digest() {
-        std::array<uint8_t, 48> hash;
-        pad();
-        revert(hash.data(), 6);
-        return hash;
-    }
-};
+struct sha2<384> : sha2_base<512,384> {};
 template <>
-struct sha2<512> : sha2_base<uint64_t,sha2_data::K512,sha512_params> {
-    sha2() {
-        h = {
-                0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
-                0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
-        };
-    }
-    auto digest() {
-        std::array<uint8_t, 64> hash;
-        pad();
-        revert(hash.data(), 8);
-        return hash;
-    }
-};
+struct sha2<512> : sha2_base<512> {};
+template <>
+struct sha2<512,224> : sha2_base<512,224> {};
 
 } // namespace crypto
