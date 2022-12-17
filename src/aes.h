@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstring>
 #include <stdexcept>
 #include <vector>
@@ -257,7 +258,13 @@ struct aes;
 template <auto KeyLength, auto Nk, auto Nr>
 struct aes<KeyLength, Nk, Nr> {
     static inline constexpr unsigned int Nb = 4;
-    static inline constexpr unsigned int blockBytesLen = 4 * Nb * sizeof(unsigned char);
+    static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
+    static inline constexpr unsigned int key_size_bytes = KeyLength / 8;
+
+    // use gnu vec?
+    template <auto N> using array = std::array<unsigned char, N>;
+    using key = array<key_size_bytes>;
+    using block = array<block_size_bytes>;
 
     void SubBytes(unsigned char state[4][Nb]){
         unsigned int i, j;
@@ -380,9 +387,9 @@ struct aes<KeyLength, Nk, Nr> {
         ShiftRow(state, 3, Nb - 3);
     }
     void check_length(unsigned int len) {
-        if (len % blockBytesLen != 0) {
+        if (len % block_size_bytes != 0) {
             throw std::length_error("Plaintext length must be divisible by " +
-                                    std::to_string(blockBytesLen));
+                                    std::to_string(block_size_bytes));
         }
     }
     void KeyExpansion(const unsigned char key[], unsigned char w[]) {
@@ -492,19 +499,17 @@ struct aes<KeyLength, Nk, Nr> {
         return a.data();
     }
 
+    key k;
+    unsigned char roundKeys[4 * Nb * (Nr + 1)];
+
 public:
-    unsigned char *EncryptECB(const unsigned char in[], unsigned int inLen,
-                              const unsigned char key[]){
-        check_length(inLen);
-        unsigned char *out = new unsigned char[inLen];
-        unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
-        KeyExpansion(key, roundKeys);
-        for (unsigned int i = 0; i < inLen; i += blockBytesLen) {
-            EncryptBlock(in + i, out + i, roundKeys);
-        }
+    explicit aes(auto &&k) : k{k} {
+        KeyExpansion(k, roundKeys);
+    }
 
-        delete[] roundKeys;
-
+    block EncryptECB(block b) {
+        block out;
+        EncryptBlock(b, out, roundKeys);
         return out;
     }
     unsigned char *DecryptECB(const unsigned char in[], unsigned int inLen,
@@ -513,7 +518,7 @@ public:
         unsigned char *out = new unsigned char[inLen];
         unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
         KeyExpansion(key, roundKeys);
-        for (unsigned int i = 0; i < inLen; i += blockBytesLen) {
+        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
             DecryptBlock(in + i, out + i, roundKeys);
         }
 
@@ -525,14 +530,14 @@ public:
                               const unsigned char key[], const unsigned char *iv) {
         check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
-        unsigned char block[blockBytesLen];
+        unsigned char block[block_size_bytes];
         unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
         KeyExpansion(key, roundKeys);
-        memcpy(block, iv, blockBytesLen);
-        for (unsigned int i = 0; i < inLen; i += blockBytesLen) {
-            XorBlocks(block, in + i, block, blockBytesLen);
+        memcpy(block, iv, block_size_bytes);
+        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
+            XorBlocks(block, in + i, block, block_size_bytes);
             EncryptBlock(block, out + i, roundKeys);
-            memcpy(block, out + i, blockBytesLen);
+            memcpy(block, out + i, block_size_bytes);
         }
 
         delete[] roundKeys;
@@ -543,14 +548,14 @@ public:
                               const unsigned char key[], const unsigned char *iv) {
         check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
-        unsigned char block[blockBytesLen];
+        unsigned char block[block_size_bytes];
         unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
         KeyExpansion(key, roundKeys);
-        memcpy(block, iv, blockBytesLen);
-        for (unsigned int i = 0; i < inLen; i += blockBytesLen) {
+        memcpy(block, iv, block_size_bytes);
+        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
             DecryptBlock(in + i, out + i, roundKeys);
-            XorBlocks(block, out + i, out + i, blockBytesLen);
-            memcpy(block, in + i, blockBytesLen);
+            XorBlocks(block, out + i, out + i, block_size_bytes);
+            memcpy(block, in + i, block_size_bytes);
         }
 
         delete[] roundKeys;
@@ -561,15 +566,15 @@ public:
                               const unsigned char key[], const unsigned char *iv) {
         check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
-        unsigned char block[blockBytesLen];
-        unsigned char encryptedBlock[blockBytesLen];
+        unsigned char block[block_size_bytes];
+        unsigned char encryptedBlock[block_size_bytes];
         unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
         KeyExpansion(key, roundKeys);
-        memcpy(block, iv, blockBytesLen);
-        for (unsigned int i = 0; i < inLen; i += blockBytesLen) {
+        memcpy(block, iv, block_size_bytes);
+        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
             EncryptBlock(block, encryptedBlock, roundKeys);
-            XorBlocks(in + i, encryptedBlock, out + i, blockBytesLen);
-            memcpy(block, out + i, blockBytesLen);
+            XorBlocks(in + i, encryptedBlock, out + i, block_size_bytes);
+            memcpy(block, out + i, block_size_bytes);
         }
 
         delete[] roundKeys;
@@ -580,15 +585,15 @@ public:
                               const unsigned char key[], const unsigned char *iv) {
         check_length(inLen);
         unsigned char *out = new unsigned char[inLen];
-        unsigned char block[blockBytesLen];
-        unsigned char encryptedBlock[blockBytesLen];
+        unsigned char block[block_size_bytes];
+        unsigned char encryptedBlock[block_size_bytes];
         unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
         KeyExpansion(key, roundKeys);
-        memcpy(block, iv, blockBytesLen);
-        for (unsigned int i = 0; i < inLen; i += blockBytesLen) {
+        memcpy(block, iv, block_size_bytes);
+        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
             EncryptBlock(block, encryptedBlock, roundKeys);
-            XorBlocks(in + i, encryptedBlock, out + i, blockBytesLen);
-            memcpy(block, in + i, blockBytesLen);
+            XorBlocks(in + i, encryptedBlock, out + i, block_size_bytes);
+            memcpy(block, in + i, block_size_bytes);
         }
 
         delete[] roundKeys;
