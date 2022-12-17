@@ -268,12 +268,7 @@ struct aes_base : aes_data {
         return (b << 1) ^ (((b >> 7) & 1) * 0x1b);
     }
     void MixColumns(unsigned char state[4][Nb]) {
-        unsigned char temp_state[4][Nb];
-
-        for (size_t i = 0; i < 4; ++i) {
-            memset(temp_state[i], 0, 4);
-        }
-
+        unsigned char temp_state[4][Nb]{};
         for (size_t i = 0; i < 4; ++i) {
             for (size_t k = 0; k < 4; ++k) {
                 for (size_t j = 0; j < 4; ++j) {
@@ -284,7 +279,6 @@ struct aes_base : aes_data {
                 }
             }
         }
-
         for (size_t i = 0; i < 4; ++i) {
             memcpy(state[i], temp_state[i], 4);
         }
@@ -321,7 +315,6 @@ struct aes_base : aes_data {
         for (i = 0; i < n - 1; i++) {
             c = xtime(c);
         }
-
         a[0] = c;
         a[1] = a[2] = a[3] = 0;
     }
@@ -336,12 +329,7 @@ struct aes_base : aes_data {
         }
     }
     void InvMixColumns(unsigned char state[4][Nb]) {
-        unsigned char temp_state[4][Nb];
-
-        for (size_t i = 0; i < 4; ++i) {
-            memset(temp_state[i], 0, 4);
-        }
-
+        unsigned char temp_state[4][Nb]{};
         for (size_t i = 0; i < 4; ++i) {
             for (size_t k = 0; k < 4; ++k) {
                 for (size_t j = 0; j < 4; ++j) {
@@ -349,7 +337,6 @@ struct aes_base : aes_data {
                 }
             }
         }
-
         for (size_t i = 0; i < 4; ++i) {
             memcpy(state[i], temp_state[i], 4);
         }
@@ -474,7 +461,7 @@ consteval auto aes_parameters(int keylen) {
 }
 
 template <auto KeyLength>
-struct aes_ecb : aes_base<aes_parameters(KeyLength)> {
+struct aes_ecb : protected aes_base<aes_parameters(KeyLength)> {
     using base = aes_base<aes_parameters(KeyLength)>;
     unsigned char round_keys[4 * base::Nb * (base::Nr + 1)];
     explicit aes_ecb(auto &&k) {
