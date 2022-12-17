@@ -69,7 +69,6 @@ struct sha2_data {
             0x96283EE2A88EFFE3, 0xBE5E1E2553863992, 0x2B0199FC2C85B8AA, 0x0EB72DDC81C52CA2,
     };
 
-    static consteval auto make_h_IV_gen(uint8_t[],int);
     template <auto ShaType, auto Bits> static consteval auto h() {
         if (0) {
         } else if constexpr (ShaType == 256 && Bits == 224) {
@@ -80,14 +79,10 @@ struct sha2_data {
             return h384;
         } else if constexpr (ShaType == 512 && Bits == 512) {
             return h512;
-        }else if constexpr (ShaType == 512 && Bits == 224) {
-            //return h512_224;
-            uint8_t d[] = "SHA-512/224";
-            return make_h_IV_gen(d, sizeof(d)-1);
+        } else if constexpr (ShaType == 512 && Bits == 224) {
+            return h512_224;
         } else if constexpr (ShaType == 512 && Bits == 256) {
-            //return h512_256;
-            uint8_t d[] = "SHA-512/256";
-            return make_h_IV_gen(d, sizeof(d)-1);
+            return h512_256;
         }
     }
     template <auto small> static consteval auto K() {
@@ -131,15 +126,18 @@ struct sha2_base {
         update((uint8_t*)s, N-1);
     }
     void update(const uint8_t *data, size_t length) {
-        for (size_t i = 0; i < length; ++i) {
-            //auto len = std::min(chunk_size_bytes - blockpos, length);
-            m_data[blockpos++] = data[i];
-            if (blockpos == chunk_size_bytes) {
-                transform();
-                // end of the block
-                bitlen += chunk_size_bits;
-                blockpos = 0;
-            }
+        auto pre_len = length % chunk_size_bytes;
+        update_slow(data, pre_len);
+        data = data + pre_len;
+        length -= pre_len;
+        if (length == 0) {
+            return;
+        }
+        auto n_chunks = length / chunk_size_bytes;
+        bitlen += n_chunks * chunk_size_bits;
+        for (size_t i = 0; i < length; i += chunk_size_bytes) {
+            memcpy(m_data, data + i, chunk_size_bytes);
+            transform();
         }
     }
     auto digest() {
@@ -223,16 +221,14 @@ private:
         }
     }
     constexpr void pad() {
-        auto i = blockpos;
         constexpr auto padding_size = chunk_size_bytes;
         constexpr auto bigint_size = padding_size / 8;
         constexpr auto padding_minus_bigint = padding_size - bigint_size;
         uint8_t end = blockpos < padding_minus_bigint ? padding_minus_bigint : padding_size;
 
+        auto i = blockpos;
         m_data[i++] = 0x80;
-        while (i < end) {
-            m_data[i++] = 0x00;
-        }
+        memset(m_data + i, 0, end - i);
         if (blockpos >= padding_minus_bigint) {
             transform();
             memset(m_data, 0, padding_minus_bigint);
@@ -244,6 +240,16 @@ private:
             m_data[padding_size - i - 1] = bitlen >> (i * 8);
         }
         transform();
+    }
+    void update_slow(const uint8_t *data, size_t length) {
+        for (size_t i = 0; i < length; ++i) {
+            m_data[blockpos++] = data[i];
+            if (blockpos == chunk_size_bytes) {
+                transform();
+                bitlen += chunk_size_bits;
+                blockpos = 0;
+            }
+        }
     }
 
     friend struct sha2_data;
@@ -258,17 +264,5 @@ template <> struct sha2<384> : sha2_base<512,384> {};
 template <> struct sha2<512> : sha2_base<512> {};
 template <> struct sha2<512,224> : sha2_base<512,224> {};
 template <> struct sha2<512,256> : sha2_base<512,256> {};
-
-consteval auto sha2_data::make_h_IV_gen(uint8_t str[], int len) {
-    sha2<512> sha;
-    for (auto &&v : sha.h) {
-        v ^= 0xa5a5a5a5a5a5a5a5;
-    }
-    for (size_t i = 0; i < len; ++i) {
-        sha.m_data[sha.blockpos++] = str[i];
-    }
-    sha.pad();
-    return sha.h;
-}
 
 } // namespace crypto
