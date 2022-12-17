@@ -61,16 +61,23 @@ struct sha2_data {
             0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
     };
 
-    template <auto Bits> static consteval auto h() {
+    static consteval auto make_h_4th_gen(uint8_t[],int);
+
+    template <auto ShaType, auto Bits> static consteval auto h() {
         if (0) {
-        } else if constexpr (Bits == 224) {
+        } else if constexpr (ShaType == 256 && Bits == 224) {
             return h224;
-        } else if constexpr (Bits == 256) {
+        } else if constexpr (ShaType == 256 && Bits == 256) {
             return h256;
-        } else if constexpr (Bits == 384) {
+        } else if constexpr (ShaType == 512 && Bits == 384) {
             return h384;
-        } else if constexpr (Bits == 512) {
+        } else if constexpr (ShaType == 512 && Bits == 512) {
             return h512;
+        } else if constexpr (ShaType == 512 && Bits == 224) {
+            uint8_t d[] = "SHA-512/224";
+            //return make_h_4th_gen(d, sizeof(d));
+        } else if constexpr (ShaType == 512 && Bits == 256) {
+            //return make_h_4th_gen("SHA-512/256");
         }
     }
     template <auto small> static consteval auto K() {
@@ -121,17 +128,27 @@ struct sha2_base {
     constexpr auto digest() {
         pad();
         // revert
-        std::array<uint8_t, DigestSizeBits / 8> hash;
-        auto base = hash.data();
+        std::array<state_type, DigestSizeBits / 8 / sizeof(state_type)> hash;
+        auto d = hash.data();
         for (uint8_t i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
-            *(state_type*)(base + i * sizeof(state_type)) = std::byteswap(h[i]);
+            *(hash.data() + i) = std::byteswap(h[i]);
         }
         return hash;
     }
+    /*non constexpr
+     * auto digest() {
+        pad();
+        // revert
+        std::array<uint8_t, DigestSizeBits / 8> hash;
+        for (uint8_t i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
+            *(state_type*)(hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
+        }
+        return hash;
+    }*/
 
 private:
     uint8_t m_data[chunk_size_bytes];
-    std::array<state_type, 8> h{sha2_data::h<DigestSizeBits>()};
+    std::array<state_type, 8> h{sha2_data::h<ShaType, DigestSizeBits>()};
     message_length_type bitlen{};
     int blockpos{};
 
@@ -218,15 +235,17 @@ private:
 template <auto ShaType, auto DigestSizeBits = ShaType>
 struct sha2;
 
-template <>
-struct sha2<224> : sha2_base<256,224> {};
-template <>
-struct sha2<256> : sha2_base<256> {};
-template <>
-struct sha2<384> : sha2_base<512,384> {};
-template <>
-struct sha2<512> : sha2_base<512> {};
-template <>
-struct sha2<512,224> : sha2_base<512,224> {};
+template <> struct sha2<224> : sha2_base<256,224> {};
+template <> struct sha2<256> : sha2_base<256> {};
+template <> struct sha2<384> : sha2_base<512,384> {};
+template <> struct sha2<512> : sha2_base<512> {};
+template <> struct sha2<512,224> : sha2_base<512,224> {};
+//template <> struct sha2<512,256> : sha2_base<512,256> {};
+
+consteval auto sha2_data::make_h_4th_gen(uint8_t str[], int len) {
+    sha2<512> sha;
+    sha.update(str,len);
+    return sha.digest();
+}
 
 } // namespace crypto

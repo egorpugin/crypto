@@ -4,6 +4,7 @@
 #include <array>
 #include <iostream>
 #include <iomanip>
+#include <span>
 #include <sstream>
 
 int main() {
@@ -59,22 +60,17 @@ int main() {
         }
     }
 
-    auto to_string = [](auto digest) {
+    auto to_string = [](auto &&digest) {
+        std::span<uint8_t> d{(uint8_t*)digest.data(), digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
         std::stringstream s;
         s << std::setfill('0') << std::hex;
-        for(uint8_t i = 0; i < digest.size(); i++) {
-            s << std::setw(2) << (unsigned int) digest[i];
+        for (auto &&v : d) {
+            s << std::setw(2) << (unsigned int)v;
         }
         std::cout << s.str() << "\n";
         return s.str();
     };
 
-    constexpr auto f = []() {
-        sha2<224> sha;
-        sha.update(0,0);
-        return sha.digest();
-    };
-    constexpr auto x = f();
     {
         sha2<224> sha;
         sha.update(0,0);
@@ -94,6 +90,16 @@ int main() {
         sha2<512> sha;
         sha.update(0,0);
         to_string(sha.digest());
+    }
+    {
+        sha2<512,224> sha;
+        sha.update(0,0);
+        to_string(sha.digest());
+    }
+    {
+        /*sha2<512,256> sha;
+        sha.update(0,0);
+        to_string(sha.digest());*/
     }
     {
         sha2<512> sha;
