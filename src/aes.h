@@ -250,14 +250,16 @@ enum class AESKeyLength {
     AES_128, AES_192, AES_256
 };
 
-template <auto Nk, auto Nr>
+template <auto Parameters>
 struct aes_base {
+    static inline constexpr unsigned int Nk = Parameters.Nk;
+    static inline constexpr unsigned int Nr = Parameters.Nr;
     static inline constexpr unsigned int Nb = 4;
     static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
 
     // use gnu vec?
     //template <auto N> using array = std::array<unsigned char, N>;
-    //using block = array<block_size_bytes>;
+    unsigned char roundKeys[4 * Nb * (Nr + 1)];
 
     void SubBytes(unsigned char state[4][Nb]){
         unsigned int i, j;
@@ -477,96 +479,67 @@ struct aes_base {
             c[i] = a[i] ^ b[i];
         }
     }
-
-    unsigned char roundKeys[4 * Nb * (Nr + 1)];
 };
 
-template <auto KeyLength, auto ...>
-struct aes;
+consteval auto aes_parameters(int keylen) {
+    struct params {
+        unsigned int Nk, Nr;
+    };
+    switch (keylen) {
+    case 128:
+        return params{4,10};
+    case 192:
+        return params{6,12};
+    case 256:
+        return params{8,14};
+    }
+    /*if constexpr (1) {
+        static_assert(keylen == 256);
+    }*/
+}
 
-template <auto KeyLength, auto Nk, auto Nr>
-struct aes<KeyLength, Nk, Nr> : aes_base<Nk, Nr> {
-    explicit aes(auto &&k) {
+template <auto KeyLength>
+struct aes_ecb : aes_base<aes_parameters(KeyLength)> {
+    using base = aes_base<aes_parameters(KeyLength)>;
+    explicit aes_ecb(auto &&k) {
         this->KeyExpansion(k, this->roundKeys);
     }
-
-    void EncryptECB(auto &&in, auto &&out) {
+    void encrypt(auto &&in, auto &&out) {
         this->EncryptBlock(in, out, this->roundKeys);
     }
-    void DecryptECB(auto &&in, auto &&out) {
+    void decrypt(auto &&in, auto &&out) {
         this->DecryptBlock(in, out, this->roundKeys);
     }
-    void EncryptCBC(auto &&in, auto &&iv, auto &&out) {
-        this->XorBlocks(iv, in, iv, this->block_size_bytes);
-        this->EncryptBlock(iv, out, this->roundKeys);
-        //iv = out;
-    }
-    /*unsigned char *DecryptCBC(const unsigned char in[], unsigned int inLen,
-                              const unsigned char key[], const unsigned char *iv) {
-        unsigned char *out = new unsigned char[inLen];
-        unsigned char block[block_size_bytes];
-        unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
-        KeyExpansion(key, roundKeys);
-        memcpy(block, iv, block_size_bytes);
-        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
-            DecryptBlock(in + i, out + i, roundKeys);
-            XorBlocks(block, out + i, out + i, block_size_bytes);
-            memcpy(block, in + i, block_size_bytes);
-        }
-
-        delete[] roundKeys;
-
-        return out;
-    }
-    unsigned char *EncryptCFB(const unsigned char in[], unsigned int inLen,
-                              const unsigned char key[], const unsigned char *iv) {
-        unsigned char *out = new unsigned char[inLen];
-        unsigned char block[block_size_bytes];
-        unsigned char encryptedBlock[block_size_bytes];
-        unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
-        KeyExpansion(key, roundKeys);
-        memcpy(block, iv, block_size_bytes);
-        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
-            EncryptBlock(block, encryptedBlock, roundKeys);
-            XorBlocks(in + i, encryptedBlock, out + i, block_size_bytes);
-            memcpy(block, out + i, block_size_bytes);
-        }
-
-        delete[] roundKeys;
-
-        return out;
-    }
-    unsigned char *DecryptCFB(const unsigned char in[], unsigned int inLen,
-                              const unsigned char key[], const unsigned char *iv) {
-        unsigned char *out = new unsigned char[inLen];
-        unsigned char block[block_size_bytes];
-        unsigned char encryptedBlock[block_size_bytes];
-        unsigned char *roundKeys = new unsigned char[4 * Nb * (Nr + 1)];
-        KeyExpansion(key, roundKeys);
-        memcpy(block, iv, block_size_bytes);
-        for (unsigned int i = 0; i < inLen; i += block_size_bytes) {
-            EncryptBlock(block, encryptedBlock, roundKeys);
-            XorBlocks(in + i, encryptedBlock, out + i, block_size_bytes);
-            memcpy(block, in + i, block_size_bytes);
-        }
-
-        delete[] roundKeys;
-
-        return out;
-    }*/
 };
 
-template <>
-struct aes<128> : aes<128,4,10> {
-    using aes<128,4,10>::aes;
+template <auto KeyLength>
+struct aes_cbc : aes_ecb<KeyLength> {
+    using aes_ecb<KeyLength>::aes_ecb;
+    void encrypt(auto &&in, auto &&iv, auto &&out) {
+        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&in, (unsigned char*)&iv, this->block_size_bytes);
+        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->roundKeys);
+        iv = out;
+    }
+    void decrypt(auto &&in, auto &&iv, auto &&out) {
+        this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->roundKeys);
+        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&out, (unsigned char*)&out, this->block_size_bytes);
+        iv = in;
+    }
 };
-template <>
-struct aes<192> : aes<192,6,12> {
-    using aes<192,6,12>::aes;
-};
-template <>
-struct aes<256> : aes<256,8,14> {
-    using aes<256,8,14>::aes;
+
+template <auto KeyLength>
+struct aes_cfb : aes_ecb<KeyLength> {
+    using aes_ecb<KeyLength>::aes_ecb;
+    void encrypt(auto &&in, auto &&iv, auto &&out) {
+        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->roundKeys);
+        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out, this->block_size_bytes);
+        iv = out;
+    }
+    void decrypt(auto &&in, auto &&iv, auto &&out) {
+        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->roundKeys);
+        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out, this->block_size_bytes);
+        iv = in;
+    }
 };
 
 } // namespace aes

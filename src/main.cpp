@@ -14,17 +14,36 @@ int main() {
     unsigned char right[] = {0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf,
                              0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49, 0x60, 0x89};
 
-    unsigned char out[16];
-    unsigned char out2[16];
+    auto cmp = [](auto &&left, auto &&right) {
+        auto r = memcmp(left, right, 16);
+        std::cout << r << "\n";
+    };
 
-    aes<256> aes{key};
-    aes.EncryptECB(plain, out);
-    auto r = memcmp(right, out, decltype(aes)::block_size_bytes);
-    aes.DecryptECB(out, out2);
-    r |= memcmp(plain, out2, decltype(aes)::block_size_bytes);
-
-    unsigned char iv[16] = {0};
-    aes.EncryptCBC(plain, iv, out);
-
-    return 0;
+    {
+        unsigned char out[16], out2[16];
+        aes_ecb<256> aes{key};
+        aes.encrypt(plain, out);
+        cmp(right, &out);
+        aes.decrypt(out, out2);
+        cmp(plain, &out2);
+    }
+    {
+        typedef unsigned v4si __attribute__ ((vector_size (16)));
+        v4si out, out2;
+        v4si iv{}, iv2{};
+        aes_cbc<256> aes{key};
+        aes.encrypt(plain, iv, out);
+        cmp(right, &out);
+        aes.decrypt(out, iv2, out2);
+        cmp(plain, &out2);
+    }
+    {
+        typedef unsigned v4si __attribute__ ((vector_size (16)));
+        v4si out, out2;
+        v4si iv{}, iv2{};
+        aes_cfb<256> aes{key};
+        aes.encrypt(plain, iv, out);
+        aes.decrypt(out, iv2, out2);
+        cmp(plain, &out2);
+    }
 }
