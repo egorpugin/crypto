@@ -1,4 +1,5 @@
 #include "aes.h"
+#include "bigint.h"
 #include "sha2.h"
 
 #include <array>
@@ -7,7 +8,7 @@
 #include <span>
 #include <sstream>
 
-int main() {
+void test_aes() {
     using namespace crypto;
 
     unsigned char plain[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
@@ -59,6 +60,10 @@ int main() {
             cmp(plain, &out2);
         }
     }
+}
+
+void test_sha2() {
+    using namespace crypto;
 
     auto to_string = [](auto &&sha) {
         auto digest = sha.digest();
@@ -143,5 +148,63 @@ int main() {
                    "1111111111111111111111111111111111111111111111111111111111111111"
                    "11111111111111111111111111111111111111111111111111111111111111111"
                 , "32063579e2f475efdea66d4384f75a96df64247e363c7ad8eb640a25");
+    }
+}
+
+#include <gmp.h>
+#include <gmpxx.h>
+
+int main() {
+    mpz_class a, b, c;
+    a = "100000000000000000000054645645645645600000000000000000000";
+    b = "20000000034534534500838393935684563456345340000000000";
+    c = a + b;
+    c = a * b;
+
+    {
+        bigint bn2{0xFFFFFFFFFFFFFFFFull};
+        bn2 <<= 65;
+    }
+    {
+        bigint bn2{0xFFFFFFFFFFFFFFFFull};
+        bn2 <<= 1;
+    }
+    {
+        bigint bn2{0xFFFFFFFFFFFFFFFFull};
+        bn2 <<= 129;
+    }
+    {
+        bigint bn2{0xFFFFFFFFFFFFFFFFull};
+        bn2 <<= 128;
+    }
+    {
+        bigint bn1;
+        bn1 += 0xFFFFFFFFFFFFFFFFull;
+        bigint bn2;
+        bn2 += 0xFFFFFFFFFFFFFFFFull;
+        bn2 <<= 64;
+        bn2 += 1u;
+        bn1 += bn2;
+    }
+    {
+        bigint bn1;
+        bn1 += 0xFFFFFFFFFFFFFFFFull;
+        bigint bn2;
+        bn2 += 0xFFFFFFFFFFFFFFFFull;
+        bn2 <<= 64;
+        bn1 += bn2;
+        bn1 += 1u;
+    }
+    {
+        bigint bn;
+        std::cout << bn << "\n";
+        std::cout << (bn += 1000u) << "\n";
+        std::cout << bn + 1u << "\n";
+        bn += 0xFFFFFFFFFFFFFFFFu;
+        bn += 0xFFFFFFFFFFFFFFFFu;
+        bn += 0xFFFFFFFFFFFFFFFFu;
+        bn += 0xFFFFFFFFFFFFFFFFu;
+        bn += 0xFFFFFFFFFFFFFFFFu;
+        //bn *= 0xFFFFFFFFFFFFFFFFu;
     }
 }
