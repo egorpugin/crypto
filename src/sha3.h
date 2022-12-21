@@ -26,30 +26,31 @@ struct keccak_p {
     >;
     static inline constexpr auto n_rounds = 12 + 2 * l;
 
-    static inline constexpr int R[] = {
-            0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43,
-            25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14
-    };
-    static inline constexpr uint64_t RC[] = {
-            0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
-            0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
-            0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
-            0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000aULL,
-            0x000000008000808bULL, 0x800000000000008bULL, 0x8000000000008089ULL,
-            0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
-            0x000000000000800aULL, 0x800000008000000aULL, 0x8000000080008081ULL,
-            0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
-    };
-    constexpr int index(int x) {
+    static constexpr int index(int x) {
         return x < 0 ? index(x + state_square_size) : x % state_square_size;
     }
-    constexpr int index(int x, int y) {
+    static constexpr int index(int x, int y) {
         return index(x) + state_square_size * index(y);
     }
 
     state_type A[state_size]{};
 
     void permute() {
+        static constexpr int R[] = {
+                0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43,
+                25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14
+        };
+        static constexpr uint64_t RC[] = {
+                0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
+                0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
+                0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
+                0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000aULL,
+                0x000000008000808bULL, 0x800000000000008bULL, 0x8000000000008089ULL,
+                0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
+                0x000000000000800aULL, 0x800000008000000aULL, 0x8000000080008081ULL,
+                0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+        };
+
         decltype(A) B;
         state_type C[state_square_size], D[state_square_size];
         for (int r = 0; r < n_rounds; ++r) {
@@ -89,7 +90,10 @@ struct keccak : keccak_p<1600> {
     template <auto N> void update(const char (&s)[N]) {
         update((uint8_t*)s, N-1);
     }
-    void update(const uint8_t *buf, int len) {
+    void update(auto &&s) requires requires { s.size(); } {
+        update((const uint8_t *)s.data(), s.size());
+    }
+    void update(const uint8_t *buf, auto len) {
         bitlen += len * 8;
         auto *d = (uint8_t *)A;
         for (int i = 0; i < len; ++i) {
@@ -105,23 +109,16 @@ struct keccak : keccak_p<1600> {
     }
     void pad() {
         auto *d = (uint8_t *)A;
-        auto &i = blockpos;
-        auto m = bitlen;
-        auto q = (r - (m % r)) / 8;
+        auto q = (r - (bitlen % r)) / 8;
         uint8_t q21 = Padding | ((1 << log2floor(Padding) + 1));
         uint8_t q22 = 0x80;
         if (q == 1) {
-            d[i++] = q21 | q22;
-        } else if (q == 2) {
-            d[i++] = q21;
-            check_permute();
-            d[i++] = q22;
+            d[blockpos++] = q21 | q22;
         } else {
-            d[i++] = q21;
-            memset(d + i, 0, q - 2);
+            d[blockpos++] = q21;
+            memset(d + blockpos, 0, q - 2);
             blockpos += q - 2;
-            check_permute();
-            d[i++] = q22;
+            d[blockpos++] = q22;
         }
         permute();
     }
@@ -142,7 +139,7 @@ template <> struct sha3<224> : keccak<224> {};
 template <> struct sha3<256> : keccak<256> {};
 template <> struct sha3<384> : keccak<384> {};
 template <> struct sha3<512> : keccak<512> {};
-template <auto DigestSizeBits> struct shake<128, DigestSizeBits> : keccak<DigestSizeBits,256,0b1111> {};
-template <auto DigestSizeBits> struct shake<256, DigestSizeBits> : keccak<DigestSizeBits,512,0b1111> {};
+template <auto DigestSizeBits> struct shake<128,DigestSizeBits> : keccak<DigestSizeBits,256,0b1111> {};
+template <auto DigestSizeBits> struct shake<256,DigestSizeBits> : keccak<DigestSizeBits,512,0b1111> {};
 
 } // namespace crypto
