@@ -11,10 +11,10 @@ struct keccak_p {
     static inline constexpr auto state_square_size = 5;
     static inline constexpr auto state_size = state_square_size * state_square_size;
     static inline constexpr auto w = b / state_size;
-    static constexpr unsigned log2(auto x) {
-        return x == 1 ? 0 : 1+log2(x >> 1);
+    static consteval unsigned log2floor(auto x) {
+        return x == 1 ? 0 : 1+log2floor(x >> 1);
     }
-    static inline constexpr auto l = log2(w);
+    static inline constexpr auto l = log2floor(w);
     using state_type = std::conditional_t<
             w == 64, uint64_t, std::conditional_t<
                     w == 32, uint32_t, std::conditional_t<
@@ -79,10 +79,8 @@ struct keccak_p {
     }
 };
 
-template <auto DigestSizeBits, auto c = 2 * DigestSizeBits, auto Padding = 1, auto PaddingBitLen = 2>
+template <auto DigestSizeBits, auto c = 2 * DigestSizeBits, auto Padding = 0b10>
 struct keccak : keccak_p<1600> {
-    using base = keccak_p<1600>;
-
     static inline constexpr auto r = StateBits - c;
 
     int blockpos{};
@@ -97,7 +95,7 @@ struct keccak : keccak_p<1600> {
         for (int i = 0; i < len; ++i) {
             d[blockpos++] ^= buf[i];
             if (blockpos == r / 8) {
-                //permute();
+                permute();
                 blockpos = 0;
             }
         }
@@ -106,31 +104,25 @@ struct keccak : keccak_p<1600> {
         auto *d = (uint8_t *)A;
         auto &i = blockpos;
         auto m = bitlen;
-        auto j = (-m-2) % r;
-        if (j < 0) {
-            j = -j;
-        }
-        auto q = (r/8) - (m % (r/8));
+        auto q = (r - (m % r)) / 8;
         auto check_permute = [&]() {
             if (blockpos == r / 8) {
                 permute();
                 blockpos = 0;
             }
         };
-        uint8_t q21 = Padding | (1 << PaddingBitLen);
+        uint8_t q21 = Padding | ((1 << log2floor(Padding) + 1));
         uint8_t q22 = 0x80;
-        uint8_t q1 = q21 | q22;
         if (q == 1) {
-            d[i++] = q1;
+            d[i++] = q21 | q22;
         } else if (q == 2) {
             d[i++] = q21;
             check_permute();
             d[i++] = q22;
         } else {
             d[i++] = q21;
-            auto sz = std::min<int>(q - 2, r / 8 - blockpos);
-            memset(d + i, 0, sz);
-            blockpos += sz;
+            memset(d + i, 0, q - 2);
+            blockpos += q - 2;
             check_permute();
             d[i++] = q22;
         }
@@ -153,7 +145,7 @@ template <> struct sha3<224> : keccak<224> {};
 template <> struct sha3<256> : keccak<256> {};
 template <> struct sha3<384> : keccak<384> {};
 template <> struct sha3<512> : keccak<512> {};
-template <auto DigestSizeBits> struct shake<128, DigestSizeBits> : keccak<DigestSizeBits,256,0xF,4> {};
-template <auto DigestSizeBits> struct shake<256, DigestSizeBits> : keccak<DigestSizeBits,512,0xF,4> {};
+template <auto DigestSizeBits> struct shake<128, DigestSizeBits> : keccak<DigestSizeBits,256,0b1111> {};
+template <auto DigestSizeBits> struct shake<256, DigestSizeBits> : keccak<DigestSizeBits,512,0b1111> {};
 
 } // namespace crypto

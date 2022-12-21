@@ -182,8 +182,9 @@ void test_sha3() {
     }
 
     auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
-        to_string2(sha, "The quick brown fox jumps over the lazy dog", h1);
-        to_string2(sha, "The quick brown fox jumps over the lazy dog.", h2);
+        using type = std::decay_t<decltype(sha)>;
+        to_string2(type{}, "The quick brown fox jumps over the lazy dog", h1);
+        to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
     };
     {
         sha3<224> sha;
@@ -215,7 +216,10 @@ void test_sha3() {
     }
     {
         shake<128,256> sha;
-        to_string2(sha, "", "7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26");
+        fox(sha,
+            "f4202e3c5852f9182a0430fd8144f0a74b95e7417ecae17db0f8cfeed0e3e66e",
+            "634069e6b13c3af64c57f05babf5911b6acf1d309b9624fc92b0c0bd9f27f538"
+        );
     }
 }
 
