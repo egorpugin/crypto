@@ -94,10 +94,13 @@ struct keccak : keccak_p<1600> {
         auto *d = (uint8_t *)A;
         for (int i = 0; i < len; ++i) {
             d[blockpos++] ^= buf[i];
-            if (blockpos == r / 8) {
-                permute();
-                blockpos = 0;
-            }
+            check_permute();
+        }
+    }
+    void check_permute() {
+        if (blockpos == r / 8) {
+            permute();
+            blockpos = 0;
         }
     }
     void pad() {
@@ -105,12 +108,6 @@ struct keccak : keccak_p<1600> {
         auto &i = blockpos;
         auto m = bitlen;
         auto q = (r - (m % r)) / 8;
-        auto check_permute = [&]() {
-            if (blockpos == r / 8) {
-                permute();
-                blockpos = 0;
-            }
-        };
         uint8_t q21 = Padding | ((1 << log2floor(Padding) + 1));
         uint8_t q22 = 0x80;
         if (q == 1) {
