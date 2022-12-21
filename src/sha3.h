@@ -85,7 +85,7 @@ struct keccak : keccak_p<1600> {
     static inline constexpr auto r = StateBits - c;
 
     int blockpos{};
-    int64_t bitlen{};
+    uint64_t bitlen{};
 
     template <auto N> void update(const char (&s)[N]) {
         update((uint8_t*)s, N-1);
@@ -98,13 +98,10 @@ struct keccak : keccak_p<1600> {
         auto *d = (uint8_t *)A;
         for (int i = 0; i < len; ++i) {
             d[blockpos++] ^= buf[i];
-            check_permute();
-        }
-    }
-    void check_permute() {
-        if (blockpos == r / 8) {
-            permute();
-            blockpos = 0;
+            if (blockpos == r / 8) {
+                permute();
+                blockpos = 0;
+            }
         }
     }
     void pad() {
@@ -125,7 +122,19 @@ struct keccak : keccak_p<1600> {
     auto digest() {
         pad();
         std::array<uint8_t, DigestSizeBits / 8> hash;
-        memcpy(hash.data(), (uint8_t *)A, hash.size());
+        auto ptr = hash.data();
+        auto sz = hash.size();
+        auto step = [&](){
+            auto len = std::min<size_t>(r / 8, sz);
+            memcpy(ptr, (uint8_t *) A, len);
+            sz -= len;
+            ptr += len;
+        };
+        step();
+        while (sz) {
+            permute();
+            step();
+        }
         return hash;
     }
 };
