@@ -4,8 +4,9 @@
 
 namespace crypto {
 
-template <auto StateBits, auto DigestSizeBits, auto c = 2 * DigestSizeBits>
+template <auto StateBits_>
 struct keccak_p {
+    static inline constexpr auto StateBits = StateBits_;
     static inline constexpr auto b = StateBits;
     static inline constexpr auto state_square_size = 5;
     static inline constexpr auto state_size = state_square_size * state_square_size;
@@ -24,8 +25,6 @@ struct keccak_p {
             >
     >;
     static inline constexpr auto n_rounds = 12 + 2 * l;
-    static inline constexpr auto r = StateBits - c;
-    static inline constexpr auto XOF = c != 2 * DigestSizeBits;
 
     static inline constexpr int R[] = {
             0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43,
@@ -49,8 +48,6 @@ struct keccak_p {
     }
 
     state_type A[state_size]{};
-    int blockpos{};
-    int64_t bitlen{};
 
     void permute() {
         decltype(A) B;
@@ -80,6 +77,16 @@ struct keccak_p {
             A[0] ^= RC[r];
         }
     }
+};
+
+template <auto DigestSizeBits, auto c = 2 * DigestSizeBits, auto Padding = 1, auto PaddingBitLen = 2>
+struct keccak : keccak_p<1600> {
+    using base = keccak_p<1600>;
+
+    static inline constexpr auto r = StateBits - c;
+
+    int blockpos{};
+    int64_t bitlen{};
 
     template <auto N> void update(const char (&s)[N]) {
         update((uint8_t*)s, N-1);
@@ -90,7 +97,7 @@ struct keccak_p {
         for (int i = 0; i < len; ++i) {
             d[blockpos++] ^= buf[i];
             if (blockpos == r / 8) {
-                permute();
+                //permute();
                 blockpos = 0;
             }
         }
@@ -99,6 +106,10 @@ struct keccak_p {
         auto *d = (uint8_t *)A;
         auto &i = blockpos;
         auto m = bitlen;
+        auto j = (-m-2) % r;
+        if (j < 0) {
+            j = -j;
+        }
         auto q = (r/8) - (m % (r/8));
         auto check_permute = [&]() {
             if (blockpos == r / 8) {
@@ -106,25 +117,23 @@ struct keccak_p {
                 blockpos = 0;
             }
         };
-        auto pad = [&](auto q21) {
-            uint8_t q22 = 0x80;
-            uint8_t q1 = q21 | q22;
-            if (q == 1) {
-                d[i++] = q1;
-            } else if (q == 2) {
-                d[i++] = q21;
-                check_permute();
-                d[i++] = q22;
-            } else {
-                d[i++] = q21;
-                auto sz = std::min<int>(q - 2, r / 8 - blockpos);
-                memset(d + i, 0, sz);
-                blockpos += sz;
-                check_permute();
-                d[i++] = q22;
-            }
-        };
-        pad(!XOF ? 0x06 : 0x1F);
+        uint8_t q21 = Padding | (1 << PaddingBitLen);
+        uint8_t q22 = 0x80;
+        uint8_t q1 = q21 | q22;
+        if (q == 1) {
+            d[i++] = q1;
+        } else if (q == 2) {
+            d[i++] = q21;
+            check_permute();
+            d[i++] = q22;
+        } else {
+            d[i++] = q21;
+            auto sz = std::min<int>(q - 2, r / 8 - blockpos);
+            memset(d + i, 0, sz);
+            blockpos += sz;
+            check_permute();
+            d[i++] = q22;
+        }
         permute();
     }
     auto digest() {
@@ -135,9 +144,6 @@ struct keccak_p {
     }
 };
 
-template <auto DigestSizeBits, auto c = 2 * DigestSizeBits>
-struct keccak : keccak_p<1600, DigestSizeBits, c> {};
-
 template <auto DigestSizeBits>
 struct sha3;
 template <auto ShakeType, auto DigestSizeBits>
@@ -147,7 +153,7 @@ template <> struct sha3<224> : keccak<224> {};
 template <> struct sha3<256> : keccak<256> {};
 template <> struct sha3<384> : keccak<384> {};
 template <> struct sha3<512> : keccak<512> {};
-template <auto DigestSizeBits> struct shake<128, DigestSizeBits> : keccak<DigestSizeBits,256> {};
-template <auto DigestSizeBits> struct shake<256, DigestSizeBits> : keccak<DigestSizeBits,512> {};
+template <auto DigestSizeBits> struct shake<128, DigestSizeBits> : keccak<DigestSizeBits,256,0xF,4> {};
+template <auto DigestSizeBits> struct shake<256, DigestSizeBits> : keccak<DigestSizeBits,512,0xF,4> {};
 
 } // namespace crypto

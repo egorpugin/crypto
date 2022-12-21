@@ -180,6 +180,43 @@ void test_sha3() {
         shake<256,512> sha;
         to_string2(sha, "", "46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be");
     }
+
+    auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
+        to_string2(sha, "The quick brown fox jumps over the lazy dog", h1);
+        to_string2(sha, "The quick brown fox jumps over the lazy dog.", h2);
+    };
+    {
+        sha3<224> sha;
+        fox(sha,
+            "d15dadceaa4d5d7bb3b48f446421d542e08ad8887305e28d58335795",
+            "2d0708903833afabdd232a20201176e8b58c5be8a6fe74265ac54db0"
+            );
+    }
+    {
+        sha3<256> sha;
+        fox(sha,
+            "69070dda01975c8c120c3aada1b282394e7f032fa9cf32f4cb2259a0897dfc04",
+            "a80f839cd4f83f6c3dafc87feae470045e4eb0d366397d5c6ce34ba1739f734d"
+        );
+    }
+    {
+        sha3<384> sha;
+        fox(sha,
+            "7063465e08a93bce31cd89d2e3ca8f602498696e253592ed26f07bf7e703cf328581e1471a7ba7ab119b1a9ebdf8be41",
+            "1a34d81695b622df178bc74df7124fe12fac0f64ba5250b78b99c1273d4b080168e10652894ecad5f1f4d5b965437fb9"
+        );
+    }
+    {
+        sha3<512> sha;
+        fox(sha,
+            "01dedd5de4ef14642445ba5f5b97c15e47b9ad931326e4b0727cd94cefc44fff23f07bf543139939b49128caf436dc1bdee54fcb24023a08d9403f9b4bf0d450",
+            "18f4f4bd419603f95538837003d9d254c26c23765565162247483f65c50303597bc9ce4d289f21d1c2f1f458828e33dc442100331b35e7eb031b5d38ba6460f8"
+        );
+    }
+    {
+        shake<128,256> sha;
+        to_string2(sha, "", "7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26");
+    }
 }
 
 #ifndef _WIN32
