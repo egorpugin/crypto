@@ -80,6 +80,8 @@ struct keccak_p {
     }
 };
 
+// Padding: bits are counted from right to left (01234567), not as usual (76543210)!
+// So, 0b10 in code means 01000000
 template <auto DigestSizeBits, auto c = 2 * DigestSizeBits, auto Padding = 0b10>
 struct keccak : keccak_p<1600> {
     static inline constexpr auto r = StateBits - c;
@@ -126,7 +128,7 @@ struct keccak : keccak_p<1600> {
         auto sz = hash.size();
         auto step = [&](){
             auto len = std::min<size_t>(r / 8, sz);
-            memcpy(ptr, (uint8_t *) A, len);
+            memcpy(ptr, (uint8_t *)A, len);
             sz -= len;
             ptr += len;
         };
