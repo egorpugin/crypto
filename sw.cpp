@@ -5,7 +5,7 @@ void build(Solution &s) {
 
     auto &t = s.addTarget<Executable>("mycrypto");
     t += cpp23;
-    t += "src/main.cpp";
+    t += "src/.*"_rr;
 
 
     // add deps here

@@ -1,12 +1,34 @@
 #include "aes.h"
+#ifndef _WIN32
 #include "bigint.h"
+#endif
 #include "sha2.h"
+#include "sha3.h"
 
 #include <array>
 #include <iostream>
 #include <iomanip>
 #include <span>
 #include <sstream>
+
+auto to_string = [](auto &&sha) {
+    auto digest = sha.digest();
+    std::span<uint8_t> d{(uint8_t *) digest.data(),
+                         digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
+    std::stringstream s;
+    s << std::setfill('0') << std::hex;
+    for (auto &&v: d) {
+        s << std::setw(2) << (unsigned int) v;
+    }
+    //printf("%s\n", s.str().c_str());
+    std::cout << s.str() << "\n";
+    return s.str();
+};
+auto to_string2 = [](auto &&sha, auto &&s, std::string s2) {
+    sha.update(s);
+    auto r = to_string(sha) == s2;
+    printf("%s\n", r ? "ok" : "false");
+};
 
 void test_aes() {
     using namespace crypto;
@@ -64,25 +86,6 @@ void test_aes() {
 
 void test_sha2() {
     using namespace crypto;
-
-    auto to_string = [](auto &&sha) {
-        auto digest = sha.digest();
-        std::span<uint8_t> d{(uint8_t*)digest.data(), digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
-        std::stringstream s;
-        s << std::setfill('0') << std::hex;
-        for (auto &&v : d) {
-            s << std::setw(2) << (unsigned int)v;
-        }
-        //printf("%s\n", s.str().c_str());
-        //std::cout << s.str() << "\n";
-        return s.str();
-    };
-    auto to_string2 = [&](auto &&sha, auto &&s, std::string s2) {
-        sha.update(s);
-        auto r = to_string(sha) == s2;
-        printf("%s\n", r ? "ok" : "false");
-    };
-
     {
         sha2<224> sha;
         to_string2(sha, "", "d14a028c2a3a2bc9476102bb288234c415a2b01f828ea62ac5b3e42f");
@@ -151,16 +154,50 @@ void test_sha2() {
     }
 }
 
+void test_sha3() {
+    using namespace crypto;
+    {
+        sha3<224> sha;
+        to_string2(sha, "", "6b4e03423667dbb73b6e15454f0eb1abd4597f9a1b078e3f5b5a6bc7");
+    }
+    {
+        sha3<256> sha;
+        to_string2(sha, "", "a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a");
+    }
+    {
+        sha3<384> sha;
+        to_string2(sha, "", "0c63a75b845e4f7d01107d852e4c2485c51a50aaaa94fc61995e71bbee983a2ac3713831264adb47fb6bd1e058d5f004");
+    }
+    {
+        sha3<512> sha;
+        to_string2(sha, "", "a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a615b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26");
+    }
+    {
+        shake<128,256> sha;
+        to_string2(sha, "", "7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26");
+    }
+    {
+        shake<256,512> sha;
+        to_string2(sha, "", "46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be");
+    }
+}
+
+#ifndef _WIN32
+#ifndef _WIN32
 #include <gmp.h>
 #include <gmpxx.h>
+#endif
 
-int main() {
-    mpz_class a, b, c;
-    a = "100000000000000000000054645645645645600000000000000000000";
-    b = "20000000034534534500838393935684563456345340000000000";
-    c = a + b;
-    c = a * b;
-
+void test_bigint() {
+#ifndef _WIN32
+    {
+        mpz_class a, b, c;
+        a = "100000000000000000000054645645645645600000000000000000000";
+        b = "20000000034534534500838393935684563456345340000000000";
+        c = a + b;
+        c = a * b;
+    }
+#endif
     {
         bigint bn2{0xFFFFFFFFFFFFFFFFull};
         bn2 <<= 65;
@@ -205,6 +242,11 @@ int main() {
         bn += 0xFFFFFFFFFFFFFFFFu;
         bn += 0xFFFFFFFFFFFFFFFFu;
         bn += 0xFFFFFFFFFFFFFFFFu;
-        //bn *= 0xFFFFFFFFFFFFFFFFu;
+        // bn *= 0xFFFFFFFFFFFFFFFFu;
     }
+}
+#endif
+
+int main() {
+    test_sha3();
 }
