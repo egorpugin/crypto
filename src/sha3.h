@@ -35,7 +35,7 @@ struct keccak_p {
 
     state_type A[state_size]{};
 
-    void permute() {
+    void permute() noexcept {
         static constexpr int R[] = {
                 0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43,
                 25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14
@@ -89,13 +89,13 @@ struct keccak : keccak_p<1600> {
     int blockpos{};
     uint64_t bitlen{};
 
-    template <auto N> void update(const char (&s)[N]) {
+    template <auto N> void update(const char (&s)[N]) noexcept {
         update((uint8_t*)s, N-1);
     }
-    void update(auto &&s) requires requires { s.size(); } {
+    void update(auto &&s) noexcept requires requires { s.size(); } {
         update((const uint8_t *)s.data(), s.size());
     }
-    void update(const uint8_t *buf, auto len) {
+    void update(const uint8_t *buf, auto len) noexcept {
         bitlen += len * 8;
         auto *d = (uint8_t *)A;
         for (int i = 0; i < len; ++i) {
@@ -106,10 +106,10 @@ struct keccak : keccak_p<1600> {
             }
         }
     }
-    void pad() {
+    void pad() noexcept {
         auto *d = (uint8_t *)A;
         auto q = (r - (bitlen % r)) / 8;
-        uint8_t q21 = Padding | ((1 << log2floor(Padding) + 1));
+        uint8_t q21 = Padding | (1 << (log2floor(Padding) + 1));
         uint8_t q22 = 0x80;
         if (q == 1) {
             d[blockpos++] = q21 | q22;
@@ -121,7 +121,7 @@ struct keccak : keccak_p<1600> {
         }
         permute();
     }
-    auto digest() {
+    auto digest() noexcept {
         pad();
         std::array<uint8_t, DigestSizeBits / 8> hash;
         auto ptr = hash.data();

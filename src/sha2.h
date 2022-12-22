@@ -125,7 +125,7 @@ struct sha2_base {
     template <auto N> void update(const char (&s)[N]) {
         update((uint8_t*)s, N-1);
     }
-    void update(const uint8_t *data, size_t length) {
+    void update(const uint8_t *data, size_t length) noexcept {
         auto pre_len = length % chunk_size_bytes;
         update_slow(data, pre_len);
         data = data + pre_len;
@@ -140,7 +140,7 @@ struct sha2_base {
             transform();
         }
     }
-    auto digest() {
+    auto digest() noexcept {
         pad();
         if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
             decltype(h) swapped;
@@ -165,21 +165,21 @@ private:
     message_length_type bitlen{};
     int blockpos{};
 
-    static constexpr auto choose(auto e, auto f, auto g) {
+    static constexpr auto choose(auto e, auto f, auto g) noexcept {
         return (e & f) ^ (~e & g);
     }
-    static constexpr auto majority(auto a, auto b, auto c) {
+    static constexpr auto majority(auto a, auto b, auto c) noexcept {
         return (a & (b | c)) | (b & c);
     }
-    template <auto P> static constexpr auto sigma(auto x) {
+    template <auto P> static constexpr auto sigma(auto x) noexcept {
         using std::rotr;
         return rotr(x, P.r1) ^ rotr(x, P.r2) ^ (x >> P.sh);
     }
-    template <auto P> static constexpr auto sum(auto x) {
+    template <auto P> static constexpr auto sum(auto x) noexcept {
         using std::rotr;
         return rotr(x, P.r1) ^ rotr(x, P.r2) ^ rotr(x, P.r3);
     }
-    constexpr void transform() {
+    constexpr void transform() noexcept {
         state_type w[rounds];
         for (uint8_t i = 0, j = 0; i < 16; ++i, j += sizeof(state_type)) {
             if constexpr (sizeof(state_type) == 4) {
@@ -220,7 +220,7 @@ private:
             h[i] += state[i];
         }
     }
-    constexpr void pad() {
+    constexpr void pad() noexcept {
         constexpr auto padding_size = chunk_size_bytes;
         constexpr auto bigint_size = padding_size / 8;
         constexpr auto padding_minus_bigint = padding_size - bigint_size;
@@ -241,7 +241,7 @@ private:
         }
         transform();
     }
-    void update_slow(const uint8_t *data, size_t length) {
+    void update_slow(const uint8_t *data, size_t length) noexcept {
         for (size_t i = 0; i < length; ++i) {
             m_data[blockpos++] = data[i];
             if (blockpos == chunk_size_bytes) {

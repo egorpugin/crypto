@@ -46,7 +46,7 @@ void test_aes() {
         auto r = memcmp(left, right, 16);
         static int x{};
         x += r;
-        //std::cout << r << "\n";
+        std::cout << (r == 0 ? "ok" : "false") << "\n";
     };
 
     //using v4u = unsigned __attribute__ ((vector_size (16)));
@@ -313,5 +313,7 @@ void test_bigint() {
 #endif
 
 int main() {
-    test_sha3();
+    test_aes();
+    //test_sha2();
+    //test_sha3();
 }

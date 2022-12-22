@@ -243,37 +243,43 @@ struct aes_base : aes_data {
 
     using state_type = unsigned char[4][Nb];
 
-    void SubBytes(state_type state) {
-        unsigned int i, j;
-        unsigned char t;
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
-                t = state[i][j];
-                state[i][j] = sbox[t / 16][t % 16];
+    static void SubBytes(state_type state, auto &&box) noexcept {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < Nb; ++j) {
+                auto t = state[i][j];
+                state[i][j] = box[t / 16][t % 16];
             }
         }
     }
+    void SubBytes(state_type state) noexcept {
+        SubBytes(state, sbox);
+    }
+    void InvSubBytes(state_type state) noexcept {
+        SubBytes(state, inv_sbox);
+    }
     // shift row i on n positions
-    void ShiftRow(state_type state, unsigned int i, unsigned int n) {
+    static void ShiftRow(state_type state, unsigned int i, unsigned int n) noexcept {
         unsigned char tmp[Nb];
-        for (unsigned int j = 0; j < Nb; j++) {
+        for (int j = 0; j < Nb; ++j) {
             tmp[j] = state[i][(j + n) % Nb];
         }
         memcpy(state[i], tmp, Nb * sizeof(unsigned char));
     }
-    void ShiftRows(state_type state) {
+    static void ShiftRows(state_type state) noexcept {
         ShiftRow(state, 1, 1);
         ShiftRow(state, 2, 2);
         ShiftRow(state, 3, 3);
     }
-    unsigned char xtime(unsigned char b) {
-        return (b << 1) ^ (((b >> 7) & 1) * 0x1b);
+    static void InvShiftRows(state_type state) noexcept {
+        ShiftRow(state, 1, Nb - 1);
+        ShiftRow(state, 2, Nb - 2);
+        ShiftRow(state, 3, Nb - 3);
     }
-    void MixColumns(state_type state) {
+    static void MixColumns(state_type state) noexcept {
         state_type temp_state{};
-        for (size_t i = 0; i < 4; ++i) {
-            for (size_t k = 0; k < 4; ++k) {
-                for (size_t j = 0; j < 4; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            for (int k = 0; k < 4; ++k) {
+                for (int j = 0; j < 4; ++j) {
                     if (CMDS[i][k] == 1)
                         temp_state[i][j] ^= state[k][j];
                     else
@@ -281,85 +287,67 @@ struct aes_base : aes_data {
                 }
             }
         }
-        for (size_t i = 0; i < 4; ++i) {
+        for (int i = 0; i < 4; ++i) {
             memcpy(state[i], temp_state[i], 4);
         }
     }
-    void AddRoundKey(state_type state, unsigned char *key) {
-        unsigned int i, j;
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
+    static void InvMixColumns(state_type state) noexcept {
+        state_type temp_state{};
+        for (int i = 0; i < 4; ++i) {
+            for (int k = 0; k < 4; ++k) {
+                for (int j = 0; j < 4; ++j) {
+                    temp_state[i][j] ^= GF_MUL_TABLE[INV_CMDS[i][k]][state[k][j]];
+                }
+            }
+        }
+        for (int i = 0; i < 4; ++i) {
+            memcpy(state[i], temp_state[i], 4);
+        }
+    }
+    static void AddRoundKey(state_type state, unsigned char *key) noexcept {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < Nb; ++j) {
                 state[i][j] = state[i][j] ^ key[i + 4 * j];
             }
         }
     }
-    void SubWord(unsigned char *a) {
-        int i;
-        for (i = 0; i < 4; i++) {
+    void SubWord(unsigned char *a) noexcept {
+        for (int i = 0; i < 4; ++i) {
             a[i] = sbox[a[i] / 16][a[i] % 16];
         }
     }
-    void RotWord(unsigned char *a) {
-        unsigned char c = a[0];
+    static void RotWord(unsigned char *a) noexcept {
+        auto c = a[0];
         a[0] = a[1];
         a[1] = a[2];
         a[2] = a[3];
         a[3] = c;
     }
-    void XorWords(unsigned char *a, unsigned char *b, unsigned char *c) {
-        for (int i = 0; i < 4; i++) {
+    static void XorWords(unsigned char *a, unsigned char *b, unsigned char *c) noexcept {
+        for (int i = 0; i < 4; ++i) {
             c[i] = a[i] ^ b[i];
         }
     }
-    void Rcon(unsigned char *a, unsigned int n) {
-        unsigned int i;
+    static auto xtime(unsigned char b) noexcept {
+        return (b << 1) ^ (((b >> 7) & 1) * 0x1b);
+    }
+    static void Rcon(unsigned char *a, unsigned int n) noexcept {
         unsigned char c = 1;
-        for (i = 0; i < n - 1; i++) {
+        for (unsigned i = 0; i < n - 1; ++i) {
             c = xtime(c);
         }
         a[0] = c;
         a[1] = a[2] = a[3] = 0;
     }
-    void InvSubBytes(state_type state) {
-        unsigned int i, j;
-        unsigned char t;
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
-                t = state[i][j];
-                state[i][j] = inv_sbox[t / 16][t % 16];
-            }
-        }
-    }
-    void InvMixColumns(state_type state) {
-        state_type temp_state{};
-        for (size_t i = 0; i < 4; ++i) {
-            for (size_t k = 0; k < 4; ++k) {
-                for (size_t j = 0; j < 4; ++j) {
-                    temp_state[i][j] ^= GF_MUL_TABLE[INV_CMDS[i][k]][state[k][j]];
-                }
-            }
-        }
-        for (size_t i = 0; i < 4; ++i) {
-            memcpy(state[i], temp_state[i], 4);
-        }
-    }
-    void InvShiftRows(state_type state) {
-        ShiftRow(state, 1, Nb - 1);
-        ShiftRow(state, 2, Nb - 2);
-        ShiftRow(state, 3, Nb - 3);
-    }
-    void KeyExpansion(const unsigned char key[], unsigned char w[]) {
+    void KeyExpansion(const unsigned char key[], unsigned char w[]) noexcept {
         unsigned char temp[4];
         unsigned char rcon[4];
 
-        unsigned int i = 0;
-        while (i < 4 * Nk) {
+        for (int i = 0; i < 4 * Nk; ++i) {
             w[i] = key[i];
-            i++;
         }
 
-        i = 4 * Nk;
-        while (i < 4 * Nb * (Nr + 1)) {
+        for (int i = 4 * Nk; i < 4 * Nb * (Nr + 1); i += 4) {
             temp[0] = w[i - 4 + 0];
             temp[1] = w[i - 4 + 1];
             temp[2] = w[i - 4 + 2];
@@ -378,22 +366,20 @@ struct aes_base : aes_data {
             w[i + 1] = w[i + 1 - 4 * Nk] ^ temp[1];
             w[i + 2] = w[i + 2 - 4 * Nk] ^ temp[2];
             w[i + 3] = w[i + 3 - 4 * Nk] ^ temp[3];
-            i += 4;
         }
     }
-    void EncryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) {
+    void EncryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) noexcept {
         state_type state;
-        unsigned int i, j, round;
 
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < Nb; ++j) {
                 state[i][j] = in[i + 4 * j];
             }
         }
 
         AddRoundKey(state, round_keys);
 
-        for (round = 1; round <= Nr - 1; round++) {
+        for (int round = 1; round <= Nr - 1; round++) {
             SubBytes(state);
             ShiftRows(state);
             MixColumns(state);
@@ -404,25 +390,24 @@ struct aes_base : aes_data {
         ShiftRows(state);
         AddRoundKey(state, round_keys + Nr * 4 * Nb);
 
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < Nb; ++j) {
                 out[i + 4 * j] = state[i][j];
             }
         }
     }
-    void DecryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) {
+    void DecryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) noexcept {
         state_type state;
-        unsigned int i, j, round;
 
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < Nb; ++j) {
                 state[i][j] = in[i + 4 * j];
             }
         }
 
         AddRoundKey(state, round_keys + Nr * 4 * Nb);
 
-        for (round = Nr - 1; round >= 1; round--) {
+        for (int round = Nr - 1; round >= 1; round--) {
             InvSubBytes(state);
             InvShiftRows(state);
             AddRoundKey(state, round_keys + round * 4 * Nb);
@@ -433,14 +418,14 @@ struct aes_base : aes_data {
         InvShiftRows(state);
         AddRoundKey(state, round_keys);
 
-        for (i = 0; i < 4; i++) {
-            for (j = 0; j < Nb; j++) {
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < Nb; ++j) {
                 out[i + 4 * j] = state[i][j];
             }
         }
     }
-    void XorBlocks(const unsigned char *a, const unsigned char *b, unsigned char *c) {
-        for (unsigned int i = 0; i < block_size_bytes; i++) {
+    static void XorBlocks(const unsigned char *a, const unsigned char *b, unsigned char *c) noexcept {
+        for (int i = 0; i < block_size_bytes; ++i) {
             c[i] = a[i] ^ b[i];
         }
     }
@@ -469,22 +454,22 @@ struct aes_ecb : protected aes_base<aes_parameters(KeyLength)> {
     explicit aes_ecb(auto &&k) {
         this->KeyExpansion(k, round_keys);
     }
-    void encrypt(auto &&in, auto &&out) {
+    void encrypt(auto &&in, auto &&out) noexcept {
         this->EncryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
     }
-    void decrypt(auto &&in, auto &&out) {
+    void decrypt(auto &&in, auto &&out) noexcept {
         this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
     }
 };
 template <auto KeyLength>
 struct aes_cbc : aes_ecb<KeyLength> {
     using aes_ecb<KeyLength>::aes_ecb;
-    void encrypt(auto &&in, auto &&iv, auto &&out) {
+    void encrypt(auto &&in, auto &&iv, auto &&out) noexcept {
         this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&in, (unsigned char*)&iv);
         this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
         iv = out;
     }
-    void decrypt(auto &&in, auto &&iv, auto &&out) {
+    void decrypt(auto &&in, auto &&iv, auto &&out) noexcept {
         this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->round_keys);
         this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&out, (unsigned char*)&out);
         iv = in;
@@ -493,12 +478,12 @@ struct aes_cbc : aes_ecb<KeyLength> {
 template <auto KeyLength>
 struct aes_cfb : aes_ecb<KeyLength> {
     using aes_ecb<KeyLength>::aes_ecb;
-    void encrypt(auto &&in, auto &&iv, auto &&out) {
+    void encrypt(auto &&in, auto &&iv, auto &&out) noexcept {
         this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
         this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
         iv = out;
     }
-    void decrypt(auto &&in, auto &&iv, auto &&out) {
+    void decrypt(auto &&in, auto &&iv, auto &&out) noexcept {
         this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
         this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
         iv = in;
