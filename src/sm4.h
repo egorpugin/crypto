@@ -1,5 +1,8 @@
 #pragma once
 
+#include <bit>
+#include <cstdint>
+
 namespace crypto {
 struct sm4 {
     static constexpr auto rounds = 32;
@@ -113,4 +116,5 @@ struct sm4 {
         x[3] = swap32(x0);
     }
 };
+
 } // namespace crypto
