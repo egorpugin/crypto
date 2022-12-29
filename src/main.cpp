@@ -1,8 +1,8 @@
 #include "aes.h"
 #ifndef _WIN32
 #include "bigint.h"
-#endif
 #include "sha2.h"
+#endif
 #include "sha3.h"
 #include "sm4.h"
 
@@ -85,6 +85,7 @@ void test_aes() {
     }
 }
 
+#ifndef _WIN32
 void test_sha2() {
     using namespace crypto;
     {
@@ -154,6 +155,7 @@ void test_sha2() {
                 , "32063579e2f475efdea66d4384f75a96df64247e363c7ad8eb640a25");
     }
 }
+#endif
 
 void test_sha3() {
     using namespace crypto;
@@ -268,10 +270,7 @@ void test_sm4() {
     sm4 sm;
     {
         sm.setkey_encrypt(&c, tv_key);
-
-        // for (int i=0; i<1000000; i++) {
         sm.crypt(&c, tv_plain);
-        //}
 
         equ = memcmp(tv_cipher, tv_plain, 16) == 0;
         printf("\nTest1 encrypt %s", equ ? "succeeded" : "failed");
@@ -370,8 +369,8 @@ void test_bigint() {
 #endif
 
 int main() {
-    test_aes();
+    //test_aes();
     //test_sha2();
     //test_sha3();
-    //test_sm4();
+    test_sm4();
 }
