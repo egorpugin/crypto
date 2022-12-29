@@ -30,6 +30,12 @@ auto to_string2 = [](auto &&sha, auto &&s, std::string s2) {
     auto r = to_string(sha) == s2;
     printf("%s\n", r ? "ok" : "false");
 };
+auto cmp = [](auto &&left, auto &&right) {
+    auto r = memcmp(left, right, 16);
+    static int x{};
+    x += r;
+    std::cout << (r == 0 ? "ok" : "false") << "\n";
+};
 
 void test_aes() {
     using namespace crypto;
@@ -42,13 +48,6 @@ void test_aes() {
                            0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
     unsigned char right[] = {0x8e, 0xa2, 0xb7, 0xca, 0x51, 0x67, 0x45, 0xbf,
                              0xea, 0xfc, 0x49, 0x90, 0x4b, 0x49, 0x60, 0x89};
-
-    auto cmp = [](auto &&left, auto &&right) {
-        auto r = memcmp(left, right, 16);
-        static int x{};
-        x += r;
-        std::cout << (r == 0 ? "ok" : "false") << "\n";
-    };
 
     //using v4u = unsigned __attribute__ ((vector_size (16)));
     using v4u = std::array<unsigned char,16>;
@@ -255,51 +254,34 @@ void test_sm4() {
 
     uint8_t tv_plain[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
                           0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
-
-    uint8_t tv_cipher2[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
-                            0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
-
-    uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
-                           0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
-
     uint8_t tv_key[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
 
-    sm4::ctx c;
-    int equ;
-
-    sm4 sm;
     {
-        sm.setkey_encrypt(&c, tv_key);
-        sm.crypt(&c, tv_plain);
+        sm4 enc{tv_key, sm4::encrypt{}};
+        enc.crypt(tv_plain);
 
-        equ = memcmp(tv_cipher, tv_plain, 16) == 0;
-        printf("\nTest1 encrypt %s", equ ? "succeeded" : "failed");
+        uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
+                               0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
+        cmp(tv_cipher, tv_plain);
 
-        sm.setkey_decrypt(&c, tv_key);
-
-        sm.crypt(&c, tv_plain);
-
-        equ = memcmp(tv_key, tv_plain, 16) == 0;
-        printf("\nTest1 decrypt %s", equ ? "succeeded" : "failed");
+        sm4 dec{tv_key, sm4::decrypt{}};
+        dec.crypt(tv_plain);
+        cmp(tv_key, tv_plain);
     }
     {
-        sm.setkey_encrypt(&c, tv_key);
-
+        sm4 enc{tv_key, sm4::encrypt{}};
         for (int i = 0; i < 1000000; i++) {
-            sm.crypt(&c, tv_plain);
+            enc.crypt(tv_plain);
         }
+        uint8_t tv_cipher[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
+                               0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
+        cmp(tv_cipher, tv_plain);
 
-        equ = memcmp(tv_cipher2, tv_plain, 16) == 0;
-        printf("\nTest2 encrypt %s", equ ? "succeeded" : "failed");
-
-        sm.setkey_decrypt(&c, tv_key);
-
+        sm4 dec{tv_key, sm4::decrypt{}};
         for (int i = 0; i < 1000000; i++) {
-            sm.crypt(&c, tv_plain);
+            dec.crypt(tv_plain);
         }
-
-        equ = memcmp(tv_key, tv_plain, 16) == 0;
-        printf("\nTest2 decrypt %s", equ ? "succeeded" : "failed");
+        cmp(tv_key, tv_plain);
     }
 }
 

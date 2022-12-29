@@ -4,6 +4,7 @@
 #include <cstdint>
 
 namespace crypto {
+
 struct sm4 {
     static constexpr auto rounds = 32;
     static constexpr uint8_t S[256] = {
@@ -22,98 +23,72 @@ struct sm4 {
         0x2d, 0x74, 0xd0, 0x12, 0xb8, 0xe5, 0xb4, 0xb0, 0x89, 0x69, 0x97, 0x4a, 0x0c, 0x96, 0x77, 0x7e, 0x65, 0xb9,
         0xf1, 0x09, 0xc5, 0x6e, 0xc6, 0x84, 0x18, 0xf0, 0x7d, 0xec, 0x3a, 0xdc, 0x4d, 0x20, 0x79, 0xee, 0x5f, 0x3e,
         0xd7, 0xcb, 0x39, 0x48};
-
     static constexpr uint32_t CK[32] = {
         0x00070e15, 0x1c232a31, 0x383f464d, 0x545b6269, 0x70777e85, 0x8c939aa1, 0xa8afb6bd, 0xc4cbd2d9,
         0xe0e7eef5, 0xfc030a11, 0x181f262d, 0x343b4249, 0x50575e65, 0x6c737a81, 0x888f969d, 0xa4abb2b9,
         0xc0c7ced5, 0xdce3eaf1, 0xf8ff060d, 0x141b2229, 0x30373e45, 0x4c535a61, 0x686f767d, 0x848b9299,
         0xa0a7aeb5, 0xbcc3cad1, 0xd8dfe6ed, 0xf4fb0209, 0x10171e25, 0x2c333a41, 0x484f565d, 0x646b7279};
-
     static constexpr uint64_t FK[4] = {0xa3b1bac6, 0x56aa3350, 0x677d9197, 0xb27022dc};
 
-    typedef struct ctx_t {
-        uint32_t rk[rounds];
-    } ctx;
+    struct encrypt{};
+    struct decrypt {};
 
-    static uint32_t swap32(uint32_t v) noexcept {
-        return ((std::rotl(v, 8) & 0x00FF00FFUL) | (std::rotl(v, 24) & 0xFF00FF00UL));
-    }
-
-    static uint32_t T(uint32_t x, int t) noexcept {
-        union {
-            uint8_t b[4];
-            uint32_t w;
-        } u;
-
-        u.w = x;
-
+    static void tau(uint8_t b[4]) noexcept {
         for (int i = 0; i < 4; ++i) {
-            u.b[i] = S[u.b[i]];
-        }
-
-        if (t == 0) {
-            // for key setup
-            return u.w ^ std::rotl(u.w, 13) ^ std::rotl(u.w, 23);
-        } else {
-            // for encryption
-            return u.w ^ std::rotl(u.w, 2) ^ std::rotl(u.w, 10) ^ std::rotl(u.w, 18) ^ std::rotl(u.w, 24);
+            b[i] = S[b[i]];
         }
     }
-
-    static uint32_t F(uint32_t x0, uint32_t x1, uint32_t x2, uint32_t x3, uint32_t rk) noexcept {
-        return x0 ^ T(x1 ^ x2 ^ x3 ^ rk, 1);
+    static uint32_t T(uint32_t b) noexcept {
+        tau((uint8_t *)&b);
+        return b ^ std::rotl(b, 2) ^ std::rotl(b, 10) ^ std::rotl(b, 18) ^ std::rotl(b, 24);
+    }
+    static uint32_t T1(uint32_t b) noexcept {
+        tau((uint8_t *)&b);
+        return b ^ std::rotl(b, 13) ^ std::rotl(b, 23);
     }
 
-    void setkey_encrypt(ctx *c, const void *key) noexcept {
-        uint32_t rk0, rk1, rk2, rk3;
+    uint32_t rk[rounds];
 
-        rk0 = swap32(((uint32_t *)key)[0]);
-        rk1 = swap32(((uint32_t *)key)[1]);
-        rk2 = swap32(((uint32_t *)key)[2]);
-        rk3 = swap32(((uint32_t *)key)[3]);
-
-        rk0 ^= FK[0];
-        rk1 ^= FK[1];
-        rk2 ^= FK[2];
-        rk3 ^= FK[3];
-
+    sm4(uint32_t key[4], encrypt) {
+        uint32_t rk[4];
+        for (int i = 0; i < 4; ++i) {
+            rk[i] = std::byteswap(key[i]);
+        }
+        for (int i = 0; i < 4; ++i) {
+            rk[i] ^= FK[i];
+        }
         for (int i = 0; i < 32; ++i) {
-            rk0 ^= T(rk1 ^ rk2 ^ rk3 ^ CK[i], 0);
-            c->rk[i] = rk0;
-            std::swap(rk0, rk1);
-            std::swap(rk1, rk2);
-            std::swap(rk2, rk3);
+            rk[0] ^= T1(rk[1] ^ rk[2] ^ rk[3] ^ CK[i]);
+            this->rk[i] = rk[0];
+            for (int i = 0; i < 3; ++i) {
+                std::swap(rk[i], rk[i + 1]);
+            }
         }
     }
-    void setkey_decrypt(ctx *c, const void *key) noexcept {
-        setkey_encrypt(c, key);
-
+    sm4(uint32_t key[4], decrypt) : sm4{key, encrypt{}} {
         for (int i = 0; i < 16; ++i) {
-            std::swap(c->rk[i], c->rk[31 - i]);
+            std::swap(rk[i], rk[31 - i]);
         }
     }
+    sm4(const void *key, auto mode) : sm4{(uint32_t *)key, mode} {}
 
-    void crypt(ctx *c, void *buf) noexcept {
-        uint32_t x0, x1, x2, x3, t;
-        uint32_t *rk = c->rk;
-        uint32_t *x = (uint32_t *)buf;
-
-        x0 = swap32(x[0]);
-        x1 = swap32(x[1]);
-        x2 = swap32(x[2]);
-        x3 = swap32(x[3]);
-
-        for (int i = 0; i < 32; ++i) {
-            x0 = F(x0, x1, x2, x3, rk[i]);
-            std::swap(x0, x1);
-            std::swap(x1, x2);
-            std::swap(x2, x3);
+    void crypt(uint32_t data[4]) noexcept {
+        uint32_t x[4];
+        for (int i = 0; i < 4; ++i) {
+            x[i] = std::byteswap(data[i]);
         }
-
-        x[0] = swap32(x3);
-        x[1] = swap32(x2);
-        x[2] = swap32(x1);
-        x[3] = swap32(x0);
+        for (int i = 0; i < 32; ++i) {
+            x[0] = x[0] ^ T(x[1] ^ x[2] ^ x[3] ^ rk[i]);
+            for (int i = 0; i < 3; ++i) {
+                std::swap(x[i], x[i + 1]);
+            }
+        }
+        for (int i = 0; i < 4; ++i) {
+            data[i] = std::byteswap(x[4 - i - 1]);
+        }
+    }
+    void crypt(auto &&in) noexcept {
+        crypt((uint32_t *)in);
     }
 };
 
