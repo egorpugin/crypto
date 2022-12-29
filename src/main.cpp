@@ -4,6 +4,7 @@
 #endif
 #include "sha2.h"
 #include "sha3.h"
+#include "sm4.h"
 
 #include <array>
 #include <iostream>
@@ -247,6 +248,62 @@ void test_sha3() {
     }
 }
 
+void test_sm4() {
+    using namespace crypto;
+
+    uint8_t tv_plain[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
+                          0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
+
+    uint8_t tv_cipher2[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
+                            0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
+
+    uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
+                           0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
+
+    uint8_t tv_key[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
+
+    sm4::ctx c;
+    int equ;
+
+    sm4 sm;
+    {
+        sm.setkey_encrypt(&c, tv_key);
+
+        // for (int i=0; i<1000000; i++) {
+        sm.crypt(&c, tv_plain);
+        //}
+
+        equ = memcmp(tv_cipher, tv_plain, 16) == 0;
+        printf("\nTest1 encrypt %s", equ ? "succeeded" : "failed");
+
+        sm.setkey_decrypt(&c, tv_key);
+
+        sm.crypt(&c, tv_plain);
+
+        equ = memcmp(tv_key, tv_plain, 16) == 0;
+        printf("\nTest1 decrypt %s", equ ? "succeeded" : "failed");
+    }
+    {
+        sm.setkey_encrypt(&c, tv_key);
+
+        for (int i = 0; i < 1000000; i++) {
+            sm.crypt(&c, tv_plain);
+        }
+
+        equ = memcmp(tv_cipher2, tv_plain, 16) == 0;
+        printf("\nTest2 encrypt %s", equ ? "succeeded" : "failed");
+
+        sm.setkey_decrypt(&c, tv_key);
+
+        for (int i = 0; i < 1000000; i++) {
+            sm.crypt(&c, tv_plain);
+        }
+
+        equ = memcmp(tv_key, tv_plain, 16) == 0;
+        printf("\nTest2 decrypt %s", equ ? "succeeded" : "failed");
+    }
+}
+
 #ifndef _WIN32
 #ifndef _WIN32
 #include <gmp.h>
@@ -316,4 +373,5 @@ int main() {
     test_aes();
     //test_sha2();
     //test_sha3();
+    //test_sm4();
 }
