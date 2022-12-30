@@ -1,3 +1,8 @@
+// https://www.rfc-editor.org/rfc/rfc8446
+// https://tls.dxdt.ru/tls.html
+// https://commandlinefanatic.com/cgi-bin/showarticle.cgi?article=art080
+// https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20180125_TLSv1.3_Andy_Brodie.pdf
+
 #pragma once
 
 #include <array>
@@ -34,9 +39,17 @@ struct length {
     void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
     }
-    //operator uint32_t() const requires (Bytes == 3) { return *(uint32_t*)data; }
-    //operator uint32_t() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
+    operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
+    operator auto() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
 };
+template <auto Bytes>
+auto operator+(auto &&v, const length<Bytes> &l) {
+    return v + (uint32_t)l;
+}
+template <auto Bytes>
+auto operator+(const length<Bytes> &l, auto &&v) {
+    return v + (uint32_t)l;
+}
 
 template <typename T, auto N, auto MinDataLength, auto MaxDataLength>
 struct repeated {
@@ -150,10 +163,24 @@ template <typename Peer, typename Fragment = empty>
 struct TLSPlaintext {
     ContentType type = Fragment::content_type;
     ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
-    length<2> length = sizeof(Fragment);
+    length<2> length;
     std::conditional_t<is_client<Peer>, Fragment, content_type> fragment;
 
     static constexpr auto recv_size() { return sizeof(TLSPlaintext) - sizeof(fragment); }
+
+    int make_buffers(auto &&vec) {
+        int sz{};
+        if constexpr (requires { fragment.make_buffers(vec); }) {
+            vec.emplace_back(this, sizeof(*this) - sizeof(fragment));
+            length = fragment.make_buffers(vec);
+            sz += length + sizeof(*this) - sizeof(fragment);
+        } else {
+            length = sizeof(fragment);
+            sz += sizeof(*this);
+            vec.emplace_back(this, sz);
+        }
+        return sz;
+    }
 };
 
 struct TLSInnerPlaintext {
@@ -198,12 +225,25 @@ template <typename MessageType>
 struct Handshake {
     static constexpr auto content_type = ContentType::handshake;
 
-    HandshakeType msg_type = MessageType::message_type; /* handshake type */
-    length<3> length_ = sizeof(MessageType);          /* bytes in message */
+    HandshakeType msg_type = MessageType::message_type;
+    length<3> length;
     MessageType message;
 
+    int make_buffers(auto &&vec) {
+        int sz{};
+        if constexpr (requires { message.make_buffers(vec); }) {
+            vec.emplace_back(this, sizeof(*this) - sizeof(message));
+            length = message.make_buffers(vec);
+            sz += length + sizeof(*this) - sizeof(message);
+        } else {
+            length = sizeof(message);
+            sz += sizeof(*this);
+            vec.emplace_back(this, sz);
+        }
+        return sz;
+    }
+
     /*select (Handshake.msg_type) {
-        case client_hello:          ClientHello;
         case server_hello:          ServerHello;
         case end_of_early_data:     EndOfEarlyData;
         case encrypted_extensions:  EncryptedExtensions;
@@ -218,34 +258,6 @@ struct Handshake {
 
 // B.3.1.  Key Exchange Messages
 
-template <auto NumberOfCipherSuites>
-struct ClientHello {
-    static constexpr auto message_type = HandshakeType::client_hello;
-
-    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
-    Random random;
-    repeated<uint8, 32, 0, 32> legacy_session_id;//<0..32>;
-    cipher_suite<NumberOfCipherSuites> cipher_suites_;
-    repeated<uint8, 1, 1, (1<<8)-1> legacy_compression_methods{};//<1..2^8-1>;
-    //Extension extensions<8..2^16-1>;
-};
-
-struct ServerHello {
-    static constexpr auto message_type = HandshakeType::server_hello;
-
-    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
-    Random random;
-    /*opaque legacy_session_id_echo<0..32>;
-    CipherSuite cipher_suite;
-    uint8 legacy_compression_method = 0;
-    Extension extensions<6..2^16-1>;*/
-};
-
-struct {
-    // ExtensionType extension_type;
-    // opaque extension_data<0..2^16-1>;
-} Extension;
-
 enum class ExtensionType : uint16 {
     server_name = 0,                             /* RFC 6066 */
     max_fragment_length = 1,                     /* RFC 6066 */
@@ -259,18 +271,148 @@ enum class ExtensionType : uint16 {
     client_certificate_type = 19,                /* RFC 7250 */
     server_certificate_type = 20,                /* RFC 7250 */
     padding = 21,                                /* RFC 7685 */
-    //RESERVED = 40,                               /* Used but never assigned */
-    pre_shared_key = 41,                         /* RFC 8446 */
-    early_data = 42,                             /* RFC 8446 */
-    supported_versions = 43,                     /* RFC 8446 */
-    cookie = 44,                                 /* RFC 8446 */
-    psk_key_exchange_modes = 45,                 /* RFC 8446 */
-    //RESERVED = 46,                               /* Used but never assigned */
-    certificate_authorities = 47,                /* RFC 8446 */
-    oid_filters = 48,                            /* RFC 8446 */
-    post_handshake_auth = 49,                    /* RFC 8446 */
-    signature_algorithms_cert = 50,              /* RFC 8446 */
-    key_share = 51,                              /* RFC 8446 */
+    // RESERVED = 40,                               /* Used but never assigned */
+    pre_shared_key = 41,         /* RFC 8446 */
+    early_data = 42,             /* RFC 8446 */
+    supported_versions = 43,     /* RFC 8446 */
+    cookie = 44,                 /* RFC 8446 */
+    psk_key_exchange_modes = 45, /* RFC 8446 */
+    // RESERVED = 46,                               /* Used but never assigned */
+    certificate_authorities = 47,   /* RFC 8446 */
+    oid_filters = 48,               /* RFC 8446 */
+    post_handshake_auth = 49,       /* RFC 8446 */
+    signature_algorithms_cert = 50, /* RFC 8446 */
+    key_share = 51,                 /* RFC 8446 */
+};
+
+template <typename E>
+struct Extension {
+    uint16 extension_type = std::byteswap(E::extension_type);
+    length<2> length;
+    E e;
+
+    int make_buffers(auto &&vec) {
+        int sz{};
+        if constexpr (requires { e.make_buffers(vec); }) {
+            vec.emplace_back(this, sizeof(*this) - sizeof(e));
+            length = e.make_buffers(vec);
+            sz += length + sizeof(*this) - sizeof(e);
+        } else {
+            length = sizeof(*this);
+            sz += length;
+            vec.emplace_back(this, sizeof(*this));
+        }
+        return length;
+    }
+};
+
+struct server_name {
+    static constexpr uint16 extension_type = 0;
+
+    enum NameType : uint8 { host_name = 0 };
+
+    length<2> server_name_list_length;
+    NameType name_type{host_name};
+    length<2> server_name_length;
+    string server_name_;
+
+    int make_buffers(auto &&vec) {
+        server_name_length = server_name_.size();
+        server_name_list_length = sizeof(name_type) + sizeof(server_name_length) + server_name_length;
+
+        vec.emplace_back(this, sizeof(*this) - sizeof(server_name_));
+        vec.emplace_back(server_name_.data(), server_name_.size());
+        return server_name_list_length + sizeof(server_name_list_length);
+    }
+};
+struct padding {
+    static constexpr uint16 extension_type = 21;
+
+    uint8_t padding_[512]{};
+
+    int make_buffers(auto &&vec) {
+        int sz{};
+        for (auto &&v : vec) {
+            sz += v.size();
+        }
+        vec.emplace_back(padding_, sizeof(*this) - sz);
+        return vec.back().size();
+    }
+};
+
+template <typename... Types>
+struct type_list {
+    using variant_type = variant<Types...>;
+    using variant_pointer_type = variant<Types*...>;
+
+    //static variant_type make_type(auto type) {
+        //variant_type v;
+    //}
+};
+
+template <template <typename> typename T, typename... Types>
+struct wrap_type_list {
+    using variant_type = variant<T<Types>...>;
+    using variant_pointer_type = variant<T<Types *>...>;
+
+    // static variant_type make_type(auto type) {
+    // variant_type v;
+    //}
+};
+
+using extension_list = type_list<Extension<server_name>, Extension<padding>>;
+using extension_type = extension_list::variant_type;
+
+struct extensions_type {
+    length<2> length;
+    std::vector<extension_type> extensions;
+
+    int make_buffers(auto &&vec) {
+        vec.emplace_back(this, sizeof(length));
+        int sz{};
+        for (auto &&e : extensions) {
+            visit(e, [&](auto &&v) {
+                if constexpr (requires { v.make_buffers(vec); }) {
+                    sz += v.make_buffers(vec);
+                } else {
+                    vec.emplace_back(&v, sizeof(v));
+                    sz += sizeof(v);
+                }
+            });
+        }
+        length = sz;
+        return sz + sizeof(length);
+    }
+};
+
+template <auto NumberOfCipherSuites>
+struct ClientHello {
+    static constexpr auto message_type = HandshakeType::client_hello;
+
+    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
+    Random random;
+    repeated<uint8, 32, 0, 32> legacy_session_id;//<0..32>;
+    cipher_suite<NumberOfCipherSuites> cipher_suites_;
+    repeated<uint8, 1, 1, (1 << 8) - 1> legacy_compression_methods{}; //<1..2^8-1>;
+    extensions_type extensions;
+
+    int make_buffers(auto &&vec) {
+        vec.emplace_back(this, sizeof(*this) - sizeof(extensions));
+        int sz = vec.back().size();
+        sz += extensions.make_buffers(vec);
+        return sz;
+    }
+};
+
+struct ServerHello {
+    static constexpr auto message_type = HandshakeType::server_hello;
+
+    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
+    Random random;
+    /*opaque legacy_session_id_echo<0..32>;
+    CipherSuite cipher_suite;
+    uint8 legacy_compression_method = 0;
+    Extension extensions<6..2^16-1>;*/
 };
 
 enum class NamedGroup : uint16 {

@@ -40,10 +40,25 @@ struct tls {
         boost::asio::ip::tcp::socket s{ex};
         co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
 
+        std::vector<boost::asio::const_buffer> buffers;
+        buffers.reserve(20);
+
         TLSPlaintext<client, Handshake<ClientHello<1>>> msg;
         auto &client_hello = msg.fragment;
         client_hello.message.cipher_suites_ = {.data = CipherSuite::TLS_AES_256_GCM_SHA384};
-        co_await s.async_send(boost::asio::buffer(&msg, sizeof(msg)), use_awaitable);
+
+        Extension<server_name> sn;
+        sn.e.server_name_ = "software-network.org";
+        client_hello.message.extensions.extensions.emplace_back(sn);
+
+        Extension<padding> p;
+        client_hello.message.extensions.extensions.emplace_back(p);
+
+        auto sz = msg.make_buffers(buffers);
+        //p.make_buffers(buffers, sz);
+        //buffers.emplace_back(padding, 512-sz);
+
+        co_await s.async_send(buffers, use_awaitable);
 
         TLSPlaintext<server> smsg;
         co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
