@@ -1,11 +1,14 @@
 #include "aes.h"
-#ifndef _WIN32
+#ifndef _MSC_VER
 #include "bigint.h"
 #include "sha2.h"
 #endif
 #include "sha3.h"
 #include "sm4.h"
+#ifdef _MSC_VER
 #include "tls.h"
+#endif
+#include "x25519.h"
 
 #include <array>
 #include <iostream>
@@ -85,7 +88,7 @@ void test_aes() {
     }
 }
 
-#ifndef _WIN32
+#ifndef _MSC_VER
 void test_sha2() {
     using namespace crypto;
     {
@@ -286,6 +289,21 @@ void test_sm4() {
     }
 }
 
+void test_25519() {
+    using namespace crypto;
+
+    x25519 x;
+    x25519::f25519 f{};
+    auto [prk, pubk] = x.compact_x25519_keygen(f);
+
+    if (prk == pubk) {
+        std::cout << "ok\n";
+    }
+    int a = 5;
+    a++;
+}
+
+#ifdef _MSC_VER
 void test_tls() {
     using namespace crypto;
 
@@ -293,6 +311,7 @@ void test_tls() {
     //tls t{"tls13.1d.pw"};
     t.run();
 }
+#endif
 
 #ifndef _WIN32
 #ifndef _WIN32
@@ -364,5 +383,6 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    test_tls();
+    test_25519();
+    //test_tls();
 }
