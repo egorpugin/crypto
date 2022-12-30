@@ -68,7 +68,13 @@ struct repeated {
     }
 
     length<length_size()> length{sizeof(data)};
-    T data[N];
+    T data[N]{};
+
+    repeated() = default;
+    repeated(T) = delete;
+    void operator=(auto) = delete;
+
+    T &operator[](int i){return data[i];}
 };
 
 //template <auto Bytes>
@@ -77,22 +83,29 @@ struct repeated {
 using ProtocolVersion = uint16;
 using Random = std::array<uint8,32>;
 
-enum class CipherSuite : uint16 {
-    TLS_AES_128_GCM_SHA256 = 0x1301,
-    TLS_AES_256_GCM_SHA384 = 0x1302,
-    TLS_CHACHA20_POLY1305_SHA256 = 0x1303,
-    TLS_AES_128_CCM_SHA256 = 0x1304,
-    TLS_AES_128_CCM_8_SHA256 = 0x1305,
+struct CipherSuite {
+    enum : uint16 {
+        TLS_AES_128_GCM_SHA256 = 0x1301,
+        TLS_AES_256_GCM_SHA384 = 0x1302,
+        TLS_CHACHA20_POLY1305_SHA256 = 0x1303,
+        TLS_AES_128_CCM_SHA256 = 0x1304,
+        TLS_AES_128_CCM_8_SHA256 = 0x1305,
 
-    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103,
-    TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104,
-    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105,
-    TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
+        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103,
+        TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104,
+        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105,
+        TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
 
-    TLS_SM4_GCM_SM3 = 0x00C6,
-    TLS_SM4_CCM_SM3 = 0x00C7,
-    // SignatureScheme sm2sig_sm3 = 0x0708;
-    // NamedGroup curveSM2 = {41};
+        TLS_SM4_GCM_SM3 = 0x00C6,
+        TLS_SM4_CCM_SM3 = 0x00C7,
+    };
+
+    uint16 suite;
+
+    auto &operator=(uint16_t v) {
+        suite = std::byteswap(v);
+        return *this;
+    }
 };
 template <auto N>
 using cipher_suite = repeated<CipherSuite, N, 2, (1<<16)-2>;
@@ -164,7 +177,13 @@ using content_type = std::variant<Alert>;
 int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
     auto sz_obj = sizeof(obj) - sizeof(variable_field);
     vec.emplace_back(&obj, sz_obj);
-    auto variable_field_size = variable_field.make_buffers(vec);
+    int variable_field_size{};
+    if constexpr (requires { variable_field.make_buffers(vec); }) {
+        variable_field_size = variable_field.make_buffers(vec);
+    } else {
+        variable_field_size = sizeof(variable_field);
+        vec.emplace_back(&variable_field, variable_field_size);
+    }
     if constexpr (requires { obj.length; }) {
         obj.length = variable_field_size;
     }
@@ -251,25 +270,19 @@ struct Handshake {
 // B.3.1.  Key Exchange Messages
 
 enum class ExtensionType : uint16 {
-    server_name = 0,                             /* RFC 6066 */
     max_fragment_length = 1,                     /* RFC 6066 */
     status_request = 5,                          /* RFC 6066 */
-    supported_groups = 10,                       /* RFC 8422, 7919 */
-    signature_algorithms = 13,                   /* RFC 8446 */
     use_srtp = 14,                               /* RFC 5764 */
     heartbeat = 15,                              /* RFC 6520 */
     application_layer_protocol_negotiation = 16, /* RFC 7301 */
     signed_certificate_timestamp = 18,           /* RFC 6962 */
     client_certificate_type = 19,                /* RFC 7250 */
     server_certificate_type = 20,                /* RFC 7250 */
-    padding = 21,                                /* RFC 7685 */
-    // RESERVED = 40,                               /* Used but never assigned */
+
     pre_shared_key = 41,         /* RFC 8446 */
     early_data = 42,             /* RFC 8446 */
-    supported_versions = 43,     /* RFC 8446 */
     cookie = 44,                 /* RFC 8446 */
-    psk_key_exchange_modes = 45, /* RFC 8446 */
-    // RESERVED = 46,                               /* Used but never assigned */
+
     certificate_authorities = 47,   /* RFC 8446 */
     oid_filters = 48,               /* RFC 8446 */
     post_handshake_auth = 49,       /* RFC 8446 */
@@ -277,9 +290,11 @@ enum class ExtensionType : uint16 {
     key_share = 51,                 /* RFC 8446 */
 };
 
+using extension_type_type = uint16;
+
 template <typename E>
 struct Extension {
-    uint16 extension_type = std::byteswap(E::extension_type);
+    extension_type_type extension_type = std::byteswap(E::extension_type);
     length<2> length;
     E e;
 
@@ -307,8 +322,80 @@ struct server_name {
         return server_name_list_length + sizeof(server_name_list_length);
     }
 };
+struct supported_versions {
+    static constexpr extension_type_type extension_type = 43;
+
+    length<1> length{sizeof(supported_version)};
+    ProtocolVersion supported_version = 0x0403; // tls13
+};
+struct signature_algorithms {
+    static constexpr extension_type_type extension_type = 13;
+    using SignatureScheme = uint16;
+/*
+    ecdsa_secp256r1_sha256 = 0x0403,
+    ecdsa_secp384r1_sha384 = 0x0503,
+    ecdsa_secp521r1_sha512 = 0x0603,
+
+    // EdDSA algorithms
+    ed25519 = 0x0807,
+    ed448 = 0x0808,
+*/
+
+    length<2> length{sizeof(scheme)};
+    SignatureScheme scheme = 0x0708;
+};
+enum class NamedGroup {
+    // Elliptic Curve Groups (ECDHE)
+    // obsolete_RESERVED(0x0001..0x0016),
+    secp256r1 = 0x0017,
+    secp384r1 = 0x0018,
+    secp521r1 = 0x0019,
+    // obsolete_RESERVED(0x001A..0x001C),
+    x25519 = 0x001D,
+    x448 = 0x001E,
+
+    // Finite Field Groups (DHE)
+    ffdhe2048 = 0x0100,
+    ffdhe3072 = 0x0101,
+    ffdhe4096 = 0x0102,
+    ffdhe6144 = 0x0103,
+    ffdhe8192 = 0x0104,
+
+    //curveSM2 = {41};
+};
+struct supported_groups {
+    static constexpr extension_type_type extension_type = 10;
+    using NamedGroup = uint16;
+
+    length<2> length{sizeof(scheme)};
+    NamedGroup scheme = 0x1D00;
+};
+struct key_share {
+    static constexpr extension_type_type extension_type = 51;
+    using NamedGroup = uint16;
+
+    struct entry {
+        NamedGroup scheme = 0x1D00;
+        ::crypto::tls13::length<2> length{sizeof(key)};
+        uint8 key[32];
+    };
+
+    length<2> length{sizeof(e)};
+    entry e;
+};
+struct psk_key_exchange_modes {
+    static constexpr extension_type_type extension_type = 45;
+
+    enum class PskKeyExchangeMode : uint8 {
+        psk_ke = 0,
+        psk_dhe_ke = 1,
+    };
+
+    length<1> length{sizeof(mode)};
+    PskKeyExchangeMode mode{PskKeyExchangeMode::psk_dhe_ke};
+};
 struct padding {
-    static constexpr uint16 extension_type = 21;
+    static constexpr extension_type_type extension_type = 21;
 
     uint8_t padding_[512]{};
 
@@ -327,6 +414,9 @@ struct type_list {
     using variant_type = variant<Types...>;
     using variant_pointer_type = variant<Types*...>;
 
+    template <template <typename> typename T>
+    using wrap_list = type_list<T<Types>...>;
+
     //static variant_type make_type(auto type) {
         //variant_type v;
     //}
@@ -342,7 +432,15 @@ struct wrap_type_list {
     //}
 };
 
-using extension_list = type_list<Extension<server_name>, Extension<padding>>;
+using extension_list = type_list<
+    server_name,
+    padding,
+    supported_versions,
+    signature_algorithms,
+    supported_groups,
+    key_share,
+    psk_key_exchange_modes
+>::wrap_list<Extension>;
 using extension_type = extension_list::variant_type;
 
 struct extensions_type {
@@ -354,16 +452,19 @@ struct extensions_type {
         int sz{};
         for (auto &&e : extensions) {
             visit(e, [&](auto &&v) {
-                if constexpr (requires { v.make_buffers(vec); }) {
-                    sz += v.make_buffers(vec);
-                } else {
-                    vec.emplace_back(&v, sizeof(v));
-                    sz += sizeof(v);
-                }
+                sz += v.make_buffers(vec);
             });
         }
         length = sz;
         return sz + sizeof(length);
+    }
+
+    template <typename T>
+    T &add() {
+        return std::get<Extension<T>>(extensions.emplace_back(Extension<T>{})).e;
+    }
+    void add(auto &&v) {
+        extensions.emplace_back(v);
     }
 };
 
@@ -394,33 +495,16 @@ struct ServerHello {
     Extension extensions<6..2^16-1>;*/
 };
 
-enum class NamedGroup : uint16 {
-    unallocated_RESERVED = 0x0000,
 
-    /* Elliptic Curve Groups (ECDHE) */
-    // obsolete_RESERVED(0x0001..0x0016),
-    secp256r1 = 0x0017,
-    secp384r1 = 0x0018,
-    secp521r1 = 0x0019,
-    // obsolete_RESERVED(0x001A..0x001C),
-    x25519 = 0x001D,
-    x448 = 0x001E,
 
-    /* Finite Field Groups (DHE) */
-    ffdhe2048 = 0x0100,
-    ffdhe3072 = 0x0101,
-    ffdhe4096 = 0x0102,
-    ffdhe6144 = 0x0103,
-    ffdhe8192 = 0x0104,
 
-    /* Reserved Code Points */
-    // ffdhe_private_use(0x01FC..0x01FF),
-    // ecdhe_private_use(0xFE00..0xFEFF),
-    // obsolete_RESERVED(0xFF01..0xFF02),
-};
+
+
+
+// unused
 
 struct KeyShareEntry {
-    NamedGroup group;
+    //NamedGroup group;
     // opaque key_exchange<1..2^16-1>;
 };
 
@@ -429,7 +513,7 @@ struct KeyShareClientHello {
 };
 
 struct {
-    NamedGroup selected_group;
+    //NamedGroup selected_group;
 } KeyShareHelloRetryRequest;
 
 struct {
@@ -441,15 +525,6 @@ struct {
     // opaque X[coordinate_length];
     // opaque Y[coordinate_length];
 } UncompressedPointRepresentation;
-
-enum class PskKeyExchangeMode : uint8 {
-    psk_ke = 0,
-    psk_dhe_ke = 1,
-};
-
-struct {
-    // PskKeyExchangeMode ke_modes<1..255>;
-} PskKeyExchangeModes;
 
 struct {
 } Empty;
@@ -499,53 +574,6 @@ struct {
     // opaque cookie<1..2^16-1>;
 } Cookie;
 
-// B.3.1.3.  Signature Algorithm Extension
-
-enum class SignatureScheme : uint16 {
-    /* RSASSA-PKCS1-v1_5 algorithms */
-    rsa_pkcs1_sha256 = 0x0401,
-    rsa_pkcs1_sha384 = 0x0501,
-    rsa_pkcs1_sha512 = 0x0601,
-
-    /* ECDSA algorithms */
-    ecdsa_secp256r1_sha256 = 0x0403,
-    ecdsa_secp384r1_sha384 = 0x0503,
-    ecdsa_secp521r1_sha512 = 0x0603,
-
-    /* RSASSA-PSS algorithms with public key OID rsaEncryption */
-    rsa_pss_rsae_sha256 = 0x0804,
-    rsa_pss_rsae_sha384 = 0x0805,
-    rsa_pss_rsae_sha512 = 0x0806,
-
-    /* EdDSA algorithms */
-    ed25519 = 0x0807,
-    ed448 = 0x0808,
-
-    /* RSASSA-PSS algorithms with public key OID RSASSA-PSS */
-    rsa_pss_pss_sha256 = 0x0809,
-    rsa_pss_pss_sha384 = 0x080a,
-    rsa_pss_pss_sha512 = 0x080b,
-
-    /* Legacy algorithms */
-    rsa_pkcs1_sha1 = 0x0201,
-    ecdsa_sha1 = 0x0203,
-
-    /* Reserved Code Points */
-    // obsolete_RESERVED(0x0000..0x0200),
-    dsa_sha1_RESERVED = 0x0202,
-    // obsolete_RESERVED(0x0204..0x0400),
-    dsa_sha256_RESERVED = 0x0402,
-    // obsolete_RESERVED(0x0404..0x0500),
-    dsa_sha384_RESERVED = 0x0502,
-    // obsolete_RESERVED(0x0504..0x0600),
-    dsa_sha512_RESERVED = 0x0602,
-    // obsolete_RESERVED(0x0604..0x06FF),
-    // private_use(0xFE00..0xFFFF),
-};
-
-struct {
-    // SignatureScheme supported_signature_algorithms<2..2^16-2>;
-} SignatureSchemeList;
 
 // B.3.1.4.  Supported Groups Extension
 
@@ -608,7 +636,7 @@ struct {
 } Certificate;
 
 struct {
-    SignatureScheme algorithm;
+    //SignatureScheme algorithm;
     // opaque signature<0..2^16-1>;
 } CertificateVerify;
 
