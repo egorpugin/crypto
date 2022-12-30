@@ -6,7 +6,9 @@
 #pragma once
 
 #include <array>
+#include <algorithm>
 #include <cstdint>
+#include <ranges>
 #include <type_traits>
 #include <variant>
 
@@ -332,7 +334,7 @@ struct padding {
 
     int make_buffers(auto &&vec) {
         int sz{};
-        for (auto &&v : vec) {
+        for (auto &&v : vec | std::views::drop(1)) {
             sz += v.size();
         }
         vec.emplace_back(padding_, sizeof(*this) - sz);
