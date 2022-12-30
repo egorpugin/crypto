@@ -7,6 +7,8 @@ void build(Solution &s) {
     t += cpp23;
     t += "src/.*"_rr;
 
+    t += "org.sw.demo.boost.asio"_dep;
+
 
     // add deps here
     // example:

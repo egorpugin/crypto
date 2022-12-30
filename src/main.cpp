@@ -5,6 +5,7 @@
 #endif
 #include "sha3.h"
 #include "sm4.h"
+#include "tls.h"
 
 #include <array>
 #include <iostream>
@@ -285,6 +286,13 @@ void test_sm4() {
     }
 }
 
+void test_tls() {
+    using namespace crypto;
+
+    tls t{"software-network.org"};
+    t.run();
+}
+
 #ifndef _WIN32
 #ifndef _WIN32
 #include <gmp.h>
@@ -354,5 +362,6 @@ int main() {
     //test_aes();
     //test_sha2();
     //test_sha3();
-    test_sm4();
+    //test_sm4();
+    test_tls();
 }
