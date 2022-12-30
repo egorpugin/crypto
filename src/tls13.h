@@ -161,6 +161,16 @@ struct Alert {
 
 using content_type = std::variant<Alert>;
 
+int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
+    auto sz_obj = sizeof(obj) - sizeof(variable_field);
+    vec.emplace_back(&obj, sz_obj);
+    auto variable_field_size = variable_field.make_buffers(vec);
+    if constexpr (requires { obj.length; }) {
+        obj.length = variable_field_size;
+    }
+    return sz_obj + variable_field_size;
+}
+
 template <typename Peer, typename Fragment = empty>
 struct TLSPlaintext {
     ContentType type = Fragment::content_type;
@@ -171,17 +181,7 @@ struct TLSPlaintext {
     static constexpr auto recv_size() { return sizeof(TLSPlaintext) - sizeof(fragment); }
 
     int make_buffers(auto &&vec) {
-        int sz{};
-        if constexpr (requires { fragment.make_buffers(vec); }) {
-            vec.emplace_back(this, sizeof(*this) - sizeof(fragment));
-            length = fragment.make_buffers(vec);
-            sz += length + sizeof(*this) - sizeof(fragment);
-        } else {
-            length = sizeof(fragment);
-            sz += sizeof(*this);
-            vec.emplace_back(this, sz);
-        }
-        return sz;
+        return make_buffers1(vec, *this, fragment);
     }
 };
 
@@ -232,17 +232,7 @@ struct Handshake {
     MessageType message;
 
     int make_buffers(auto &&vec) {
-        int sz{};
-        if constexpr (requires { message.make_buffers(vec); }) {
-            vec.emplace_back(this, sizeof(*this) - sizeof(message));
-            length = message.make_buffers(vec);
-            sz += length + sizeof(*this) - sizeof(message);
-        } else {
-            length = sizeof(message);
-            sz += sizeof(*this);
-            vec.emplace_back(this, sz);
-        }
-        return sz;
+        return make_buffers1(vec, *this, message);
     }
 
     /*select (Handshake.msg_type) {
@@ -294,17 +284,7 @@ struct Extension {
     E e;
 
     int make_buffers(auto &&vec) {
-        int sz{};
-        if constexpr (requires { e.make_buffers(vec); }) {
-            vec.emplace_back(this, sizeof(*this) - sizeof(e));
-            length = e.make_buffers(vec);
-            sz += length + sizeof(*this) - sizeof(e);
-        } else {
-            length = sizeof(*this);
-            sz += length;
-            vec.emplace_back(this, sizeof(*this));
-        }
-        return length;
+        return make_buffers1(vec, *this, e);
     }
 };
 
@@ -399,10 +379,7 @@ struct ClientHello {
     extensions_type extensions;
 
     int make_buffers(auto &&vec) {
-        vec.emplace_back(this, sizeof(*this) - sizeof(extensions));
-        int sz = vec.back().size();
-        sz += extensions.make_buffers(vec);
-        return sz;
+        return make_buffers1(vec, *this, extensions);
     }
 };
 
