@@ -40,10 +40,9 @@ struct tls {
         boost::asio::ip::tcp::socket s{ex};
         co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
 
-        constexpr repeated<CipherSuite, 1> suites{.data = CipherSuite::TLS_AES_128_GCM_SHA256};
-
-        TLSPlaintext<client, Handshake<ClientHello<suites>>> msg;
+        TLSPlaintext<client, Handshake<ClientHello<1>>> msg;
         auto &client_hello = msg.fragment;
+        client_hello.message.cipher_suites_ = {.data = CipherSuite::TLS_AES_256_GCM_SHA384};
         co_await s.async_send(boost::asio::buffer(&msg, sizeof(msg)), use_awaitable);
 
         TLSPlaintext<server> smsg;

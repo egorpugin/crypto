@@ -23,42 +23,45 @@ struct length {
 
     uint8 data[Bytes]{};
 
+    length() = default;
+    length(int v) {
+        *this = v;
+    }
+
     void operator=(uint32_t v) requires (Bytes == 3) {
         *(uint32_t*)data |= std::byteswap(v << 8);
     }
-    void operator=(internal_type v) requires !std::same_as<internal_type, bad_type> {
+    void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
     }
-    operator uint32_t() const requires (Bytes == 3) { return *(uint32_t*)data; }
-    operator uint32_t() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
+    //operator uint32_t() const requires (Bytes == 3) { return *(uint32_t*)data; }
+    //operator uint32_t() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
 };
 
-template <auto N>
-struct bits {
-    static constexpr auto n_bits = N;
-};
-template <auto N>
-struct bytes {
-    static constexpr auto n_bits = N * 8;
-};
-
-template <typename T, auto N, auto MinDataSize, auto MaxDataSize>
+template <typename T, auto N, auto MinDataLength, auto MaxDataLength>
 struct repeated {
     static consteval unsigned log2floor(auto x) {
         return x == 1 ? 0 : 1 + log2floor(x >> 1);
     }
+    static consteval unsigned length_size() {
+        auto bits = log2floor(MaxDataLength) + 1;
+        auto bytes = bits / 8;
+        if (!bytes) {
+            bytes = 1;
+        }
+        return bytes;
+    }
 
-    length<log2floor(MaxDataSize)> length{sizeof(data)};
+    length<length_size()> length{sizeof(data)};
     T data[N];
 };
 
-template <auto Bytes>
-using opaque = repeated<uint8, Bytes>;
+//template <auto Bytes>
+//using opaque = repeated<uint8, Bytes>;
 
 using ProtocolVersion = uint16;
 using Random = std::array<uint8,32>;
 
-/* Cryptographic suite selector */
 enum class CipherSuite : uint16 {
     TLS_AES_128_GCM_SHA256 = 0x1301,
     TLS_AES_256_GCM_SHA384 = 0x1302,
@@ -73,9 +76,11 @@ enum class CipherSuite : uint16 {
 
     TLS_SM4_GCM_SM3 = 0x00C6,
     TLS_SM4_CCM_SM3 = 0x00C7,
-    //SignatureScheme sm2sig_sm3 = 0x0708;
-    //NamedGroup curveSM2 = {41};
+    // SignatureScheme sm2sig_sm3 = 0x0708;
+    // NamedGroup curveSM2 = {41};
 };
+template <auto N>
+using cipher_suite = repeated<CipherSuite, N, 2, (1<<16)-2>;
 
 enum class ContentType : uint8 {
     invalid = 0,
@@ -213,15 +218,15 @@ struct Handshake {
 
 // B.3.1.  Key Exchange Messages
 
-template <auto cipher_suites>
+template <auto NumberOfCipherSuites>
 struct ClientHello {
     static constexpr auto message_type = HandshakeType::client_hello;
 
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random;
-    repeated<uint8, 32, 32> legacy_session_id;//<0..32>;
-    decltype(cipher_suites) cipher_suites_;
-    repeated<uint8 1> legacy_compression_methods{};//<1..2^8-1>;
+    repeated<uint8, 32, 0, 32> legacy_session_id;//<0..32>;
+    cipher_suite<NumberOfCipherSuites> cipher_suites_;
+    repeated<uint8, 1, 1, (1<<8)-1> legacy_compression_methods{};//<1..2^8-1>;
     //Extension extensions<8..2^16-1>;
 };
 
