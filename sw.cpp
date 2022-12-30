@@ -8,6 +8,7 @@ void build(Solution &s) {
     t += "src/.*"_rr;
 
     t += "org.sw.demo.boost.asio"_dep;
+    t += "org.sw.demo.neargye.nameof"_dep;
 
 
     // add deps here

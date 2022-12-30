@@ -1,8 +1,10 @@
 #pragma once
 
+#include "helpers.h"
 #include "tls13.h"
 
 #include <boost/asio.hpp>
+#include <nameof.hpp>
 #include <iostream>
 
 namespace crypto {
@@ -38,19 +40,36 @@ struct tls {
         boost::asio::ip::tcp::socket s{ex};
         co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
 
-        TLSPlaintext msg;
-        //msg.type = tls13::ContentType::handshake;
-        //msg.fragment =
+        constexpr repeated<CipherSuite, 1> suites{.data = CipherSuite::TLS_AES_128_GCM_SHA256};
 
-        Handshake client_hello;
-        client_hello.msg_type = tls13::HandshakeType::client_hello;
-        client_hello.length[0] = 0;
-        client_hello.length[1] = 0;
-        client_hello.length[2] = 0;
-        co_await s.async_send(boost::asio::buffer(&client_hello, sizeof(client_hello)), use_awaitable);
+        TLSPlaintext<client, Handshake<ClientHello<suites>>> msg;
+        auto &client_hello = msg.fragment;
+        co_await s.async_send(boost::asio::buffer(&msg, sizeof(msg)), use_awaitable);
 
-        char buf[8192]{};
-        co_await s.async_read_some(boost::asio::buffer(&buf, sizeof(buf)), use_awaitable);
+        TLSPlaintext<server> smsg;
+        co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
+
+        switch (smsg.type) {
+        case tls13::ContentType::alert:
+        {
+            Alert a;
+            co_await s.async_read_some(boost::asio::buffer(&a, sizeof(a)), use_awaitable);
+            smsg.fragment = a;
+        }
+            break;
+        default:
+            throw std::logic_error{format("content is not implemented: {}", (string)NAMEOF_ENUM(smsg.type))};
+        }
+
+        visit(smsg.fragment, [](Alert &a) {
+            if (a.level == tls13::Alert::Level::fatal) {
+                throw std::runtime_error{format("fatal tls error: {} ({})",
+                    (string)NAMEOF_ENUM(a.description),
+                    std::to_underlying(a.description))};
+            }
+        });
+
+
 
         //ServerHello server_hello;
         //co_await s.async_receive(boost::asio::buffer(&server_hello, sizeof(server_hello)), use_awaitable);

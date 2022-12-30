@@ -1,24 +1,81 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <type_traits>
+#include <variant>
 
 namespace crypto::tls13 {
 
+#pragma pack(push, 1)
+
 using uint8 = uint8_t;
 using uint16 = uint16_t;
-using uint24 = uint8[3];
 using uint32 = uint32_t;
 
-/*struct uint24 {
-    uint8 data[3];
-};*/
+template <auto Bytes>
+struct length {
+    using bad_type = uint64_t;
+    using internal_type = std::conditional_t<Bytes == 1, uint8,
+                           std::conditional_t<Bytes == 2, uint16,
+        std::conditional_t<Bytes == 4, uint32, bad_type>>
+    >;
 
-using opaque = uint8;
+    uint8 data[Bytes]{};
+
+    void operator=(uint32_t v) requires (Bytes == 3) {
+        *(uint32_t*)data |= std::byteswap(v << 8);
+    }
+    void operator=(internal_type v) requires !std::same_as<internal_type, bad_type> {
+        *(internal_type *)data = std::byteswap(v);
+    }
+    operator uint32_t() const requires (Bytes == 3) { return *(uint32_t*)data; }
+    operator uint32_t() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
+};
+
+template <auto N>
+struct bits {
+    static constexpr auto n_bits = N;
+};
+template <auto N>
+struct bytes {
+    static constexpr auto n_bits = N * 8;
+};
+
+template <typename T, auto N, auto MinDataSize, auto MaxDataSize>
+struct repeated {
+    static consteval unsigned log2floor(auto x) {
+        return x == 1 ? 0 : 1 + log2floor(x >> 1);
+    }
+
+    length<log2floor(MaxDataSize)> length{sizeof(data)};
+    T data[N];
+};
+
+template <auto Bytes>
+using opaque = repeated<uint8, Bytes>;
 
 using ProtocolVersion = uint16;
-using Random = opaque[32];
+using Random = std::array<uint8,32>;
+
 /* Cryptographic suite selector */
-using CipherSuite = uint8[2];
+enum class CipherSuite : uint16 {
+    TLS_AES_128_GCM_SHA256 = 0x1301,
+    TLS_AES_256_GCM_SHA384 = 0x1302,
+    TLS_CHACHA20_POLY1305_SHA256 = 0x1303,
+    TLS_AES_128_CCM_SHA256 = 0x1304,
+    TLS_AES_128_CCM_8_SHA256 = 0x1305,
+
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103,
+    TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104,
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105,
+    TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
+
+    TLS_SM4_GCM_SM3 = 0x00C6,
+    TLS_SM4_CCM_SM3 = 0x00C7,
+    //SignatureScheme sm2sig_sm3 = 0x0708;
+    //NamedGroup curveSM2 = {41};
+};
 
 enum class ContentType : uint8 {
     invalid = 0,
@@ -29,71 +86,83 @@ enum class ContentType : uint8 {
     heartbeat = 24, /* RFC 6520 */
 };
 
-struct TLSPlaintext {
-    ContentType type;
-    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
-    uint16 length;
-    opaque fragment[1];
+struct client{};
+struct server{};
+struct empty {
+    static constexpr auto content_type = ContentType::invalid;
 };
 
-struct {
+template <typename T>
+constexpr bool is_client = std::same_as<T,client>;
+
+struct Alert {
+    enum class Level : uint8 { warning = 1, fatal = 2 };
+
+    enum class Description : uint8 {
+        close_notify = 0,
+        unexpected_message = 10,
+        bad_record_mac = 20,
+        decryption_failed_RESERVED = 21,
+        record_overflow = 22,
+        decompression_failure_RESERVED = 30,
+        handshake_failure = 40,
+        no_certificate_RESERVED = 41,
+        bad_certificate = 42,
+        unsupported_certificate = 43,
+        certificate_revoked = 44,
+        certificate_expired = 45,
+        certificate_unknown = 46,
+        illegal_parameter = 47,
+        unknown_ca = 48,
+        access_denied = 49,
+        decode_error = 50,
+        decrypt_error = 51,
+        export_restriction_RESERVED = 60,
+        protocol_version = 70,
+        insufficient_security = 71,
+        internal_error = 80,
+        inappropriate_fallback = 86,
+        user_canceled = 90,
+        no_renegotiation_RESERVED = 100,
+        missing_extension = 109,
+        unsupported_extension = 110,
+        certificate_unobtainable_RESERVED = 111,
+        unrecognized_name = 112,
+        bad_certificate_status_response = 113,
+        bad_certificate_hash_value_RESERVED = 114,
+        unknown_psk_identity = 115,
+        certificate_required = 116,
+        no_application_protocol = 120,
+    };
+
+    Level level;
+    Description description;
+};
+
+using content_type = std::variant<Alert>;
+
+template <typename Peer, typename Fragment = empty>
+struct TLSPlaintext {
+    ContentType type = Fragment::content_type;
+    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
+    length<2> length = sizeof(Fragment);
+    std::conditional_t<is_client<Peer>, Fragment, content_type> fragment;
+
+    static constexpr auto recv_size() { return sizeof(TLSPlaintext) - sizeof(fragment); }
+};
+
+struct TLSInnerPlaintext {
     // opaque content[TLSPlaintext.length];
     ContentType type;
     // uint8 zeros[length_of_padding];
-} TLSInnerPlaintext;
+};
 
 struct TLSCiphertext {
     ContentType opaque_type = ContentType::application_data;     /* 23 */
     ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
     uint16 length;
-    opaque encrypted_record[1];
+    //opaque encrypted_record[1];
 };
-
-// B.2.  Alert Messages
-
-enum class AlertLevel : uint8 { warning = 1, fatal = 2 };
-
-enum class AlertDescription : uint8 {
-    close_notify = 0,
-    unexpected_message = 10,
-    bad_record_mac = 20,
-    decryption_failed_RESERVED = 21,
-    record_overflow = 22,
-    decompression_failure_RESERVED = 30,
-    handshake_failure = 40,
-    no_certificate_RESERVED = 41,
-    bad_certificate = 42,
-    unsupported_certificate = 43,
-    certificate_revoked = 44,
-    certificate_expired = 45,
-    certificate_unknown = 46,
-    illegal_parameter = 47,
-    unknown_ca = 48,
-    access_denied = 49,
-    decode_error = 50,
-    decrypt_error = 51,
-    export_restriction_RESERVED = 60,
-    protocol_version = 70,
-    insufficient_security = 71,
-    internal_error = 80,
-    inappropriate_fallback = 86,
-    user_canceled = 90,
-    no_renegotiation_RESERVED = 100,
-    missing_extension = 109,
-    unsupported_extension = 110,
-    certificate_unobtainable_RESERVED = 111,
-    unrecognized_name = 112,
-    bad_certificate_status_response = 113,
-    bad_certificate_hash_value_RESERVED = 114,
-    unknown_psk_identity = 115,
-    certificate_required = 116,
-    no_application_protocol = 120,
-};
-
-struct {
-    AlertLevel level;
-    AlertDescription description;
-} Alert;
 
 // B.3.  Handshake Protocol
 
@@ -120,9 +189,14 @@ enum class HandshakeType : uint8 {
     message_hash = 254,
 };
 
+template <typename MessageType>
 struct Handshake {
-    HandshakeType msg_type; /* handshake type */
-    uint24 length;          /* bytes in message */
+    static constexpr auto content_type = ContentType::handshake;
+
+    HandshakeType msg_type = MessageType::message_type; /* handshake type */
+    length<3> length_ = sizeof(MessageType);          /* bytes in message */
+    MessageType message;
+
     /*select (Handshake.msg_type) {
         case client_hello:          ClientHello;
         case server_hello:          ServerHello;
@@ -139,16 +213,21 @@ struct Handshake {
 
 // B.3.1.  Key Exchange Messages
 
+template <auto cipher_suites>
 struct ClientHello {
+    static constexpr auto message_type = HandshakeType::client_hello;
+
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random;
-    /*opaque legacy_session_id<0..32>;
-    CipherSuite cipher_suites<2..2^16-2>;
-    opaque legacy_compression_methods<1..2^8-1>;
-    Extension extensions<8..2^16-1>;*/
+    repeated<uint8, 32, 32> legacy_session_id;//<0..32>;
+    decltype(cipher_suites) cipher_suites_;
+    repeated<uint8 1> legacy_compression_methods{};//<1..2^8-1>;
+    //Extension extensions<8..2^16-1>;
 };
 
 struct ServerHello {
+    static constexpr auto message_type = HandshakeType::server_hello;
+
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random;
     /*opaque legacy_session_id_echo<0..32>;
@@ -434,5 +513,7 @@ enum class KeyUpdateRequest : uint8 {
 struct KeyUpdate {
     KeyUpdateRequest request_update;
 };
+
+#pragma pack(pop)
 
 } // namespace crypto::tls::tls13
