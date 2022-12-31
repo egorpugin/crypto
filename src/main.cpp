@@ -315,6 +315,24 @@ void test_25519() {
         cmp_base(r.x, "0x41da1a8f74ff8d3f1ce20ef3e9d8865c96014fe3"_bi);
         cmp_base(r.y, "0x73ca143c9badedf2d9d3c7573307115ccfe04f13"_bi);
     }
+    {
+        ec::simple c{
+            "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9a",
+            "0x01914dc5f39d6da3b1fa841fdc891674fa439bd4",
+            "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9d"
+        };
+        ec::point p{
+            c,
+            "0x70ee7b94f7d52ed6b1a1d3201e2d85d3b82a9810",
+            "0x0b23823cd6dc3df20979373e5662f7083f6aa56f"
+        };
+        auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
+        auto r = m * p;
+        cmp_base(r.x, "0x5432bddd1f97418147aff016eaa6100834f2caa8"_bi);
+        cmp_base(r.y, "0xc498b88965689ee44df349b066cd43cbf4f2c5d0"_bi);
+        //std::cout << r.x << "\n";
+        //std::cout << r.y << "\n";
+    }
 
     // gost 34.10
     {

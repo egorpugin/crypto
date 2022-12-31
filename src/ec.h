@@ -42,9 +42,6 @@ struct point {
         return r;
     }
     point operator+(point q) {
-        *this %= ec.p;
-        q %= ec.p;
-
         if (*this == 0) {
             return q;
         }
@@ -67,28 +64,23 @@ struct point {
         return r;
     }
 };
-// can be time attacked!
-point operator*(const bigint &m, const point &p) {
-    point r{p.ec};
 
+point operator*(const bigint &m, const point &p) {
     if (m == 0) {
-        return r;
+        return {p.ec};
     }
-    if (mpz_tstbit(m, 0) == 1) {
-        r = p;
-    }
-    auto no_of_bits = mpz_sizeinbase(m, 2);
-    auto q = p;
-    for (int loop = 1; loop < no_of_bits; ++loop) {
-        q = q.double_();
-        if (mpz_tstbit(m, loop)) {
-            r = r + q;
+    point r0{p.ec};
+    point r1 = p;
+    for (int bit = mpz_sizeinbase(m, 2) - 1; bit >= 0; --bit) {
+        if (mpz_tstbit(m, bit) == 0) {
+            r1 = r0 + r1;
+            r0 = r0.double_();
         } else {
-            // time attack is here!
-            // in empty branch
+            r0 = r0 + r1;
+            r1 = r1.double_();
         }
     }
-    return r;
+    return r0;
 }
 
 } // namespace crypto::ec
