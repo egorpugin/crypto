@@ -1,6 +1,6 @@
 #include "aes.h"
-#ifndef _MSC_VER
 #include "bigint.h"
+#ifndef _MSC_VER
 #include "sha2.h"
 #endif
 #include "sha3.h"
@@ -9,6 +9,8 @@
 #include "tls.h"
 #endif
 #include "x25519.h"
+#include "random.h"
+#include "ec.h"
 
 #include <array>
 #include <iostream>
@@ -34,7 +36,7 @@ auto to_string2 = [](auto &&sha, auto &&s, std::string s2) {
     auto r = to_string(sha) == s2;
     printf("%s\n", r ? "ok" : "false");
 };
-auto cmp = [](auto &&left, auto &&right) {
+auto cmp_l = [](auto &&left, auto &&right) {
     auto r = memcmp(left, right, 16);
     static int x{};
     x += r;
@@ -64,18 +66,18 @@ void test_aes() {
             unsigned char out[16], out2[16];
             aes_ecb<256> aes{key};
             aes.encrypt(plain, out);
-            cmp(right, &out);
+            cmp_l(right, &out);
             aes.decrypt(out, out2);
-            cmp(plain, &out2);
+            cmp_l(plain, &out2);
         }
         {
             v4u out, out2;
             v4u iv{}, iv2{};
             aes_cbc<256> aes{key};
             aes.encrypt(plain, iv, out);
-            cmp(right, &out);
+            cmp_l(right, &out);
             aes.decrypt(out, iv2, out2);
-            cmp(plain, &out2);
+            cmp_l(plain, &out2);
         }
         {
             v4u out, out2;
@@ -83,7 +85,7 @@ void test_aes() {
             aes_cfb<256> aes{key};
             aes.encrypt(plain, iv, out);
             aes.decrypt(out, iv2, out2);
-            cmp(plain, &out2);
+            cmp_l(plain, &out2);
         }
     }
 }
@@ -266,11 +268,11 @@ void test_sm4() {
 
         uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
                                0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
-        cmp(tv_cipher, tv_plain);
+        cmp_l(tv_cipher, tv_plain);
 
         sm4 dec{tv_key, sm4::decrypt{}};
         dec.crypt(tv_plain);
-        cmp(tv_key, tv_plain);
+        cmp_l(tv_key, tv_plain);
     }
     {
         sm4 enc{tv_key, sm4::encrypt{}};
@@ -279,22 +281,46 @@ void test_sm4() {
         }
         uint8_t tv_cipher[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
                                0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
-        cmp(tv_cipher, tv_plain);
+        cmp_l(tv_cipher, tv_plain);
 
         sm4 dec{tv_key, sm4::decrypt{}};
         for (int i = 0; i < 1000000; i++) {
             dec.crypt(tv_plain);
         }
-        cmp(tv_key, tv_plain);
+        cmp_l(tv_key, tv_plain);
     }
 }
 
 void test_25519() {
     using namespace crypto;
 
+    std::cout << std::hex;
+
+    ec::simple c{
+        "0xc1c627e1638fdc8e24299bb041e4e23af4bb5424",
+        "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab",
+        "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"
+    };
+    ec::point P{
+        c,
+        "0x010aff82b3ac72569ae645af3b527be133442131",
+        "0x46b8ec1e6d71e5ecb549614887d57a287df573cc"
+    };
+    bigint m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710";
+
+    ec::point R{c};
+    R.Scalar_Multiplication(P, &R, m);
+    std::cout << R.x << "\n";
+    std::cout << R.y << "\n";
+
+    //auto r = m * P;
+    //std::cout << r << "\n";
+
     x25519 x;
-    x25519::f25519 f{};
-    auto [prk, pubk] = x.compact_x25519_keygen(f);
+    auto [prk, pubk] = x.keygen();
+
+    std::cout << prk << "\n";
+    std::cout << pubk << "\n";
 
     if (prk == pubk) {
         std::cout << "ok\n";
@@ -310,71 +336,6 @@ void test_tls() {
     tls t{"software-network.org"};
     //tls t{"tls13.1d.pw"};
     t.run();
-}
-#endif
-
-#ifndef _WIN32
-#ifndef _WIN32
-#include <gmp.h>
-#include <gmpxx.h>
-#endif
-
-void test_bigint() {
-#ifndef _WIN32
-    {
-        mpz_class a, b, c;
-        a = "100000000000000000000054645645645645600000000000000000000";
-        b = "20000000034534534500838393935684563456345340000000000";
-        c = a + b;
-        c = a * b;
-    }
-#endif
-    {
-        bigint bn2{0xFFFFFFFFFFFFFFFFull};
-        bn2 <<= 65;
-    }
-    {
-        bigint bn2{0xFFFFFFFFFFFFFFFFull};
-        bn2 <<= 1;
-    }
-    {
-        bigint bn2{0xFFFFFFFFFFFFFFFFull};
-        bn2 <<= 129;
-    }
-    {
-        bigint bn2{0xFFFFFFFFFFFFFFFFull};
-        bn2 <<= 128;
-    }
-    {
-        bigint bn1;
-        bn1 += 0xFFFFFFFFFFFFFFFFull;
-        bigint bn2;
-        bn2 += 0xFFFFFFFFFFFFFFFFull;
-        bn2 <<= 64;
-        bn2 += 1u;
-        bn1 += bn2;
-    }
-    {
-        bigint bn1;
-        bn1 += 0xFFFFFFFFFFFFFFFFull;
-        bigint bn2;
-        bn2 += 0xFFFFFFFFFFFFFFFFull;
-        bn2 <<= 64;
-        bn1 += bn2;
-        bn1 += 1u;
-    }
-    {
-        bigint bn;
-        std::cout << bn << "\n";
-        std::cout << (bn += 1000u) << "\n";
-        std::cout << bn + 1u << "\n";
-        bn += 0xFFFFFFFFFFFFFFFFu;
-        bn += 0xFFFFFFFFFFFFFFFFu;
-        bn += 0xFFFFFFFFFFFFFFFFu;
-        bn += 0xFFFFFFFFFFFFFFFFu;
-        bn += 0xFFFFFFFFFFFFFFFFu;
-        // bn *= 0xFFFFFFFFFFFFFFFFu;
-    }
 }
 #endif
 
