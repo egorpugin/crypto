@@ -11,7 +11,7 @@ struct simple {
 
 struct point {
     simple &ec;
-    bigint x{0u},y{0u};
+    bigint x,y;
 
     bool operator==(const point &rhs) const {
         return x == rhs.x && y == rhs.y;
@@ -34,33 +34,18 @@ struct point {
             return point{ec};
         }
         bigint temp = y * 2u;
-        temp %= ec.p;
+        //temp %= ec.p;
         mpz_invert(temp, temp, ec.p);
-        bigint slope{0u};
-        slope = ((x * x * 3u + ec.a) * temp);
+        bigint slope;
+        slope = (x * x * 3u + ec.a) * temp;
         slope %= ec.p;
-        //slope = ((3 * x * x + ec.a) / (2 * y)) % ec.p;
         point r{ec};
-        r.x = (slope * slope - x * 2u);
+        r.x = slope * slope - x * 2u;
         r.x %= ec.p;
-        r.y = (slope * (x - r.x) - y);
+        r.y = slope * (x - r.x) - y;
         r.y %= ec.p;
         return r;
     }
-    /*static point double_33() {
-        if (y == 0) {
-            return point{ec};
-        }
-        bigint temp = 2 * y;
-        mpz_invert(temp, temp, ec.p);
-        bigint slope{0u};
-        slope = ((3 * x * x + ec.a) * temp) % ec.p;
-        // slope = ((3 * x * x + ec.a) / (2 * y)) % ec.p;
-        point r{ec};
-        r.x = (slope * slope - 2 * x) % ec.p;
-        r.y = (slope * (x - r.x) - y) % ec.p;
-        return r;
-    }*/
     point operator+(point q) {
         if (*this == 0) {
             return q;
@@ -80,17 +65,16 @@ struct point {
             return double_();
         }
 
-        bigint temp = (q.x - x);
+        bigint temp = q.x - x;
         temp %= ec.p;
         mpz_invert(temp, temp, ec.p);
-        bigint slope{0u};
-        slope = ((q.y - y) * temp);
+        bigint slope;
+        slope = (q.y - y) * temp;
         slope %= ec.p;
-        //slope = ((q.y - y) / (q.x - x)) % ec.p;
         point r{ec};
-        r.x = (slope * slope - x - q.x);
+        r.x = slope * slope - x - q.x;
         r.x %= ec.p;
-        r.y = (slope * (x - r.x) - y);
+        r.y = slope * (x - r.x) - y;
         r.y %= ec.p;
         return r;
     }
@@ -101,6 +85,7 @@ point operator*(const bigint &m, const point &p) {
         return {p.ec};
     }
     // https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Montgomery_ladder
+    // prevent timing attack
     point r0{p.ec};
     point r1 = p;
     for (int bit = mpz_sizeinbase(m, 2) - 0; bit >= 0; --bit) {
