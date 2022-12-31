@@ -306,7 +306,7 @@ void test_sm4() {
 void test_25519() {
     using namespace crypto;
 
-    std::cout << std::hex;
+    //std::cout << std::hex;
 
     {
         auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
@@ -338,38 +338,7 @@ void test_25519() {
             };
             auto r = m * p;
             cmp_base(r.x, "0xb616c81e21d66dd84906468475654cf7d6f2058a"_bi);
-            cmp_base(r.y, "0x657799257529530608675121022538079304312156399964"_bi);
-            std::cout << r.x << "\n";
-            std::cout << r.y << "\n";
-
-
-            ec::EC = c;
-            ec::Point p2;
-            mpz_init(p2.x);
-            mpz_init(p2.y);
-            mpz_set(p2.x, p.x);
-            mpz_set(p2.y, p.y);
-            ec::Point r2;
-            mpz_init(r2.x);
-            mpz_init(r2.y);
-            ec::Scalar_Multiplication(p2, &r2, m);
-
-            puts("");
-            mpz_out_str(stdout, 10, c.p); puts("");
-            mpz_out_str(stdout, 10, c.a); puts("");
-            mpz_out_str(stdout, 10, c.b);
-            puts("");
-            puts("");
-            mpz_out_str(stdout, 10, p.x);
-            puts("");
-            mpz_out_str(stdout, 10, p.y);
-            puts("");
-            puts("");
-            mpz_out_str(stdout, 10, m);
-            puts("");
-            puts("");
-            mpz_out_str(stdout, 10, r2.x); puts("");
-            mpz_out_str(stdout, 10, r2.y); puts("");
+            cmp_base(r.y, "0x7338bd2600ad645b093a67f4651de9edc625295c"_bi);
         }
     }
 
