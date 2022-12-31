@@ -18,6 +18,10 @@ struct bigint : mpz_class {
     operator mpz_srcptr() const { return __get_mp(); }
 };
 
+auto operator""_bi(const char *p, size_t len) {
+    return bigint{p};
+}
+
 template <auto N>
 bigint bytes_to_bigint(uint8_t (&v)[N], int order = 1) {
     bigint b;
