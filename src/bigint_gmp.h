@@ -15,6 +15,16 @@ struct bigint : mpz_class {
 
     operator mpz_ptr() { return __get_mp(); }
     operator mpz_srcptr() const { return __get_mp(); }
+
+    auto &operator%=(const bigint &m) {
+        mpz_mod(*this, *this, m);
+        return *this;
+    }
+    auto operator%(const bigint &m) {
+        auto b = *this;
+        b %= m;
+        return b;
+    }
 };
 
 auto operator""_bi(const char *p, size_t len) {

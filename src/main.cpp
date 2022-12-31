@@ -337,10 +337,39 @@ void test_25519() {
                 "0x0b23823cd6dc3df20979373e5662f7083f6aa56f"
             };
             auto r = m * p;
-            cmp_base(r.x, "0x5432bddd1f97418147aff016eaa6100834f2caa8"_bi);
-            cmp_base(r.y, "0xc498b88965689ee44df349b066cd43cbf4f2c5d0"_bi);
+            cmp_base(r.x, "0xb616c81e21d66dd84906468475654cf7d6f2058a"_bi);
+            cmp_base(r.y, "0x657799257529530608675121022538079304312156399964"_bi);
             std::cout << r.x << "\n";
             std::cout << r.y << "\n";
+
+
+            ec::EC = c;
+            ec::Point p2;
+            mpz_init(p2.x);
+            mpz_init(p2.y);
+            mpz_set(p2.x, p.x);
+            mpz_set(p2.y, p.y);
+            ec::Point r2;
+            mpz_init(r2.x);
+            mpz_init(r2.y);
+            ec::Scalar_Multiplication(p2, &r2, m);
+
+            puts("");
+            mpz_out_str(stdout, 10, c.p); puts("");
+            mpz_out_str(stdout, 10, c.a); puts("");
+            mpz_out_str(stdout, 10, c.b);
+            puts("");
+            puts("");
+            mpz_out_str(stdout, 10, p.x);
+            puts("");
+            mpz_out_str(stdout, 10, p.y);
+            puts("");
+            puts("");
+            mpz_out_str(stdout, 10, m);
+            puts("");
+            puts("");
+            mpz_out_str(stdout, 10, r2.x); puts("");
+            mpz_out_str(stdout, 10, r2.y); puts("");
         }
     }
 
@@ -362,7 +391,7 @@ void test_25519() {
             auto r = m * p;
             cmp_base(r.x, "57520216126176808443631405023338071176630104906313632182896741342206604859403"_bi);
             cmp_base(r.y, "17614944419213781543809391949654080031942662045363639260709847859438286763994"_bi);
-            std::cout << r.y << "\n";
+            //std::cout << r.y << "\n";
         }
         // gost 34.10 example 2
         {
@@ -380,23 +409,6 @@ void test_25519() {
             auto r = m * p;
             cmp_base(r.x, "0x115dc5bc96760c7b48598d8ab9e740d4c4a85a65be33c1815b5c320c854621dd5a515856d13314af69bc5b924c8b4ddff75c45415c1d9dd9dd33612cd530efe1"_bi);
             cmp_base(r.y, "0x37c7c90cd40b0f5621dc3ac1b751cfa0e2634fa0503b3d52639f5d7fb72afd61ea199441d943ffe7f0c70a2759a3cdb84c114e1f9339fdf27f35eca93677beec"_bi);
-
-
-            ec::EC = c;
-            ec::Point p2;
-            mpz_init(p2.x);
-            mpz_init(p2.y);
-            mpz_set(p2.x, p.x);
-            mpz_set(p2.y, p.y);
-            ec::Point r2;
-            mpz_init(r2.x);
-            mpz_init(r2.y);
-            ec::Scalar_Multiplication(p2, &r2, m);
-
-            mpz_out_str(stdout, 10, r2.x);
-            puts("");
-            mpz_out_str(stdout, 10, r2.y);
-            puts("");
         }
     }
 
