@@ -2,9 +2,8 @@
 
 #include "bigint.h"
 
-#include <gmpxx.h>
-
 // what about timing attacks & gmp?
+#include <gmpxx.h>
 
 namespace crypto {
 
