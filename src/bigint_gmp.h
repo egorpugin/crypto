@@ -25,4 +25,4 @@ bigint bytes_to_bigint(uint8_t (&v)[N], int order = 1) {
     return b;
 }
 
-}
+} // namespace crypto

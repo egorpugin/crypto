@@ -301,17 +301,17 @@ void test_25519() {
         "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab",
         "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"
     };
-    ec::point P{
+    ec::point p{
         c,
         "0x010aff82b3ac72569ae645af3b527be133442131",
         "0x46b8ec1e6d71e5ecb549614887d57a287df573cc"
     };
     bigint m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710";
+    auto r = m * p;
+    std::cout << r.x << "\n";
+    std::cout << r.y << "\n";
 
-    ec::point R{c};
-    R.Scalar_Multiplication(P, &R, m);
-    std::cout << R.x << "\n";
-    std::cout << R.y << "\n";
+    return;
 
     //auto r = m * P;
     //std::cout << r << "\n";
