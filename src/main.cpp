@@ -311,7 +311,7 @@ void test_25519() {
     {
         auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
         {
-            ec::simple c{
+            ec::weierstrass c{
                 "0xc1c627e1638fdc8e24299bb041e4e23af4bb5424",
                 "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab",
                 "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"
@@ -326,7 +326,7 @@ void test_25519() {
             cmp_base(r.y, "0x73ca143c9badedf2d9d3c7573307115ccfe04f13"_bi);
         }
         {
-            ec::simple c{
+            ec::weierstrass c{
                 "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9a",
                 "0x01914dc5f39d6da3b1fa841fdc891674fa439bd4",
                 "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9d"
@@ -346,7 +346,7 @@ void test_25519() {
     {
         // example 1
         {
-            ec::simple c{
+            ec::weierstrass c{
                 "0x7",
                 "0x5fbff498aa938ce739b8e022fbafef40563f6e6a3472fc2a514c0ce9dae23b7e",
                 "0x8000000000000000000000000000000000000000000000000000000000000431"
@@ -364,7 +364,7 @@ void test_25519() {
         }
         // gost 34.10 example 2
         {
-            ec::simple c{
+            ec::weierstrass c{
                 "0x7",
                 "0x1cff0806a31116da29d8cfa54e57eb748bc5f377e49400fdd788b649eca1ac4361834013b2ad7322480a89ca58e0cf74bc9e540c2add6897fad0a3084f302adc",
                 "0x4531acd1fe0023c7550d267b6b2fee80922b14b2ffb90f04d4eb7c09b5d2d15df1d852741af4704a0458047e80e4546d35b8336fac224dd81664bbf528be6373"
@@ -414,6 +414,6 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    test_25519();
-    //test_tls();
+    //test_25519();
+    test_tls();
 }

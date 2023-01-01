@@ -2,6 +2,7 @@
 
 #include "helpers.h"
 #include "tls13.h"
+#include "random.h"
 
 #include <boost/asio.hpp>
 #include <nameof.hpp>
@@ -45,6 +46,8 @@ struct tls {
 
         TLSPlaintext<client, Handshake<ClientHello<1>>> msg;
         auto &client_hello = msg.fragment;
+        get_random_secure_bytes(client_hello.message.legacy_session_id.data);
+        get_random_secure_bytes(client_hello.message.random);
         client_hello.message.cipher_suites_[0] = CipherSuite::TLS_AES_256_GCM_SHA384;
 
         Extension<server_name> sn;
@@ -53,7 +56,8 @@ struct tls {
         client_hello.message.extensions.add<supported_versions>();
         client_hello.message.extensions.add<signature_algorithms>();
         client_hello.message.extensions.add<supported_groups>();
-        client_hello.message.extensions.add<key_share>();
+        auto &k = client_hello.message.extensions.add<key_share>();
+        //get_random_secure_bytes(k.e.key[0]);
         client_hello.message.extensions.add<psk_key_exchange_modes>();
         Extension<padding> p;
         client_hello.message.extensions.add(p);

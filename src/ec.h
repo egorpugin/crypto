@@ -5,12 +5,12 @@
 namespace crypto::ec {
 
 // y^2 = x^3 + ax + b
-struct simple {
+struct weierstrass {
     bigint a,b,p;
 };
 
 struct point {
-    simple &ec;
+    weierstrass &ec;
     bigint x,y;
 
     bool operator==(const point &rhs) const {
@@ -34,10 +34,8 @@ struct point {
             return point{ec};
         }
         bigint temp = y * 2u;
-        //temp %= ec.p;
         mpz_invert(temp, temp, ec.p);
-        bigint slope;
-        slope = (x * x * 3u + ec.a) * temp;
+        bigint slope = (x * x * 3u + ec.a) * temp;
         slope %= ec.p;
         point r{ec};
         r.x = slope * slope - x * 2u;
@@ -64,12 +62,10 @@ struct point {
         if (*this == q) {
             return double_();
         }
-
         bigint temp = q.x - x;
         temp %= ec.p;
         mpz_invert(temp, temp, ec.p);
-        bigint slope;
-        slope = (q.y - y) * temp;
+        bigint slope = (q.y - y) * temp;
         slope %= ec.p;
         point r{ec};
         r.x = slope * slope - x - q.x;
