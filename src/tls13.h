@@ -129,148 +129,19 @@ struct empty {
 template <typename T>
 constexpr bool is_client = std::same_as<T,client>;
 
-struct Alert {
-    enum class Level : uint8 { warning = 1, fatal = 2 };
 
-    enum class Description : uint8 {
-        close_notify = 0,
-        unexpected_message = 10,
-        bad_record_mac = 20,
-        decryption_failed_RESERVED = 21,
-        record_overflow = 22,
-        decompression_failure_RESERVED = 30,
-        handshake_failure = 40,
-        no_certificate_RESERVED = 41,
-        bad_certificate = 42,
-        unsupported_certificate = 43,
-        certificate_revoked = 44,
-        certificate_expired = 45,
-        certificate_unknown = 46,
-        illegal_parameter = 47,
-        unknown_ca = 48,
-        access_denied = 49,
-        decode_error = 50,
-        decrypt_error = 51,
-        export_restriction_RESERVED = 60,
-        protocol_version = 70,
-        insufficient_security = 71,
-        internal_error = 80,
-        inappropriate_fallback = 86,
-        user_canceled = 90,
-        no_renegotiation_RESERVED = 100,
-        missing_extension = 109,
-        unsupported_extension = 110,
-        certificate_unobtainable_RESERVED = 111,
-        unrecognized_name = 112,
-        bad_certificate_status_response = 113,
-        bad_certificate_hash_value_RESERVED = 114,
-        unknown_psk_identity = 115,
-        certificate_required = 116,
-        no_application_protocol = 120,
-    };
 
-    Level level;
-    Description description;
-};
 
-using content_type = std::variant<Alert>;
 
-int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
-    auto sz_obj = sizeof(obj) - sizeof(variable_field);
-    vec.emplace_back(&obj, sz_obj);
-    int variable_field_size{};
-    if constexpr (requires { variable_field.make_buffers(vec); }) {
-        variable_field_size = variable_field.make_buffers(vec);
-    } else {
-        variable_field_size = sizeof(variable_field);
-        vec.emplace_back(&variable_field, variable_field_size);
-    }
-    if constexpr (requires { obj.length; }) {
-        obj.length = variable_field_size;
-    }
-    return sz_obj + variable_field_size;
-}
-
-template <typename Peer, typename Fragment = empty>
-struct TLSPlaintext {
-    ContentType type = Fragment::content_type;
-    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
-    length<2> length;
-    std::conditional_t<is_client<Peer>, Fragment, content_type> fragment;
-
-    static constexpr auto recv_size() { return sizeof(TLSPlaintext) - sizeof(fragment); }
-
-    int make_buffers(auto &&vec) {
-        return make_buffers1(vec, *this, fragment);
-    }
-};
-
-struct TLSInnerPlaintext {
-    // opaque content[TLSPlaintext.length];
-    ContentType type;
-    // uint8 zeros[length_of_padding];
-};
-
-struct TLSCiphertext {
-    ContentType opaque_type = ContentType::application_data;     /* 23 */
-    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
-    uint16 length;
-    //opaque encrypted_record[1];
-};
-
-// B.3.  Handshake Protocol
-
-enum class HandshakeType : uint8 {
-    hello_request_RESERVED = 0,
-    client_hello = 1,
-    server_hello = 2,
-    hello_verify_request_RESERVED = 3,
-    new_session_ticket = 4,
-    end_of_early_data = 5,
-    hello_retry_request_RESERVED = 6,
-    encrypted_extensions = 8,
-    certificate = 11,
-    server_key_exchange_RESERVED = 12,
-    certificate_request = 13,
-    server_hello_done_RESERVED = 14,
-    certificate_verify = 15,
-    client_key_exchange_RESERVED = 16,
-    finished = 20,
-    certificate_url_RESERVED = 21,
-    certificate_status_RESERVED = 22,
-    supplemental_data_RESERVED = 23,
-    key_update = 24,
-    message_hash = 254,
-};
-
-template <typename MessageType>
-struct Handshake {
-    static constexpr auto content_type = ContentType::handshake;
-
-    HandshakeType msg_type = MessageType::message_type;
-    length<3> length;
-    MessageType message;
-
-    int make_buffers(auto &&vec) {
-        return make_buffers1(vec, *this, message);
-    }
-
-    /*select (Handshake.msg_type) {
-        case server_hello:          ServerHello;
-        case end_of_early_data:     EndOfEarlyData;
-        case encrypted_extensions:  EncryptedExtensions;
-        case certificate_request:   CertificateRequest;
-        case certificate:           Certificate;
-        case certificate_verify:    CertificateVerify;
-        case finished:              Finished;
-        case new_session_ticket:    NewSessionTicket;
-        case key_update:            KeyUpdate;
-    };*/
-};
-
-// B.3.1.  Key Exchange Messages
 
 enum class ExtensionType : uint16 {
+    server_name = 0,
+    supported_versions = 43,
+    signature_algorithms = 13,
+    supported_groups = 10,
+    psk_key_exchange_modes = 45,
+    padding = 21,
+
     max_fragment_length = 1,                     /* RFC 6066 */
     status_request = 5,                          /* RFC 6066 */
     use_srtp = 14,                               /* RFC 5764 */
@@ -381,7 +252,7 @@ struct key_share {
         uint8 key[32];
     };
 
-    length<2> length{sizeof(e)};
+    length<2> length{sizeof(e)}; // only on client
     entry e;
 };
 struct psk_key_exchange_modes {
@@ -469,6 +340,174 @@ struct extensions_type {
     }
 };
 
+
+
+
+
+
+enum class HandshakeType : uint8 {
+    hello_request_RESERVED = 0,
+    client_hello = 1,
+    server_hello = 2,
+    hello_verify_request_RESERVED = 3,
+    new_session_ticket = 4,
+    end_of_early_data = 5,
+    hello_retry_request_RESERVED = 6,
+    encrypted_extensions = 8,
+    certificate = 11,
+    server_key_exchange_RESERVED = 12,
+    certificate_request = 13,
+    server_hello_done_RESERVED = 14,
+    certificate_verify = 15,
+    client_key_exchange_RESERVED = 16,
+    finished = 20,
+    certificate_url_RESERVED = 21,
+    certificate_status_RESERVED = 22,
+    supplemental_data_RESERVED = 23,
+    key_update = 24,
+    message_hash = 254,
+};
+
+struct Alert {
+    enum class Level : uint8 { warning = 1, fatal = 2 };
+
+    enum class Description : uint8 {
+        close_notify = 0,
+        unexpected_message = 10,
+        bad_record_mac = 20,
+        decryption_failed_RESERVED = 21,
+        record_overflow = 22,
+        decompression_failure_RESERVED = 30,
+        handshake_failure = 40,
+        no_certificate_RESERVED = 41,
+        bad_certificate = 42,
+        unsupported_certificate = 43,
+        certificate_revoked = 44,
+        certificate_expired = 45,
+        certificate_unknown = 46,
+        illegal_parameter = 47,
+        unknown_ca = 48,
+        access_denied = 49,
+        decode_error = 50,
+        decrypt_error = 51,
+        export_restriction_RESERVED = 60,
+        protocol_version = 70,
+        insufficient_security = 71,
+        internal_error = 80,
+        inappropriate_fallback = 86,
+        user_canceled = 90,
+        no_renegotiation_RESERVED = 100,
+        missing_extension = 109,
+        unsupported_extension = 110,
+        certificate_unobtainable_RESERVED = 111,
+        unrecognized_name = 112,
+        bad_certificate_status_response = 113,
+        bad_certificate_hash_value_RESERVED = 114,
+        unknown_psk_identity = 115,
+        certificate_required = 116,
+        no_application_protocol = 120,
+    };
+
+    Level level;
+    Description description;
+};
+
+struct ServerHello {
+    static constexpr auto message_type = HandshakeType::server_hello;
+
+    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
+    Random random;
+    repeated<uint8, 32, 0, 32> legacy_session_id; //<0..32>;
+    CipherSuite cipher_suite;
+    uint8 legacy_compression_method;
+    extensions_type extensions;
+
+    auto recv_size() {
+        return sizeof(*this) - sizeof(extensions) + 2;
+    }
+};
+
+using content_type = std::variant<Alert, ServerHello>;
+
+int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
+    auto sz_obj = sizeof(obj) - sizeof(variable_field);
+    vec.emplace_back(&obj, sz_obj);
+    int variable_field_size{};
+    if constexpr (requires { variable_field.make_buffers(vec); }) {
+        variable_field_size = variable_field.make_buffers(vec);
+    } else {
+        variable_field_size = sizeof(variable_field);
+        vec.emplace_back(&variable_field, variable_field_size);
+    }
+    if constexpr (requires { obj.length; }) {
+        obj.length = variable_field_size;
+    }
+    return sz_obj + variable_field_size;
+}
+
+template <typename Peer, typename Fragment = empty>
+struct TLSPlaintext {
+    ContentType type = Fragment::content_type;
+    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
+    length<2> length;
+    std::conditional_t<is_client<Peer>, Fragment, content_type> fragment;
+
+    auto recv_size() {
+        return sizeof(*this) - sizeof(fragment);
+    }
+
+    int make_buffers(auto &&vec) {
+        return make_buffers1(vec, *this, fragment);
+    }
+};
+
+struct TLSInnerPlaintext {
+    // opaque content[TLSPlaintext.length];
+    ContentType type;
+    // uint8 zeros[length_of_padding];
+};
+
+struct TLSCiphertext {
+    ContentType opaque_type = ContentType::application_data;     /* 23 */
+    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
+    uint16 length;
+    //opaque encrypted_record[1];
+};
+
+// B.3.  Handshake Protocol
+
+template <typename MessageType>
+struct Handshake {
+    static constexpr auto content_type = ContentType::handshake;
+
+    HandshakeType msg_type = MessageType::message_type;
+    length<3> length;
+    MessageType message;
+
+    auto recv_size() {
+        return sizeof(*this) - sizeof(message);
+    }
+
+    int make_buffers(auto &&vec) {
+        return make_buffers1(vec, *this, message);
+    }
+
+    /*select (Handshake.msg_type) {
+        case server_hello:          ServerHello;
+        case end_of_early_data:     EndOfEarlyData;
+        case encrypted_extensions:  EncryptedExtensions;
+        case certificate_request:   CertificateRequest;
+        case certificate:           Certificate;
+        case certificate_verify:    CertificateVerify;
+        case finished:              Finished;
+        case new_session_ticket:    NewSessionTicket;
+        case key_update:            KeyUpdate;
+    };*/
+};
+
+// B.3.1.  Key Exchange Messages
+
+
 template <auto NumberOfCipherSuites>
 struct ClientHello {
     static constexpr auto message_type = HandshakeType::client_hello;
@@ -483,17 +522,6 @@ struct ClientHello {
     int make_buffers(auto &&vec) {
         return make_buffers1(vec, *this, extensions);
     }
-};
-
-struct ServerHello {
-    static constexpr auto message_type = HandshakeType::server_hello;
-
-    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
-    Random random;
-    /*opaque legacy_session_id_echo<0..32>;
-    CipherSuite cipher_suite;
-    uint8 legacy_compression_method = 0;
-    Extension extensions<6..2^16-1>;*/
 };
 
 

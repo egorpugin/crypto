@@ -403,8 +403,11 @@ void test_25519() {
 void test_tls() {
     using namespace crypto;
 
-    tls t{"software-network.org"};
-    //tls t{"tls13.1d.pw"};
+    //tls t{"github.com"};
+    //tls t{"google.com"};
+    //tls t{"example.com"};
+    //tls t{"software-network.org"}; // does not work for some reason
+    tls t{"tls13.1d.pw"};
     t.run();
 }
 #endif
