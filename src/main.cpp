@@ -1,8 +1,6 @@
 #include "aes.h"
 #include "bigint.h"
-#ifndef _MSC_VER
 #include "sha2.h"
-#endif
 #include "sha3.h"
 #include "sm4.h"
 #ifdef _MSC_VER
@@ -11,6 +9,7 @@
 #include "x25519.h"
 #include "random.h"
 #include "ec.h"
+#include "hmac.h"
 
 #include <array>
 #include <iostream>
@@ -18,18 +17,21 @@
 #include <span>
 #include <sstream>
 
+auto to_string_raw = [](auto &&d) {
+    std::stringstream s;
+    s << std::setfill('0') << std::hex;
+    for (auto &&v : d) {
+        s << std::setw(2) << (unsigned int)v;
+    }
+    // printf("%s\n", s.str().c_str());
+    std::cout << s.str() << "\n";
+    return s.str();
+};
 auto to_string = [](auto &&sha) {
     auto digest = sha.digest();
     std::span<uint8_t> d{(uint8_t *) digest.data(),
                          digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
-    std::stringstream s;
-    s << std::setfill('0') << std::hex;
-    for (auto &&v: d) {
-        s << std::setw(2) << (unsigned int) v;
-    }
-    //printf("%s\n", s.str().c_str());
-    std::cout << s.str() << "\n";
-    return s.str();
+    return to_string_raw(d);
 };
 auto to_string2 = [](auto &&sha, auto &&s, std::string s2) {
     sha.update(s);
@@ -102,7 +104,6 @@ void test_aes() {
     }
 }
 
-#ifndef _MSC_VER
 void test_sha2() {
     using namespace crypto;
     {
@@ -172,7 +173,6 @@ void test_sha2() {
                 , "32063579e2f475efdea66d4384f75a96df64247e363c7ad8eb640a25");
     }
 }
-#endif
 
 void test_sha3() {
     using namespace crypto;
@@ -399,6 +399,34 @@ void test_25519() {
     a++;
 }
 
+void test_hmac() {
+    using namespace crypto;
+
+    auto f = [](auto h, auto &&r1, auto &&r2) {
+        auto key = "key";
+        auto fox = "The quick brown fox jumps over the lazy dog";
+        cmp_base(to_string_raw(hmac<decltype(h)>(key, fox)), r1);
+        cmp_base(to_string_raw(hmac<decltype(h)>(fox, fox)), r2);
+
+        auto f = [&](auto &&key, auto &&fox, auto &&r) {
+            cmp_base(to_string_raw(hmac<decltype(h)>(string{key}, fox)), r);
+            cmp_base(to_string_raw(hmac<decltype(h)>(key, string{fox})), r);
+            cmp_base(to_string_raw(hmac<decltype(h)>(string{key}, string{fox})), r);
+        };
+        f(key, fox, r1);
+        f(fox, fox, r2);
+    };
+
+    f(sha2<256>{},
+        "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"s,
+        "05ef8d2632d4140db730878ffb03a0bd9b32de06fb74df0471bde777cba1eff7"s
+    );
+    f(sha2<512>{},
+        "b42af09057bac1e2d41708e48a902e09b5ff7f12ab428a4fe86653c73dd248fb82f948a549f7b791a5b41915ee4d1ec3935357e4e2317250d0372afa2ebeeb3a"s,
+        "ed9bb695a3ccfe82fea7055e79fad7d225f5cc9c9b7b1808fc7121237a47903f59d8fad228c5710c487541db2bbecb09891b96b87c8718759ca4aa302cc72598"s
+    );
+}
+
 #ifdef _MSC_VER
 void test_tls() {
     using namespace crypto;
@@ -414,9 +442,10 @@ void test_tls() {
 
 int main() {
     //test_aes();
-    //test_sha2();
+    test_sha2();
     //test_sha3();
     //test_sm4();
     //test_25519();
+    test_hmac();
     test_tls();
 }

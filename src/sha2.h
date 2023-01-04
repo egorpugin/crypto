@@ -113,17 +113,38 @@ struct sha2_base {
     static inline constexpr auto rounds = small_sha ? 64 : 80;
     static inline constexpr auto chunk_size_bits = small_sha ? 512 : 1024;
     static inline constexpr auto chunk_size_bytes = chunk_size_bits / 8;
+    static inline constexpr auto digest_size_bytes = DigestSizeBits / 8;
     using state_type = std::conditional_t<small_sha, uint32_t, uint64_t>;
+#ifdef _MSC_VER
+    struct uint128 {
+        uint64_t v[2]{};
+        void operator+=(auto in) {
+            v[1] += in;
+        }
+        uint8_t operator>>(int b) {
+            auto v0 = v[0];
+            v[0] >>= b;
+            v[1] >>= b;
+            v[1] |= (v0 >> (64 - b)) << (64 - b);
+            return v[1];
+        }
+    };
+    using message_length_type = std::conditional_t<small_sha, uint64_t, uint128>;
+#else
     using message_length_type = std::conditional_t<small_sha, uint64_t, unsigned __int128>;
+#endif
     static inline constexpr auto K = sha2_data::K<small_sha>();
     static inline constexpr auto s = sha2_data::sigma<small_sha>();
     static inline constexpr auto S = sha2_data::sum<small_sha>();
 
-    /*void update(auto &&s) {
-        update((uint8_t*)s, sizeof(s)-1);
-    }*/
-    template <auto N> void update(const char (&s)[N]) {
-        update((uint8_t*)s, N-1);
+    template <typename T, auto N> void update(const T (&s)[N]) {
+        update((const uint8_t *)s, N);
+    }
+    void update(const char *s) {
+        update((const uint8_t *)s, strlen(s));
+    }
+    void update(auto &&s) noexcept requires requires { s.size(); } {
+        update((const uint8_t *)s.data(), s.size());
     }
     void update(const uint8_t *data, size_t length) noexcept {
         auto pre_len = length % chunk_size_bytes;

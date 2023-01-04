@@ -5,6 +5,7 @@
 #include "random.h"
 #include "ec25519.h"
 #include "aes.h"
+#include "hmac.h"
 
 #include <boost/asio.hpp>
 #include <nameof.hpp>
@@ -118,6 +119,22 @@ struct tls {
             break;
         }
         case tls13::ContentType::application_data: {
+            auto hkdf_extract = [&](auto &&salt, auto &&input_keying_material) {
+                return hmac<sha2<256>>(salt, input_keying_material);
+            };
+            auto hkdf_expand = [&](auto &&pseudorandom_key, auto &&info) {
+                return "";
+            };
+            auto hkdf_expand_label = [&](auto &&pseudorandom_key, auto &&label) {
+                return hkdf_expand(pseudorandom_key, "tls13 "s + label);
+            };
+
+            uint8_t salt0[32]{};
+            auto early_secret = hkdf_extract(salt0, key);
+
+            //auto k = hkdf(key, "key", "");
+            //auto iv = hkdf(key, "iv", "");
+
             int len = smsg.length;
             // we need:
             // 1. HKDF to get 'key' and 'iv' (initialization vector)
