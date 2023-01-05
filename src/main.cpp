@@ -33,7 +33,7 @@ auto to_string = [](auto &&sha) {
                          digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
     return to_string_raw(d);
 };
-auto to_string2 = [](auto &&sha, auto &&s, std::string s2) {
+auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
     sha.update(s);
     auto r = to_string(sha) == s2;
     printf("%s\n", r ? "ok" : "false");
@@ -435,7 +435,7 @@ void test_tls() {
 
 int main() {
     //test_aes();
-    test_sha2();
+    //test_sha2();
     //test_sha3();
     //test_sm4();
     //test_25519();

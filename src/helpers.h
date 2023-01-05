@@ -13,6 +13,7 @@ using fmt::format;
 #include <fmt/format.h>
 using fmt::format;
 #endif
+#include <iostream>
 #include <span>
 #include <string>
 #include <string_view>
@@ -33,11 +34,11 @@ using std::variant;
 using std::vector;
 using namespace std::literals;
 
-/*template <typename T>
-concept bytes_concept = requires (T t) {
+template <typename T>
+concept bytes_concept1 = requires (T t) {
     t.data();
     t.size();
-};*/
+};
 
 struct bytes_concept {
     uint8_t *p;
@@ -68,8 +69,15 @@ struct bytes_concept {
         p = (uint8_t *)s.data();
         sz = s.size();
     }
+    bytes_concept(bytes_concept1 auto &&s) {
+        p = (uint8_t *)s.data();
+        sz = s.size();
+    }
     auto data() const { return p; }
     auto size() const { return sz; }
+    auto &operator[](int i) { return data()[i]; }
+    auto operator[](int i) const { return data()[i]; }
+    void operator+=(int i) { p += i; }
 };
 
 template <typename... Ts>
@@ -85,6 +93,53 @@ decltype(auto) visit(auto &&var, auto &&...f) {
 decltype(auto) visit_any(auto &&var, auto &&...f) {
     return visit(FWD(var), overload{FWD(f)..., [](auto &&) {
                                     }});
+}
+
+inline void print_buffer(bytes_concept buffer) {
+    int i, buflen = (int)buffer.size(), bufidx;
+    constexpr int LINE_LEN = 16;
+    char line[(LINE_LEN * 4) + 3]; /* \t00..0F | chars...chars\0 */
+
+    auto print = [](auto &&s) {
+        std::cout << s << "\n";
+    };
+
+    if (!buffer.data()) {
+        print("\tNULL");
+        return;
+    }
+
+    while (buflen > 0) {
+        bufidx = 0;
+        snprintf(&line[bufidx], sizeof(line) - bufidx, "\t");
+        bufidx++;
+
+        for (i = 0; i < LINE_LEN; i++) {
+            if (i < buflen) {
+                snprintf(&line[bufidx], sizeof(line) - bufidx, "%02x ", buffer[i]);
+            } else {
+                snprintf(&line[bufidx], sizeof(line) - bufidx, "   ");
+            }
+            bufidx += 3;
+        }
+        snprintf(&line[bufidx], sizeof(line) - bufidx, "| ");
+        bufidx++;
+
+        for (i = 0; i < LINE_LEN; i++) {
+            if (i < buflen) {
+                snprintf(&line[bufidx], sizeof(line) - bufidx, "%c",
+                          31 < buffer[i] && buffer[i] < 127 ? buffer[i] : '.');
+                bufidx++;
+            }
+        }
+        print(line);
+        buffer += LINE_LEN;
+        buflen -= LINE_LEN;
+    }
+}
+inline void print_buffer(auto &&name, auto &&buffer) {
+    std::cout << name << "\n";
+    print_buffer(buffer);
 }
 
 }

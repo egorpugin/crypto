@@ -1,5 +1,7 @@
 #pragma once
 
+#include "helpers.h"
+
 #include <array>
 #include <bit>
 #include <cstdint>
@@ -115,6 +117,7 @@ struct sha2_base {
     static inline constexpr auto chunk_size_bytes = chunk_size_bits / 8;
     static inline constexpr auto digest_size_bytes = DigestSizeBits / 8;
     using state_type = std::conditional_t<small_sha, uint32_t, uint64_t>;
+    static inline constexpr auto state_size = 8;
 #ifdef _MSC_VER
     struct uint128 {
         uint64_t v[2]{};
@@ -137,20 +140,16 @@ struct sha2_base {
     static inline constexpr auto s = sha2_data::sigma<small_sha>();
     static inline constexpr auto S = sha2_data::sum<small_sha>();
 
-    template <typename T, auto N> void update(const T (&s)[N]) {
-        update((const uint8_t *)s, N);
-    }
-    void update(const char *s) {
-        update((const uint8_t *)s, strlen(s));
-    }
-    void update(auto &&s) noexcept requires requires { s.size(); } {
-        update((const uint8_t *)s.data(), s.size());
+    void update(bytes_concept b) noexcept {
+        update(b.data(), b.size());
     }
     void update(const uint8_t *data, size_t length) noexcept {
         bitlen += length * 8;
+        return update_slow(data, length);
+        // BUG: this length is incorrect
         auto pre_len = length % chunk_size_bytes;
         update_slow(data, pre_len);
-        data = data + pre_len;
+        data += pre_len;
         length -= pre_len;
         if (length == 0) {
             return;
@@ -174,7 +173,7 @@ struct sha2_base {
         } else {
             std::array<uint8_t, DigestSizeBits / 8> hash;
             for (uint8_t i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
-                *(state_type *) (hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
+                *(state_type *)(hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
             }
             return hash;
         }
@@ -182,7 +181,7 @@ struct sha2_base {
 
 private:
     uint8_t m_data[chunk_size_bytes];
-    std::array<state_type, 8> h{sha2_data::h<ShaType, DigestSizeBits>()};
+    std::array<state_type, state_size> h{sha2_data::h<ShaType, DigestSizeBits>()};
     message_length_type bitlen{};
     int blockpos{};
 
@@ -202,21 +201,8 @@ private:
     }
     constexpr void transform() noexcept {
         state_type w[rounds];
-        for (uint8_t i = 0, j = 0; i < 16; ++i, j += sizeof(state_type)) {
-            if constexpr (sizeof(state_type) == 4) {
-                w[i] = (m_data[j] << 24) | (m_data[j + 1] << 16) | (m_data[j + 2] << 8) | (m_data[j + 3] << 0);
-            } else {
-                w[i] = 0
-                       | ((uint64_t)m_data[j + 0] << 56)
-                       | ((uint64_t)m_data[j + 1] << 48)
-                       | ((uint64_t)m_data[j + 2] << 40)
-                       | ((uint64_t)m_data[j + 3] << 32)
-                       | ((uint64_t)m_data[j + 4] << 24)
-                       | ((uint64_t)m_data[j + 5] << 16)
-                       | ((uint64_t)m_data[j + 6] << 8)
-                       | ((uint64_t)m_data[j + 7] << 0)
-                       ;
-            }
+        for (uint8_t i = 0; i < 16; ++i) {
+            w[i] = std::byteswap(*(state_type *)(m_data + i * sizeof(state_type)));
         }
         for (uint8_t k = 16; k < rounds; ++k) {
             w[k] = sigma<s[1]>(w[k - 2]) + w[k - 7] + sigma<s[0]>(w[k - 15]) + w[k - 16];
@@ -236,8 +222,7 @@ private:
             state[1] = state[0];
             state[0] = sum<S[0]>(state[0]) + maj + s;
         }
-        auto sz = h.size();
-        for (uint8_t i = 0; i < sz; ++i) {
+        for (uint8_t i = 0; i < state_size; ++i) {
             h[i] += state[i];
         }
     }

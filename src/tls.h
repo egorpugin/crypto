@@ -68,12 +68,10 @@ struct tls {
         uint8_t priv[32], peer[32], shared[32];
         get_random_secure_bytes(priv);
         curve25519(priv, k.e.key);
-        //client_hello.message.extensions.add<psk_key_exchange_modes>();
         Extension<padding> p;
         client_hello.message.extensions.add(p);
 
         auto sz = msg.make_buffers(buffers);
-        std::string context;
         for (auto &&b : buffers | std::views::drop(1)) {
             h.update(b);
         }
@@ -126,27 +124,6 @@ struct tls {
             break;
         }
         case tls13::ContentType::application_data: {
-            auto hkdf_expand_label = [&](auto &&secret, auto &&label, auto &&ctx, int len) {
-                auto protocol = "tls13 "s;
-                string info(2 + 1 + protocol.size() + label.size() + 1 + ctx.size(), 0);
-                *(uint16*)info.data() = len;
-                *(uint16*)info.data() = std::byteswap(*(uint16*)info.data());
-                info[2] = protocol.size() + label.size();
-                memcpy(info.data() + 3, protocol.data(), protocol.size());
-                memcpy(info.data() + 3 + protocol.size(), label.data(), label.size());
-                info[3 + info[2]] = ctx.size();
-                memcpy(info.data() + 3 + info[2] + 1, ctx.data(), ctx.size());
-                return hkdf_expand<hash, hash::digest_size_bytes>(secret, info);
-            };
-            auto derive_secret = [&](auto &&secret, auto &&label) {
-                hash h;
-                return hkdf_expand_label(secret, label, h.digest(), hash::digest_size_bytes);
-            };
-            auto derive_secret_hash = [&](auto &&secret, auto &&label) {
-                auto h2 = h;
-                return hkdf_expand_label(secret, label, h2.digest(), hash::digest_size_bytes);
-            };
-
             auto key2 = std::span<uint8_t>{key, 32}; // ecdhe?
             auto ecdhe = key2;
             std::array<uint8_t, 32> zero_bytes{};
@@ -156,12 +133,22 @@ struct tls {
             auto early_secret = hkdf_extract<hash>(salt0, psk);
             //auto binder_key = derive_secret(early_secret, "ext binder"|"res binder"s, ""s);
             //auto client_early_traffic_secret = derive_secret(early_secret, "c e traffic"s, ""s);
-            auto derived1 = derive_secret(early_secret, "derived"s); // handshake_secret?
+            auto derived1 = derive_secret<hash>(early_secret, "derived"s); // handshake_secret?
             auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe); // pre master key?
-            client_handshake_traffic_secret = derive_secret_hash(handshake_secret, "c hs traffic"s);
-            server_handshake_traffic_secret = derive_secret_hash(handshake_secret, "s hs traffic"s);
-            auto derived2 = derive_secret(handshake_secret, "derived"s);
+            client_handshake_traffic_secret = derive_secret<hash>(handshake_secret, "c hs traffic"s, h);
+            server_handshake_traffic_secret = derive_secret<hash>(handshake_secret, "s hs traffic"s, h);
+            auto derived2 = derive_secret<hash>(handshake_secret, "derived"s);
             auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
+
+            constexpr auto aes_key_size = 16;
+
+            auto client_key = hkdf_expand_label<hash,aes_key_size>(client_handshake_traffic_secret, "key");
+            auto server_key = hkdf_expand_label<hash,aes_key_size>(server_handshake_traffic_secret, "key");
+
+            constexpr auto aes_iv_size = 12;
+
+            auto client_iv = hkdf_expand_label<hash,aes_iv_size>(client_handshake_traffic_secret, "iv");
+            auto server_iv = hkdf_expand_label<hash,aes_iv_size>(server_handshake_traffic_secret, "iv");
 
             int len = smsg.length;
             //aes_cbc<128> cipher{server_handshake_traffic_secret};

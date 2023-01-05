@@ -6,8 +6,8 @@
 namespace crypto {
 
 template <auto ... Settings>
-constexpr auto hmac_b(sha2<Settings...>) {
-    return sha2<Settings...>::small_sha ? 64 : 128;
+constexpr auto hmac_b(sha2_base<Settings...>) {
+    return sha2_base<Settings...>::small_sha ? 64 : 128;
 }
 
 // not available for sha3?
@@ -53,24 +53,51 @@ template <typename Hash>
 auto hkdf_extract(bytes_concept salt, bytes_concept input_keying_material) {
     return hmac<Hash>(salt, input_keying_material);
 }
-template <typename Hash, auto Len>
+// constexpr info?
+template <typename Hash, auto Len = Hash::digest_size_bytes>
 auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
-    constexpr int hash_bytes = Hash::digest_size_bytes;
-    constexpr auto n = Len / hash_bytes + (Len % hash_bytes == 0 ? 0 : 1);
+    constexpr auto hash_bytes = Hash::digest_size_bytes;
+    auto n = Len / hash_bytes + (Len % hash_bytes == 0 ? 0 : 1);
     string r;
-    r.reserve(Len + info.size() + 1);
+    r.reserve(hash_bytes + info.size() + 1);
     r.append((const char *)info.data(), info.size());
     r.resize(r.size() + 1);
+    std::array<uint8_t, Len> r2;
+    int pos = 0;
     for (int i = 0; i < n; ++i) {
         if (i == 1) {
-            memcpy(r.data() + Len, info.data(), info.size());
+            memcpy(r.data() + hash_bytes, info.data(), info.size());
         }
         r[r.size() - 1] = i + 1;
-        memcpy(r.data(), hkdf_extract<Hash>(pseudorandom_key, r).data(), Len);
+        memcpy(r.data(), hkdf_extract<Hash>(pseudorandom_key, r).data(), hash_bytes);
+        auto sz = (i == n - 1) ? Len - pos : hash_bytes;
+        memcpy(r2.data() + pos, r.data(), sz);
+        pos += sz;
     }
-    std::array<uint8_t, Len> r2;
-    memcpy(r2.data(), r.data(), Len);
     return r2;
+}
+
+// tls 1.3
+template <typename Hash, auto Len = Hash::digest_size_bytes>
+auto hkdf_expand_label(auto &&secret, auto &&label, auto &&ctx) {
+    auto protocol = "tls13 "s;
+    auto plabel = protocol + label;
+    string info(2 + 1 + plabel.size() + 1 + ctx.size(), 0);
+    *(uint16_t *)info.data() = Len;
+    *(uint16_t *)info.data() = std::byteswap(*(uint16_t *)info.data());
+    info[2] = plabel.size();
+    memcpy(info.data() + 3, plabel.data(), plabel.size());
+    info[3 + info[2]] = ctx.size();
+    memcpy(info.data() + 3 + info[2] + 1, ctx.data(), ctx.size());
+    return hkdf_expand<Hash, Len>(secret, info);
+}
+template <typename Hash, auto Len = Hash::digest_size_bytes>
+auto hkdf_expand_label(auto &&secret, auto &&label) {
+    return hkdf_expand_label<Hash, Len>(secret, label, ""sv);
+}
+template <typename Hash>
+auto derive_secret(auto &&secret, auto &&label, Hash h = {}) {
+    return hkdf_expand_label<Hash>(secret, label, h.digest());
 }
 
 } // namespace crypto

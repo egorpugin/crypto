@@ -513,7 +513,7 @@ struct ClientHello {
     static constexpr auto message_type = HandshakeType::client_hello;
 
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
-    Random random;
+    Random random{};
     repeated<uint8, 32, 0, 32> legacy_session_id;//<0..32>;
     cipher_suite<NumberOfCipherSuites> cipher_suites_;
     repeated<uint8, 1, 1, (1 << 8) - 1> legacy_compression_methods{}; //<1..2^8-1>;
