@@ -16,6 +16,7 @@ namespace crypto {
 struct tls {
     std::string url;
     boost::asio::io_context ctx;
+    std::array<uint8_t, 32> server_handshake_traffic_secret;
 
     tls(auto &&url) : url{url} {
     }
@@ -37,7 +38,7 @@ struct tls {
         auto ex = co_await boost::asio::this_coro::executor;
 
         boost::asio::ip::tcp::resolver r{ex};
-        auto result = co_await r.async_resolve({url,"443"}, use_awaitable);
+        auto result = co_await r.async_resolve({url,url=="localhost"s?"11111":"443"}, use_awaitable);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
@@ -51,7 +52,7 @@ struct tls {
         auto &client_hello = msg.fragment;
         get_random_secure_bytes(client_hello.message.legacy_session_id.data);
         get_random_secure_bytes(client_hello.message.random);
-        client_hello.message.cipher_suites_[0] = CipherSuite::TLS_AES_256_GCM_SHA384;
+        client_hello.message.cipher_suites_[0] = CipherSuite::TLS_AES_128_GCM_SHA256;
 
         Extension<server_name> sn;
         sn.e.server_name_ = url;
@@ -63,23 +64,25 @@ struct tls {
         uint8_t priv[32], peer[32], shared[32];
         get_random_secure_bytes(priv);
         curve25519(priv, k.e.key);
-        client_hello.message.extensions.add<psk_key_exchange_modes>();
+        //client_hello.message.extensions.add<psk_key_exchange_modes>();
         Extension<padding> p;
         client_hello.message.extensions.add(p);
 
         auto sz = msg.make_buffers(buffers);
-
+        std::string context;
+        for (auto &&b : buffers | std::views::drop(1)) {
+            context.append((const char *)b.data(), b.size());
+        }
         co_await s.async_send(buffers, use_awaitable);
 
 
 
-        co_await handle_server_message(s, peer);
+        co_await handle_server_message(s, peer, context);
         curve25519(priv, peer, shared);
-        co_await handle_server_message(s, shared);
-        co_await handle_server_message(s, shared);
-        co_await handle_server_message(s, shared);
-        co_await handle_server_message(s, shared);
-        co_await handle_server_message(s, shared);
+        co_await handle_server_message(s, shared, context);
+        co_await handle_server_message(s, shared, context);
+        co_await handle_server_message(s, shared, context);
+        co_await handle_server_message(s, shared, context);
 
 
         //ServerHello server_hello;
@@ -89,7 +92,7 @@ struct tls {
         a++;
         co_return;
     }
-    boost::asio::awaitable<void> handle_server_message(auto &s, uint8_t key[32]) {
+    boost::asio::awaitable<string> handle_server_message(auto &s, uint8_t key[32], std::string &context) {
         using namespace tls13;
         using boost::asio::use_awaitable;
 
@@ -98,7 +101,7 @@ struct tls {
         TLSPlaintext<server> smsg;
         co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
         if ((int)smsg.length > sizeof(buf)) {
-            throw std::logic_error{"unhandled lentth"};
+            throw std::logic_error{"unhandled length"};
         }
         co_await s.async_read_some(boost::asio::buffer(&buf, smsg.length), use_awaitable);
 
@@ -119,23 +122,39 @@ struct tls {
             break;
         }
         case tls13::ContentType::application_data: {
-            auto hkdf_extract = [&](auto &&salt, auto &&input_keying_material) {
-                return hmac<sha2<256>>(salt, input_keying_material);
+            using hash = sha2<256>;
+
+            auto hkdf_expand_label = [&](auto &&secret, auto &&label, auto &&ctx, int len) {
+                string info = "\0\0"s + "tls13 " + label;
+                info.append((const char *)ctx.data(), ctx.size());
+                *(uint16*)info.data() = len;
+                *(uint16*)info.data() = std::byteswap(*(uint16*)info.data()); //?
+                return hkdf_expand<hash, hash::digest_size_bytes>(secret, info);
             };
-            auto hkdf_expand = [&](auto &&pseudorandom_key, auto &&info) {
-                return "";
-            };
-            auto hkdf_expand_label = [&](auto &&pseudorandom_key, auto &&label) {
-                return hkdf_expand(pseudorandom_key, "tls13 "s + label);
+            auto derive_secret = [&](auto &&secret, auto &&label, auto &&messages) {
+                hash h;
+                h.update(messages);
+                return hkdf_expand_label(secret, label, h.digest(), hash::digest_size_bytes);
             };
 
-            uint8_t salt0[32]{};
-            auto early_secret = hkdf_extract(salt0, key);
+            auto key2 = std::span<uint8_t>{key, 32}; // ecdhe?
+            auto ecdhe = key2;
+            std::array<uint8_t, 32> zero_bytes{};
+            auto salt0 = zero_bytes;
+            auto psk = salt0; // zero psk
 
-            //auto k = hkdf(key, "key", "");
-            //auto iv = hkdf(key, "iv", "");
+            auto early_secret = hkdf_extract<hash>(salt0, psk);
+            //auto binder_key = derive_secret(early_secret, "ext binder"|"res binder"s, ""s);
+            //auto client_early_traffic_secret = derive_secret(early_secret, "c e traffic"s, ""s);
+            auto derived1 = derive_secret(early_secret, "derived"s, ""s);
+            auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe);
+            server_handshake_traffic_secret = derive_secret(handshake_secret, "s hs traffic"s, context);
+            auto derived2 = derive_secret(handshake_secret, "derived"s, ""s);
+            auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
 
             int len = smsg.length;
+            //aes_cbc<128> cipher{server_handshake_traffic_secret};
+            //cipher.decrypt()
             // we need:
             // 1. HKDF to get 'key' and 'iv' (initialization vector)
             // https://github.com/randombit/botan/blob/master/src/lib/kdf/hkdf/hkdf.h#L113
@@ -155,6 +174,7 @@ struct tls {
             break;
         }
         case tls13::ContentType::handshake: {
+            context.append((const char *)buf, smsg.length);
             auto &h = *(Handshake<ServerHello> *)p;
             p += h.recv_size();
             switch (h.msg_type) {
@@ -186,6 +206,7 @@ struct tls {
         default:
             throw std::logic_error{format("content is not implemented: {}", (string)NAMEOF_ENUM(smsg.type))};
         }
+        co_return ""s;
     }
 };
 

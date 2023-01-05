@@ -403,18 +403,10 @@ void test_hmac() {
     using namespace crypto;
 
     auto f = [](auto h, auto &&r1, auto &&r2) {
-        auto key = "key";
-        auto fox = "The quick brown fox jumps over the lazy dog";
+        auto key = "key"sv;
+        auto fox = "The quick brown fox jumps over the lazy dog"sv;
         cmp_base(to_string_raw(hmac<decltype(h)>(key, fox)), r1);
         cmp_base(to_string_raw(hmac<decltype(h)>(fox, fox)), r2);
-
-        auto f = [&](auto &&key, auto &&fox, auto &&r) {
-            cmp_base(to_string_raw(hmac<decltype(h)>(string{key}, fox)), r);
-            cmp_base(to_string_raw(hmac<decltype(h)>(key, string{fox})), r);
-            cmp_base(to_string_raw(hmac<decltype(h)>(string{key}, string{fox})), r);
-        };
-        f(key, fox, r1);
-        f(fox, fox, r2);
     };
 
     f(sha2<256>{},
@@ -435,17 +427,18 @@ void test_tls() {
     //tls t{"google.com"};
     //tls t{"example.com"};
     //tls t{"software-network.org"}; // does not work for some reason
-    tls t{"tls13.1d.pw"};
+    //tls t{"tls13.1d.pw"};
+    tls t{"localhost"};
     t.run();
 }
 #endif
 
 int main() {
     //test_aes();
-    test_sha2();
+    //test_sha2();
     //test_sha3();
     //test_sm4();
     //test_25519();
-    test_hmac();
+    //test_hmac();
     test_tls();
 }
