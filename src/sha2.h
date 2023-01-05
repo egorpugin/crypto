@@ -147,6 +147,7 @@ struct sha2_base {
         update((const uint8_t *)s.data(), s.size());
     }
     void update(const uint8_t *data, size_t length) noexcept {
+        bitlen += length * 8;
         auto pre_len = length % chunk_size_bytes;
         update_slow(data, pre_len);
         data = data + pre_len;
@@ -155,7 +156,6 @@ struct sha2_base {
             return;
         }
         auto n_chunks = length / chunk_size_bytes;
-        bitlen += n_chunks * chunk_size_bits;
         for (size_t i = 0; i < length; i += chunk_size_bytes) {
             memcpy(m_data, data + i, chunk_size_bytes);
             transform();
@@ -256,7 +256,6 @@ private:
         }
 
         // Append to the padding the total message's length in bits and transform.
-        bitlen += blockpos * 8;
         for (int i = 0; i < bigint_size; ++i) {
             m_data[padding_size - i - 1] = bitlen >> (i * 8);
         }
@@ -267,7 +266,6 @@ private:
             m_data[blockpos++] = data[i];
             if (blockpos == chunk_size_bytes) {
                 transform();
-                bitlen += chunk_size_bits;
                 blockpos = 0;
             }
         }

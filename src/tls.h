@@ -14,9 +14,13 @@
 namespace crypto {
 
 struct tls {
+    using hash = sha2<256>;
+
     std::string url;
     boost::asio::io_context ctx;
     std::array<uint8_t, 32> server_handshake_traffic_secret;
+    std::array<uint8_t, 32> client_handshake_traffic_secret;
+    hash h;
 
     tls(auto &&url) : url{url} {
     }
@@ -71,18 +75,18 @@ struct tls {
         auto sz = msg.make_buffers(buffers);
         std::string context;
         for (auto &&b : buffers | std::views::drop(1)) {
-            context.append((const char *)b.data(), b.size());
+            h.update(b);
         }
         co_await s.async_send(buffers, use_awaitable);
 
 
 
-        co_await handle_server_message(s, peer, context);
+        co_await handle_server_message(s, peer);
         curve25519(priv, peer, shared);
-        co_await handle_server_message(s, shared, context);
-        co_await handle_server_message(s, shared, context);
-        co_await handle_server_message(s, shared, context);
-        co_await handle_server_message(s, shared, context);
+        co_await handle_server_message(s, shared);
+        co_await handle_server_message(s, shared);
+        co_await handle_server_message(s, shared);
+        co_await handle_server_message(s, shared);
 
 
         //ServerHello server_hello;
@@ -92,7 +96,7 @@ struct tls {
         a++;
         co_return;
     }
-    boost::asio::awaitable<string> handle_server_message(auto &s, uint8_t key[32], std::string &context) {
+    boost::asio::awaitable<string> handle_server_message(auto &s, uint8_t key[32]) {
         using namespace tls13;
         using boost::asio::use_awaitable;
 
@@ -122,19 +126,25 @@ struct tls {
             break;
         }
         case tls13::ContentType::application_data: {
-            using hash = sha2<256>;
-
             auto hkdf_expand_label = [&](auto &&secret, auto &&label, auto &&ctx, int len) {
-                string info = "\0\0"s + "tls13 " + label;
-                info.append((const char *)ctx.data(), ctx.size());
+                auto protocol = "tls13 "s;
+                string info(2 + 1 + protocol.size() + label.size() + 1 + ctx.size(), 0);
                 *(uint16*)info.data() = len;
-                *(uint16*)info.data() = std::byteswap(*(uint16*)info.data()); //?
+                *(uint16*)info.data() = std::byteswap(*(uint16*)info.data());
+                info[2] = protocol.size() + label.size();
+                memcpy(info.data() + 3, protocol.data(), protocol.size());
+                memcpy(info.data() + 3 + protocol.size(), label.data(), label.size());
+                info[3 + info[2]] = ctx.size();
+                memcpy(info.data() + 3 + info[2] + 1, ctx.data(), ctx.size());
                 return hkdf_expand<hash, hash::digest_size_bytes>(secret, info);
             };
-            auto derive_secret = [&](auto &&secret, auto &&label, auto &&messages) {
+            auto derive_secret = [&](auto &&secret, auto &&label) {
                 hash h;
-                h.update(messages);
                 return hkdf_expand_label(secret, label, h.digest(), hash::digest_size_bytes);
+            };
+            auto derive_secret_hash = [&](auto &&secret, auto &&label) {
+                auto h2 = h;
+                return hkdf_expand_label(secret, label, h2.digest(), hash::digest_size_bytes);
             };
 
             auto key2 = std::span<uint8_t>{key, 32}; // ecdhe?
@@ -146,10 +156,11 @@ struct tls {
             auto early_secret = hkdf_extract<hash>(salt0, psk);
             //auto binder_key = derive_secret(early_secret, "ext binder"|"res binder"s, ""s);
             //auto client_early_traffic_secret = derive_secret(early_secret, "c e traffic"s, ""s);
-            auto derived1 = derive_secret(early_secret, "derived"s, ""s);
-            auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe);
-            server_handshake_traffic_secret = derive_secret(handshake_secret, "s hs traffic"s, context);
-            auto derived2 = derive_secret(handshake_secret, "derived"s, ""s);
+            auto derived1 = derive_secret(early_secret, "derived"s); // handshake_secret?
+            auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe); // pre master key?
+            client_handshake_traffic_secret = derive_secret_hash(handshake_secret, "c hs traffic"s);
+            server_handshake_traffic_secret = derive_secret_hash(handshake_secret, "s hs traffic"s);
+            auto derived2 = derive_secret(handshake_secret, "derived"s);
             auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
 
             int len = smsg.length;
@@ -174,7 +185,8 @@ struct tls {
             break;
         }
         case tls13::ContentType::handshake: {
-            context.append((const char *)buf, smsg.length);
+            h.update(buf, smsg.length);
+
             auto &h = *(Handshake<ServerHello> *)p;
             p += h.recv_size();
             switch (h.msg_type) {

@@ -435,7 +435,7 @@ void test_tls() {
 
 int main() {
     //test_aes();
-    //test_sha2();
+    test_sha2();
     //test_sha3();
     //test_sm4();
     //test_25519();

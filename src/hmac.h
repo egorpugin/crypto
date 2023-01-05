@@ -57,9 +57,14 @@ template <typename Hash, auto Len>
 auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
     constexpr int hash_bytes = Hash::digest_size_bytes;
     constexpr auto n = Len / hash_bytes + (Len % hash_bytes == 0 ? 0 : 1);
-    std::vector<uint8_t> r(Len + info.size() + 1);
-    for (int i = 0; i <= n; ++i) {
-        memcpy(r.data() + Len, info.data(), info.size());
+    string r;
+    r.reserve(Len + info.size() + 1);
+    r.append((const char *)info.data(), info.size());
+    r.resize(r.size() + 1);
+    for (int i = 0; i < n; ++i) {
+        if (i == 1) {
+            memcpy(r.data() + Len, info.data(), info.size());
+        }
         r[r.size() - 1] = i + 1;
         memcpy(r.data(), hkdf_extract<Hash>(pseudorandom_key, r).data(), Len);
     }
