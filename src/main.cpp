@@ -423,13 +423,23 @@ void test_hmac() {
 void test_tls() {
     using namespace crypto;
 
-    //tls t{"github.com"};
-    //tls t{"google.com"};
-    //tls t{"example.com"};
-    //tls t{"software-network.org"}; // does not work for some reason
-    //tls t{"tls13.1d.pw"};
-    tls t{"localhost"};
-    t.run();
+    auto run = [](auto &&url) {
+        std::cout << "connecting to " << url << "\n";
+        try {
+            tls t{url};
+            t.run();
+            std::cout << "ok" << "\n";
+        } catch (std::exception &e) {
+            std::cerr << e.what() << "\n";
+        }
+    };
+
+    run("software-network.org");
+    run("example.com");
+    run("google.com");
+    run("github.com");
+    run("tls13.1d.pw");
+    run("localhost");
 }
 #endif
 

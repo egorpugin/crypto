@@ -34,6 +34,9 @@ using std::variant;
 using std::vector;
 using namespace std::literals;
 
+template <auto N>
+using array = std::array<uint8_t, N>;
+
 template <typename T>
 concept bytes_concept1 = requires (T t) {
     t.data();
@@ -59,7 +62,7 @@ struct bytes_concept {
         sz = N;
     }
     template <auto N>
-    bytes_concept(const std::array<uint8_t, N> &s) {
+    bytes_concept(const array<N> &s) {
         p = (uint8_t *)s.data();
         sz = N;
     }
@@ -151,4 +154,16 @@ inline void print_buffer(auto &&name, auto &&buffer) {
     print_buffer(buffer);
 }
 
-}
+template<std::size_t N>
+struct static_string {
+    char p[N]{};
+    constexpr static_string(char const(&pp)[N]) {
+        std::ranges::copy(pp, p);
+    }
+    operator auto() const { return &p[0]; }
+    operator string_view() const { return string_view{p, N-1}; }
+};
+template<static_string s>
+constexpr auto operator""_s() { return s; }
+
+} // namespace crypto

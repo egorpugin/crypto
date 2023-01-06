@@ -505,6 +505,7 @@ struct aes_cfb : aes_ecb<KeyLength> {
 
 // _ccm
 
+// mostly tls 1.3 variant with additional length etc.
 template <auto KeyLength>
 struct aes_gcm : aes_ecb<KeyLength> {
     using base = aes_ecb<KeyLength>;
@@ -512,45 +513,18 @@ struct aes_gcm : aes_ecb<KeyLength> {
     // see
     // https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf (7.1)
     // also https://github.com/mko-x/SharedAES-GCM/blob/master/Sources/gcm.c#L275
-    static inline constexpr auto iv_size_bytes = 12;
+    static inline constexpr auto iv_size_bytes = 12; // 8 + 4
     static inline constexpr auto tag_size_bytes = base::block_size_bytes;
 
     std::array<uint8_t, base::block_size_bytes> counter{};
-    std::array<uint8_t, base::block_size_bytes> Ek, Ek0;
+    std::array<uint8_t, base::block_size_bytes> Ek0;
     std::array<uint8_t, base::block_size_bytes> h{};
-    //
-    uint64_t HL[16]; // precalculated lo-half HTable
-    uint64_t HH[16]; // precalculated hi-half HTable
 
     aes_gcm(auto &&k, const std::array<uint8_t, iv_size_bytes> &iv) : base{k} {
         memcpy(counter.data(), iv.data(), iv.size());
         inc_counter();
         Ek0 = base::encrypt(counter);
-
-        // make H
         h = base::encrypt(h);
-
-        auto vl = HL[8] = std::byteswap(*(uint64_t*)(h.data() + 0)); // 8 = 1000 corresponds to 1 in GF(2^128)
-        auto vh = HH[8] = std::byteswap(*(uint64_t*)(h.data() + 8));
-        HH[0] = 0; // 0 corresponds to 0 in GF(2^128)
-        HL[0] = 0;
-
-        for (int i = 4; i > 0; i >>= 1) {
-            auto T = (uint32_t)(vl & 1) * 0xe1000000U;
-            vl = (vh << 63) | (vl >> 1);
-            vh = (vh >> 1) ^ ((uint64_t)T << 32);
-            HL[i] = vl;
-            HH[i] = vh;
-        }
-        for (int i = 2; i < 16; i <<= 1) {
-            uint64_t *HiL = HL + i, *HiH = HH + i;
-            vh = *HiH;
-            vl = *HiL;
-            for (int j = 1; j < i; j++) {
-                HiH[j] = vh ^ HH[j];
-                HiL[j] = vl ^ HL[j];
-            }
-        }
     }
     void inc_counter() {
         // BUG: overflow is possible!
@@ -560,6 +534,7 @@ struct aes_gcm : aes_ecb<KeyLength> {
         }
     }
     auto encrypt(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
+        std::array<uint8_t, base::block_size_bytes> Ek;
         while (!input.empty()) {
             inc_counter();
             Ek = base::encrypt(counter);
@@ -571,20 +546,21 @@ struct aes_gcm : aes_ecb<KeyLength> {
             output = output.subspan(sz);
         }
     }
-    auto encrypt(auto &&data) noexcept {
-        std::string out(data.size() + tag_size_bytes, 0);
+    auto encrypt(auto &&data, auto &&auth_data) {
+        std::string out(data.size() + tag_size_bytes + 1, 0);
         encrypt(data, out);
-        //make_tag(auth_data, out);
+        auto auth_tag = make_tag(auth_data, out);
+        memcpy(out.data() + data.size(), auth_tag.data(), tag_size_bytes);
         return out;
     }
     auto decrypt(auto &&data, auto &&auth_data) {
         auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
         std::string out(data.size() - tag_size_bytes, 0);
         encrypt(ciphered_data, std::span<uint8_t>((uint8_t*)out.data(), out.size()));
-
-        make_tag(auth_data, ciphered_data);
+        out.resize(out.size() - 1);
+        auto check_tag = make_tag(auth_data, ciphered_data);
         auto auth_tag = data.subspan(data.size() - tag_size_bytes);
-        if (memcmp(Ek0.data(), auth_tag.data(), tag_size_bytes) != 0) {
+        if (memcmp(check_tag.data(), auth_tag.data(), tag_size_bytes) != 0) {
             throw std::runtime_error{"aes auth tag is incorrect"};
         }
         return out;
@@ -596,6 +572,7 @@ struct aes_gcm : aes_ecb<KeyLength> {
         for (int i = 0; i < base::block_size_bytes; ++i) {
             Ek0[i] ^= buf[i];
         }
+        return Ek0;
     }
     // S = GHASH (A || 0v || C || 0u || [len(A)]64 || [len(C)]64)
     auto ghash(bytes_concept auth_data, bytes_concept ciphered_data) {
@@ -620,49 +597,42 @@ struct aes_gcm : aes_ecb<KeyLength> {
         }
         if (ciphered_len || auth_len) {
             std::array<uint8_t, base::block_size_bytes> work_buf;
-
             *(uint64_t *)(work_buf.data() + 0) = std::byteswap(auth_len);
             *(uint64_t *)(work_buf.data() + 8) = std::byteswap(ciphered_len);
-
             for (int i = 0; i < base::block_size_bytes; ++i) {
                 buf[i] ^= work_buf[i];
             }
             gmult(buf);
         }
-        //*(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        //*(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
         return buf;
     }
-
-    using word64 = uint64_t;
     void gmult(auto &&buf) {
+        // for now
         *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
         *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
         *(uint64_t *)(h.data() + 0) = std::byteswap(*(uint64_t *)(h.data() + 0));
         *(uint64_t *)(h.data() + 8) = std::byteswap(*(uint64_t *)(h.data() + 8));
 
-        gmult2((word64 *)buf.data(), (word64 *)h.data());
+        gmult2((uint64_t *)buf.data(), (uint64_t *)h.data());
 
         *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
         *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
         *(uint64_t *)(h.data() + 0) = std::byteswap(*(uint64_t *)(h.data() + 0));
         *(uint64_t *)(h.data() + 8) = std::byteswap(*(uint64_t *)(h.data() + 8));
     }
-    void gmult2(word64 *X, word64 *Y) {
-        word64 Z[2] = {0, 0};
-        word64 V[2];
+    void gmult2(uint64_t *X, uint64_t *Y) {
+        uint64_t Z[2] = {0, 0};
+        uint64_t V[2];
         int i, j;
-        word64 v1;
         V[0] = X[0];
         V[1] = X[1];
-
         for (i = 0; i < 2; i++) {
-            word64 y = Y[i];
+            auto y = Y[i];
             for (j = 0; j < 64; j++) {
-                word64 mask = 0 - (y >> 63);
+                uint64_t mask = 0 - (y >> 63);
                 Z[0] ^= V[0] & mask;
                 Z[1] ^= V[1] & mask;
-                v1 = (0 - (V[1] & 1)) & 0xE100000000000000ULL;
+                auto v1 = (0 - (V[1] & 1)) & 0xE100000000000000ULL;
                 V[1] >>= 1;
                 V[1] |= V[0] << 63;
                 V[0] >>= 1;
@@ -672,43 +642,6 @@ struct aes_gcm : aes_ecb<KeyLength> {
         }
         X[0] = Z[0];
         X[1] = Z[1];
-    }
-
-    /*
-     *  This 16-entry table of pre-computed constants is used by the
-     *  GHASH multiplier to improve over a strictly table-free but
-     *  significantly slower 128x128 bit multiple within GF(2^128).
-     */
-    static constexpr uint64_t last4[] = {
-        0x0000, 0x1c20, 0x3840, 0x2460, 0x7080, 0x6ca0, 0x48c0, 0x54e0,
-        0xe100, 0xfd20, 0xd940, 0xc560, 0x9180, 0x8da0, 0xa9c0, 0xb5e0  };
-    void gmult1(auto &&x) {
-        auto lo = x[15] & 0x0f;
-        auto hi = x[15] >> 4;
-        auto zh = HH[lo];
-        auto zl = HL[lo];
-
-        for (int i = 15; i >= 0; i--) {
-            lo = x[i] & 0x0f;
-            hi = x[i] >> 4;
-
-            if (i != 15) {
-                auto rem = zl & 0x0f;
-                zl = (zh << 60) | (zl >> 4);
-                zh = (zh >> 4);
-                zh ^= last4[rem] << 48;
-                zh ^= HH[lo];
-                zl ^= HL[lo];
-            }
-            auto rem = zl & 0x0f;
-            zl = (zh << 60) | (zl >> 4);
-            zh = (zh >> 4);
-            zh ^= last4[rem] << 48;
-            zh ^= HH[hi];
-            zl ^= HL[hi];
-        }
-        *(uint64_t *)(x.data() + 0) = std::byteswap(zh);
-        *(uint64_t *)(x.data() + 8) = std::byteswap(zl);
     }
 };
 

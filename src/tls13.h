@@ -120,14 +120,14 @@ enum class ContentType : uint8 {
     heartbeat = 24, /* RFC 6520 */
 };
 
-struct client{};
-struct server{};
+struct client_tag{};
+struct server_tag{};
 struct empty {
     static constexpr auto content_type = ContentType::invalid;
 };
 
 template <typename T>
-constexpr bool is_client = std::same_as<T,client>;
+constexpr bool is_client = std::same_as<T,client_tag>;
 
 
 
@@ -216,7 +216,7 @@ struct signature_algorithms {
     length<2> length{sizeof(scheme)};
     SignatureScheme scheme = 0x0708;
 };
-enum class NamedGroup {
+enum class NamedGroup : uint16 {
     // Elliptic Curve Groups (ECDHE)
     // obsolete_RESERVED(0x0001..0x0016),
     secp256r1 = 0x0017,
@@ -461,11 +461,11 @@ struct TLSPlaintext {
     }
 };
 
-struct TLSInnerPlaintext {
-    // opaque content[TLSPlaintext.length];
+struct {
+    //opaque content[TLSPlaintext.length];
     ContentType type;
-    // uint8 zeros[length_of_padding];
-};
+    //uint8 zeros[length_of_padding];
+} TLSInnerPlaintext;
 
 struct TLSCiphertext {
     ContentType opaque_type = ContentType::application_data;     /* 23 */
@@ -523,6 +523,12 @@ struct ClientHello {
         return make_buffers1(vec, *this, extensions);
     }
 };
+
+
+
+
+
+
 
 
 
@@ -629,10 +635,6 @@ struct {
 
 struct {
 } PostHandshakeAuth;
-
-struct {
-    // Extension extensions<0..2^16-1>;
-} EncryptedExtensions;
 
 struct {
     // opaque certificate_request_context<0..2^8-1>;

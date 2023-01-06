@@ -19,15 +19,70 @@ struct tls {
 
     std::string url;
     boost::asio::io_context ctx;
-    std::array<uint8_t, 32> server_handshake_traffic_secret;
-    std::array<uint8_t, 32> client_handshake_traffic_secret;
     hash h;
+    bool auth_ok{};
+
+    template <auto Peer, auto Type>
+    struct peer_data {
+        using sequence_number = uint64_t;
+        array<hash::digest_size_bytes> secret;
+        sequence_number record_id{-1ULL};
+        array<aes::key_size_bytes> key;
+        array<aes::iv_size_bytes> iv;
+
+        auto bump_nonce() {
+            auto v = ++record_id;
+            v = std::byteswap(v);
+            auto iv = this->iv;
+            (*(uint64_t *)&iv[aes::iv_size_bytes - sizeof(sequence_number)]) ^= v;
+            return iv;
+        }
+        array<aes::iv_size_bytes> next_nonce() {
+            return bump_nonce();
+        }
+        void make_keys(auto &&input_secret, auto &&h) {
+            string s;
+            s += Peer;
+            s += " ";
+            s += Type;
+            s += " ";
+            s += "traffic";
+            secret = derive_secret<hash>(input_secret, s, h);
+            key = hkdf_expand_label<hash, aes::key_size_bytes>(secret, "key");
+            iv = hkdf_expand_label<hash, aes::iv_size_bytes>(secret, "iv");
+        }
+    };
+    template <auto Type>
+    struct server_peer_data : peer_data<"s"_s, Type> {
+        auto decrypt(auto &&ciphered_text, auto &&auth_data) {
+            aes a{this->key, this->next_nonce()};
+            return a.decrypt(ciphered_text, auth_data);
+        }
+    };
+    template <auto Type>
+    struct client_peer_data : peer_data<"c"_s, Type> {
+    };
+    template <auto Type>
+    struct peer_pair {
+        server_peer_data<Type> server;
+        client_peer_data<Type> client;
+
+        void make_keys(auto &&input_secret, auto &&h) {
+            server.make_keys(input_secret, h);
+            client.make_keys(input_secret, h);
+        }
+    };
+    peer_pair<"hs"_s> handshake;
+    peer_pair<"ap"_s> traffic;
 
     tls(auto &&url) : url{url} {
     }
 
     void run() {
         boost::asio::co_spawn(ctx, run1(), [](auto eptr) {
+            if (!eptr) {
+                return;
+            }
             try {
                 std::rethrow_exception(eptr);
             } catch (std::exception &e) {
@@ -53,7 +108,7 @@ struct tls {
         std::vector<boost::asio::const_buffer> buffers;
         buffers.reserve(20);
 
-        TLSPlaintext<client, Handshake<ClientHello<1>>> msg;
+        TLSPlaintext<client_tag, Handshake<ClientHello<1>>> msg;
         auto &client_hello = msg.fragment;
         get_random_secure_bytes(client_hello.message.legacy_session_id.data);
         get_random_secure_bytes(client_hello.message.random);
@@ -83,25 +138,16 @@ struct tls {
         co_await handle_server_message(s, peer);
         curve25519(priv, peer, shared);
         co_await handle_server_message(s, shared);
+        // actual traffic
         co_await handle_server_message(s, shared);
-        co_await handle_server_message(s, shared);
-        co_await handle_server_message(s, shared);
-
-
-        //ServerHello server_hello;
-        //co_await s.async_receive(boost::asio::buffer(&server_hello, sizeof(server_hello)), use_awaitable);
-
-        int a = 5;
-        a++;
-        co_return;
     }
-    boost::asio::awaitable<string> handle_server_message(auto &s, uint8_t key[32]) {
+    boost::asio::awaitable<void> handle_server_message(auto &s, uint8_t key[32]) {
         using namespace tls13;
         using boost::asio::use_awaitable;
 
         uint8_t buf[8192];
 
-        TLSPlaintext<server> smsg;
+        TLSPlaintext<server_tag> smsg;
         co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
         if ((int)smsg.length > sizeof(buf)) {
             throw std::logic_error{"unhandled length"};
@@ -109,6 +155,14 @@ struct tls {
         co_await s.async_read_some(boost::asio::buffer(&buf, smsg.length), use_awaitable);
 
         auto p = buf;
+
+        if (auth_ok) {
+            auto dec = traffic.server.decrypt(std::span<uint8_t>(buf, smsg.length),
+                                                std::span<uint8_t>((uint8_t *)&smsg, smsg.recv_size()));
+            if (dec.size() == 0) {
+                co_return;
+            }
+        }
 
         switch (smsg.type) {
         case tls13::ContentType::alert: {
@@ -136,39 +190,76 @@ struct tls {
             //auto client_early_traffic_secret = derive_secret(early_secret, "c e traffic"s, ""s);
             auto derived1 = derive_secret<hash>(early_secret, "derived"s); // handshake_secret?
             auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe); // pre master key?
-            client_handshake_traffic_secret = derive_secret<hash>(handshake_secret, "c hs traffic"s, h);
-            server_handshake_traffic_secret = derive_secret<hash>(handshake_secret, "s hs traffic"s, h);
+            handshake.make_keys(handshake_secret, h);
             auto derived2 = derive_secret<hash>(handshake_secret, "derived"s);
             auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
 
-            auto client_key = hkdf_expand_label<hash,aes::key_size_bytes>(client_handshake_traffic_secret, "key");
-            auto server_key = hkdf_expand_label<hash,aes::key_size_bytes>(server_handshake_traffic_secret, "key");
-
-            auto client_iv = hkdf_expand_label<hash,aes::iv_size_bytes>(client_handshake_traffic_secret, "iv");
-            auto server_iv = hkdf_expand_label<hash,aes::iv_size_bytes>(server_handshake_traffic_secret, "iv");
-
-            /*co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
-            if ((int)smsg.length > sizeof(buf)) {
-                throw std::logic_error{"unhandled length"};
+            auto dec = handshake.server.decrypt(std::span<uint8_t>(buf, smsg.length),std::span<uint8_t>((uint8_t*)&smsg, smsg.recv_size()));
+            if (dec.size() == 0) {
+                co_return;
             }
-            if (smsg.type != tls13::ContentType::application_data) {
+            h.update(dec);
+            auto &e = *(Handshake<extensions_type>*)dec.data();
+            switch (e.msg_type) {
+            case tls13::HandshakeType::encrypted_extensions:
+            {
+                uint16 t1 = *(uint16*)&e.message.extensions;
+                auto type = (ExtensionType)std::byteswap(t1);
+                int len = *(length<2>*)(((uint8_t*)&e.message.extensions) + sizeof(type));
+                auto p = (NamedGroup*)(((uint8_t*)&e.message.extensions) + sizeof(type) + sizeof(length<2>) + sizeof(length<2>));
+                auto grps = std::span<NamedGroup>(p, p + len / sizeof(NamedGroup));
+                switch (type) {
+                case ExtensionType::supported_groups:
+                    break;
+                default:
+                    break;
+                }
+            }
+                break;
+            default:
                 throw std::logic_error{"unimpl"};
             }
-            co_await s.async_read_some(boost::asio::buffer(&buf, smsg.length), use_awaitable);*/
 
-            aes_gcm<128> a{server_key,server_iv};
-            auto dec = a.decrypt(std::span<uint8_t>(buf, smsg.length),std::span<uint8_t>((uint8_t*)&smsg, smsg.recv_size()));
+            auto f = [&]() -> boost::asio::awaitable<void> {
+                co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
+                if ((int)smsg.length > sizeof(buf)) {
+                    throw std::logic_error{"unhandled length"};
+                }
+                if (smsg.type != tls13::ContentType::application_data) {
+                    throw std::logic_error{"unimpl"};
+                }
+                co_await s.async_read_some(boost::asio::buffer(&buf, smsg.length), use_awaitable);
 
-            //aes_cbc<128> cipher{server_handshake_traffic_secret};
-            //cipher.decrypt()
-            //
+                auto dec = handshake.server.decrypt(std::span<uint8_t>(buf, smsg.length),
+                                          std::span<uint8_t>((uint8_t *)&smsg, smsg.recv_size()));
+                if (dec.size() == 0) {
+                    co_return;
+                }
+                h.update(dec);
+                auto &e = *(Handshake<extensions_type> *)dec.data();
+                switch (e.msg_type) {
+                case tls13::HandshakeType::certificate:
+                {
+                }
+                    break;
+                case tls13::HandshakeType::finished:
+                    auth_ok = true;
+                    traffic.make_keys(master_secret, h);
+                    break;
+                default:
+                    break;
+                }
+            };
+            while (!auth_ok) {
+                co_await f();
+            }
+
             // 2. aes gcm or chacha20/poly or ...
-            throw std::logic_error{"unimpl"};
             //aes_gcm<256> aes{key};
             //uint8_t dec[8192];
             //aes.decrypt(buf, dec);
-            //int a = 5;
-            //a++;
+            int a = 5;
+            a++;
             break;
         }
         case tls13::ContentType::handshake: {
@@ -205,7 +296,6 @@ struct tls {
         default:
             throw std::logic_error{format("content is not implemented: {}", (string)NAMEOF_ENUM(smsg.type))};
         }
-        co_return ""s;
     }
 };
 
