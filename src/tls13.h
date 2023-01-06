@@ -445,20 +445,12 @@ int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
     return sz_obj + variable_field_size;
 }
 
-template <typename Peer, typename Fragment = empty>
 struct TLSPlaintext {
-    ContentType type = Fragment::content_type;
+    ContentType type;
     ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
     length<2> length;
-    std::conditional_t<is_client<Peer>, Fragment, content_type> fragment;
 
-    auto recv_size() {
-        return sizeof(*this) - sizeof(fragment);
-    }
-
-    int make_buffers(auto &&vec) {
-        return make_buffers1(vec, *this, fragment);
-    }
+    size_t size() const { return (int)length; }
 };
 
 struct {

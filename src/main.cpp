@@ -434,11 +434,11 @@ void test_tls() {
         }
     };
 
-    run("software-network.org");
+    /*run("software-network.org");
     run("example.com");
     run("google.com");
     run("github.com");
-    run("tls13.1d.pw");
+    run("tls13.1d.pw");*/
     run("localhost");
 }
 #endif
