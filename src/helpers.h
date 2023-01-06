@@ -43,6 +43,8 @@ concept bytes_concept1 = requires (T t) {
 struct bytes_concept {
     uint8_t *p;
     size_t sz;
+    bytes_concept(uint8_t *p, size_t sz) : p{p}, sz{sz} {
+    }
     bytes_concept(const std::string &s) {
         p = (uint8_t *)s.data();
         sz = s.size();
@@ -75,6 +77,13 @@ struct bytes_concept {
     }
     auto data() const { return p; }
     auto size() const { return sz; }
+    auto empty() const { return size() == 0; }
+    auto subspan(size_t start, size_t sz = -1) const {
+        if (sz == -1 || sz >= this->sz) {
+            return bytes_concept{p + start, this->sz - start};
+        }
+        return bytes_concept{p + start, this->sz - start - sz};
+    }
     auto &operator[](int i) { return data()[i]; }
     auto operator[](int i) const { return data()[i]; }
     void operator+=(int i) { p += i; }

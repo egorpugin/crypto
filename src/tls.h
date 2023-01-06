@@ -156,8 +156,8 @@ struct tls {
             }
             co_await s.async_read_some(boost::asio::buffer(&buf, smsg.length), use_awaitable);*/
 
-            aes_gcm<128> a{server_key,server_iv,std::span<uint8_t>((uint8_t*)&smsg, smsg.recv_size())};
-            auto dec = a.decrypt(std::span<uint8_t>(buf, smsg.length));
+            aes_gcm<128> a{server_key,server_iv};
+            auto dec = a.decrypt(std::span<uint8_t>(buf, smsg.length),std::span<uint8_t>((uint8_t*)&smsg, smsg.recv_size()));
 
             //aes_cbc<128> cipher{server_handshake_traffic_secret};
             //cipher.decrypt()

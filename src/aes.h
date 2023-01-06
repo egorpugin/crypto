@@ -516,19 +516,18 @@ struct aes_gcm : aes_ecb<KeyLength> {
     static inline constexpr auto tag_size_bytes = base::block_size_bytes;
 
     std::array<uint8_t, base::block_size_bytes> counter{};
-    std::array<uint8_t, base::block_size_bytes> Ek, buf{}, tag;
-    std::span<uint8_t> auth_data;
+    std::array<uint8_t, base::block_size_bytes> Ek, Ek0;
+    std::array<uint8_t, base::block_size_bytes> h{};
     //
     uint64_t HL[16]; // precalculated lo-half HTable
     uint64_t HH[16]; // precalculated hi-half HTable
 
-    aes_gcm(auto &&k, const std::array<uint8_t, iv_size_bytes> &iv, auto &&in_auth_data) : base{k}, auth_data{in_auth_data} {
+    aes_gcm(auto &&k, const std::array<uint8_t, iv_size_bytes> &iv) : base{k} {
         memcpy(counter.data(), iv.data(), iv.size());
         inc_counter();
-        tag = base::encrypt(counter);
+        Ek0 = base::encrypt(counter);
 
-        //
-        std::array<uint8_t, base::block_size_bytes> h{};
+        // make H
         h = base::encrypt(h);
 
         auto vl = HL[8] = std::byteswap(*(uint64_t*)(h.data() + 0)); // 8 = 1000 corresponds to 1 in GF(2^128)
@@ -552,76 +551,127 @@ struct aes_gcm : aes_ecb<KeyLength> {
                 HiL[j] = vl ^ HL[j];
             }
         }
-
-        while (!in_auth_data.empty()) {
-            auto sz = std::min(in_auth_data.size(), base::block_size_bytes);
-            for (int i = 0; i < sz; i++) {
-                buf[i] ^= in_auth_data[i];
-            }
-            gmult(buf, buf);
-            in_auth_data = in_auth_data.subspan(sz);
-        }
     }
     void inc_counter() {
+        // BUG: overflow is possible!
         for (int i = 16; i > 12; i--) {
             if (++counter[i - 1] != 0)
                 break;
         }
     }
-    template <bool Decrypt = false>
     auto encrypt(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
-        uint64_t len = input.size() * 8;
-        uint64_t add_len = auth_data.size() * 8;
         while (!input.empty()) {
             inc_counter();
             Ek = base::encrypt(counter);
             auto sz = std::min(input.size(), base::block_size_bytes);
             for (int i = 0; i < sz; ++i) {
-                if constexpr (!Decrypt) {
-                    output[i] = Ek[i] ^ input[i];
-                    buf[i] ^= output[i];
-                } else {
-                    buf[i] ^= input[i];
-                    output[i] = Ek[i] ^ input[i];
-                }
+                output[i] = Ek[i] ^ input[i];
             }
-            gmult(buf, buf);
             input = input.subspan(sz);
             output = output.subspan(sz);
-        }
-
-        // if taglen > 0
-        if (len || add_len) {
-            std::array<uint8_t, base::block_size_bytes> work_buf;
-
-            *(uint64_t *)(work_buf.data() + 0) = std::byteswap(add_len);
-            *(uint64_t *)(work_buf.data() + 8) = std::byteswap(len);
-
-            for (int i = 0; i < base::block_size_bytes; ++i) {
-                buf[i] ^= work_buf[i];
-            }
-            gmult(buf, buf);
-            for (int i = 0; i < base::block_size_bytes; ++i) {
-                tag[i] ^= buf[i];
-            }
         }
     }
     auto encrypt(auto &&data) noexcept {
         std::string out(data.size() + tag_size_bytes, 0);
         encrypt(data, out);
+        //make_tag(auth_data, out);
         return out;
     }
-    auto decrypt(auto &&data) {
-        auto auth_tag = data.subspan(data.size() - tag_size_bytes);
+    auto decrypt(auto &&data, auto &&auth_data) {
+        auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
         std::string out(data.size() - tag_size_bytes, 0);
-        encrypt<true>(data.subspan(0, data.size() - tag_size_bytes), std::span<uint8_t>((uint8_t*)out.data(), out.size()));
-        if (memcmp(tag.data(), auth_tag.data(), tag_size_bytes) != 0) {
+        encrypt(ciphered_data, std::span<uint8_t>((uint8_t*)out.data(), out.size()));
+
+        make_tag(auth_data, ciphered_data);
+        auto auth_tag = data.subspan(data.size() - tag_size_bytes);
+        if (memcmp(Ek0.data(), auth_tag.data(), tag_size_bytes) != 0) {
             throw std::runtime_error{"aes auth tag is incorrect"};
         }
         return out;
     }
 
-    auto ghash(auto &&auth_data, auto &&ciphered_data) {
+    // T = S ^ Ek0
+    auto make_tag(auto &&auth_data, auto &&ciphered_data) {
+        auto buf = ghash(auth_data, ciphered_data);
+        for (int i = 0; i < base::block_size_bytes; ++i) {
+            Ek0[i] ^= buf[i];
+        }
+    }
+    // S = GHASH (A || 0v || C || 0u || [len(A)]64 || [len(C)]64)
+    auto ghash(bytes_concept auth_data, bytes_concept ciphered_data) {
+        uint64_t ciphered_len = ciphered_data.size() * 8;
+        uint64_t auth_len = auth_data.size() * 8;
+        std::array<uint8_t, base::block_size_bytes> buf{};
+        while (!auth_data.empty()) {
+            auto sz = std::min(auth_data.size(), base::block_size_bytes);
+            for (int i = 0; i < sz; i++) {
+                buf[i] ^= auth_data[i];
+            }
+            gmult(buf);
+            auth_data = auth_data.subspan(sz);
+        }
+        while (!ciphered_data.empty()) {
+            auto sz = std::min(ciphered_data.size(), base::block_size_bytes);
+            for (int i = 0; i < sz; ++i) {
+                buf[i] ^= ciphered_data[i];
+            }
+            gmult(buf);
+            ciphered_data = ciphered_data.subspan(sz);
+        }
+        if (ciphered_len || auth_len) {
+            std::array<uint8_t, base::block_size_bytes> work_buf;
+
+            *(uint64_t *)(work_buf.data() + 0) = std::byteswap(auth_len);
+            *(uint64_t *)(work_buf.data() + 8) = std::byteswap(ciphered_len);
+
+            for (int i = 0; i < base::block_size_bytes; ++i) {
+                buf[i] ^= work_buf[i];
+            }
+            gmult(buf);
+        }
+        //*(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
+        //*(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
+        return buf;
+    }
+
+    using word64 = uint64_t;
+    void gmult(auto &&buf) {
+        *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
+        *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
+        *(uint64_t *)(h.data() + 0) = std::byteswap(*(uint64_t *)(h.data() + 0));
+        *(uint64_t *)(h.data() + 8) = std::byteswap(*(uint64_t *)(h.data() + 8));
+
+        gmult2((word64 *)buf.data(), (word64 *)h.data());
+
+        *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
+        *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
+        *(uint64_t *)(h.data() + 0) = std::byteswap(*(uint64_t *)(h.data() + 0));
+        *(uint64_t *)(h.data() + 8) = std::byteswap(*(uint64_t *)(h.data() + 8));
+    }
+    void gmult2(word64 *X, word64 *Y) {
+        word64 Z[2] = {0, 0};
+        word64 V[2];
+        int i, j;
+        word64 v1;
+        V[0] = X[0];
+        V[1] = X[1];
+
+        for (i = 0; i < 2; i++) {
+            word64 y = Y[i];
+            for (j = 0; j < 64; j++) {
+                word64 mask = 0 - (y >> 63);
+                Z[0] ^= V[0] & mask;
+                Z[1] ^= V[1] & mask;
+                v1 = (0 - (V[1] & 1)) & 0xE100000000000000ULL;
+                V[1] >>= 1;
+                V[1] |= V[0] << 63;
+                V[0] >>= 1;
+                V[0] ^= v1;
+                y <<= 1;
+            }
+        }
+        X[0] = Z[0];
+        X[1] = Z[1];
     }
 
     /*
@@ -632,8 +682,7 @@ struct aes_gcm : aes_ecb<KeyLength> {
     static constexpr uint64_t last4[] = {
         0x0000, 0x1c20, 0x3840, 0x2460, 0x7080, 0x6ca0, 0x48c0, 0x54e0,
         0xe100, 0xfd20, 0xd940, 0xc560, 0x9180, 0x8da0, 0xa9c0, 0xb5e0  };
-
-    void gmult(auto &&x, auto &&output) {
+    void gmult1(auto &&x) {
         auto lo = x[15] & 0x0f;
         auto hi = x[15] >> 4;
         auto zh = HH[lo];
@@ -658,8 +707,8 @@ struct aes_gcm : aes_ecb<KeyLength> {
             zh ^= HH[hi];
             zl ^= HL[hi];
         }
-        *(uint64_t *)(output.data() + 0) = std::byteswap(zh);
-        *(uint64_t *)(output.data() + 8) = std::byteswap(zl);
+        *(uint64_t *)(x.data() + 0) = std::byteswap(zh);
+        *(uint64_t *)(x.data() + 8) = std::byteswap(zl);
     }
 };
 
