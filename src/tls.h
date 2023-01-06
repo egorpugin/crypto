@@ -15,6 +15,7 @@ namespace crypto {
 
 struct tls {
     using hash = sha2<256>;
+    using aes = aes_gcm<128>;
 
     std::string url;
     boost::asio::io_context ctx;
@@ -140,35 +141,34 @@ struct tls {
             auto derived2 = derive_secret<hash>(handshake_secret, "derived"s);
             auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
 
-            constexpr auto aes_key_size = 16;
+            auto client_key = hkdf_expand_label<hash,aes::key_size_bytes>(client_handshake_traffic_secret, "key");
+            auto server_key = hkdf_expand_label<hash,aes::key_size_bytes>(server_handshake_traffic_secret, "key");
 
-            auto client_key = hkdf_expand_label<hash,aes_key_size>(client_handshake_traffic_secret, "key");
-            auto server_key = hkdf_expand_label<hash,aes_key_size>(server_handshake_traffic_secret, "key");
+            auto client_iv = hkdf_expand_label<hash,aes::iv_size_bytes>(client_handshake_traffic_secret, "iv");
+            auto server_iv = hkdf_expand_label<hash,aes::iv_size_bytes>(server_handshake_traffic_secret, "iv");
 
-            constexpr auto aes_iv_size = 12;
+            /*co_await s.async_read_some(boost::asio::buffer(&smsg, smsg.recv_size()), use_awaitable);
+            if ((int)smsg.length > sizeof(buf)) {
+                throw std::logic_error{"unhandled length"};
+            }
+            if (smsg.type != tls13::ContentType::application_data) {
+                throw std::logic_error{"unimpl"};
+            }
+            co_await s.async_read_some(boost::asio::buffer(&buf, smsg.length), use_awaitable);*/
 
-            auto client_iv = hkdf_expand_label<hash,aes_iv_size>(client_handshake_traffic_secret, "iv");
-            auto server_iv = hkdf_expand_label<hash,aes_iv_size>(server_handshake_traffic_secret, "iv");
+            aes_gcm<128> a{server_key,server_iv,std::span<uint8_t>((uint8_t*)&smsg, smsg.recv_size())};
+            auto dec = a.decrypt(std::span<uint8_t>(buf, smsg.length));
 
-            int len = smsg.length;
             //aes_cbc<128> cipher{server_handshake_traffic_secret};
             //cipher.decrypt()
-            // we need:
-            // 1. HKDF to get 'key' and 'iv' (initialization vector)
-            // https://github.com/randombit/botan/blob/master/src/lib/kdf/hkdf/hkdf.h#L113
-            // https://www.oryx-embedded.com/doc/tls13__key__material_8c_source.html
-            // key = HKDF-Expand-Label(Secret, "key", "", key_length)
-            // write_iv = HKDF-Expand-Label(Secret, "iv", "", iv_length)
-            // https://github.com/chromium/chromium/blob/b75d8e421243371fa43f83b72ff68aa37342b84a/crypto/hkdf.cc
-            // simple HKDF based on hmac_256 or hmac_384?
-            // https://www.rfc-editor.org/rfc/rfc5869 has tests
+            //
             // 2. aes gcm or chacha20/poly or ...
             throw std::logic_error{"unimpl"};
             //aes_gcm<256> aes{key};
             //uint8_t dec[8192];
             //aes.decrypt(buf, dec);
-            int a = 5;
-            a++;
+            //int a = 5;
+            //a++;
             break;
         }
         case tls13::ContentType::handshake: {

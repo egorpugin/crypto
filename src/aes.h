@@ -1,6 +1,11 @@
 #pragma once
 
+#include "helpers.h"
+
+#include <array>
 #include <cstring>
+#include <span>
+#include <stdexcept>
 
 namespace crypto {
 
@@ -234,12 +239,29 @@ struct aes_data {
             {11, 13, 9,  14}};
 };
 
+consteval auto aes_parameters(int keylen) {
+    struct params {
+        unsigned int key_size_bytes, Nk, Nr;
+    };
+    switch (keylen) {
+    case 128:
+        return params{128/8, 4, 10};
+    case 192:
+        return params{192/8, 6, 12};
+    case 256:
+        return params{256/8, 8, 14};
+        // default:
+        // static_assert(keylen == 256);
+    }
+}
+
 template <auto Parameters>
 struct aes_base : aes_data {
     static inline constexpr unsigned int Nk = Parameters.Nk;
     static inline constexpr unsigned int Nr = Parameters.Nr;
     static inline constexpr unsigned int Nb = 4;
-    static inline constexpr unsigned int block_size_bytes = 4 * Nb * sizeof(unsigned char);
+    static inline constexpr auto block_size_bytes = 4 * Nb * sizeof(unsigned char);
+    static inline constexpr auto key_size_bytes = Parameters.key_size_bytes;
 
     using state_type = unsigned char[4][Nb];
 
@@ -339,7 +361,7 @@ struct aes_base : aes_data {
         a[0] = c;
         a[1] = a[2] = a[3] = 0;
     }
-    void KeyExpansion(const unsigned char key[], unsigned char w[]) noexcept {
+    void KeyExpansion(auto &&key, unsigned char w[]) noexcept {
         unsigned char temp[4];
         unsigned char rcon[4];
 
@@ -431,31 +453,22 @@ struct aes_base : aes_data {
     }
 };
 
-consteval auto aes_parameters(int keylen) {
-    struct params {
-        unsigned int Nk, Nr;
-    };
-    switch (keylen) {
-    case 128:
-        return params{4,10};
-    case 192:
-        return params{6,12};
-    case 256:
-        return params{8,14};
-    //default:
-        //static_assert(keylen == 256);
-    }
-}
-
 template <auto KeyLength>
 struct aes_ecb : protected aes_base<aes_parameters(KeyLength)> {
     using base = aes_base<aes_parameters(KeyLength)>;
+    static inline constexpr auto key_size_bytes = base::key_size_bytes;
+
     unsigned char round_keys[4 * base::Nb * (base::Nr + 1)];
     explicit aes_ecb(auto &&k) {
         this->KeyExpansion(k, round_keys);
     }
     void encrypt(auto &&in, auto &&out) noexcept {
         this->EncryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
+    }
+    auto encrypt(auto &&in) noexcept {
+        std::array<uint8_t, base::block_size_bytes> out;
+        this->EncryptBlock((const unsigned char *)&in, (unsigned char *)out.data(), round_keys);
+        return out;
     }
     void decrypt(auto &&in, auto &&out) noexcept {
         this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
@@ -487,6 +500,166 @@ struct aes_cfb : aes_ecb<KeyLength> {
         this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
         this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
         iv = in;
+    }
+};
+
+// _ccm
+
+template <auto KeyLength>
+struct aes_gcm : aes_ecb<KeyLength> {
+    using base = aes_ecb<KeyLength>;
+    // when iv_size_bytes != there is non implemented special handling of Ek0
+    // see
+    // https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf (7.1)
+    // also https://github.com/mko-x/SharedAES-GCM/blob/master/Sources/gcm.c#L275
+    static inline constexpr auto iv_size_bytes = 12;
+    static inline constexpr auto tag_size_bytes = base::block_size_bytes;
+
+    std::array<uint8_t, base::block_size_bytes> counter{};
+    std::array<uint8_t, base::block_size_bytes> Ek, buf{}, tag;
+    std::span<uint8_t> auth_data;
+    //
+    uint64_t HL[16]; // precalculated lo-half HTable
+    uint64_t HH[16]; // precalculated hi-half HTable
+
+    aes_gcm(auto &&k, const std::array<uint8_t, iv_size_bytes> &iv, auto &&in_auth_data) : base{k}, auth_data{in_auth_data} {
+        memcpy(counter.data(), iv.data(), iv.size());
+        inc_counter();
+        tag = base::encrypt(counter);
+
+        //
+        std::array<uint8_t, base::block_size_bytes> h{};
+        h = base::encrypt(h);
+
+        auto vl = HL[8] = std::byteswap(*(uint64_t*)(h.data() + 0)); // 8 = 1000 corresponds to 1 in GF(2^128)
+        auto vh = HH[8] = std::byteswap(*(uint64_t*)(h.data() + 8));
+        HH[0] = 0; // 0 corresponds to 0 in GF(2^128)
+        HL[0] = 0;
+
+        for (int i = 4; i > 0; i >>= 1) {
+            auto T = (uint32_t)(vl & 1) * 0xe1000000U;
+            vl = (vh << 63) | (vl >> 1);
+            vh = (vh >> 1) ^ ((uint64_t)T << 32);
+            HL[i] = vl;
+            HH[i] = vh;
+        }
+        for (int i = 2; i < 16; i <<= 1) {
+            uint64_t *HiL = HL + i, *HiH = HH + i;
+            vh = *HiH;
+            vl = *HiL;
+            for (int j = 1; j < i; j++) {
+                HiH[j] = vh ^ HH[j];
+                HiL[j] = vl ^ HL[j];
+            }
+        }
+
+        while (!in_auth_data.empty()) {
+            auto sz = std::min(in_auth_data.size(), base::block_size_bytes);
+            for (int i = 0; i < sz; i++) {
+                buf[i] ^= in_auth_data[i];
+            }
+            gmult(buf, buf);
+            in_auth_data = in_auth_data.subspan(sz);
+        }
+    }
+    void inc_counter() {
+        for (int i = 16; i > 12; i--) {
+            if (++counter[i - 1] != 0)
+                break;
+        }
+    }
+    template <bool Decrypt = false>
+    auto encrypt(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
+        uint64_t len = input.size() * 8;
+        uint64_t add_len = auth_data.size() * 8;
+        while (!input.empty()) {
+            inc_counter();
+            Ek = base::encrypt(counter);
+            auto sz = std::min(input.size(), base::block_size_bytes);
+            for (int i = 0; i < sz; ++i) {
+                if constexpr (!Decrypt) {
+                    output[i] = Ek[i] ^ input[i];
+                    buf[i] ^= output[i];
+                } else {
+                    buf[i] ^= input[i];
+                    output[i] = Ek[i] ^ input[i];
+                }
+            }
+            gmult(buf, buf);
+            input = input.subspan(sz);
+            output = output.subspan(sz);
+        }
+
+        // if taglen > 0
+        if (len || add_len) {
+            std::array<uint8_t, base::block_size_bytes> work_buf;
+
+            *(uint64_t *)(work_buf.data() + 0) = std::byteswap(add_len);
+            *(uint64_t *)(work_buf.data() + 8) = std::byteswap(len);
+
+            for (int i = 0; i < base::block_size_bytes; ++i) {
+                buf[i] ^= work_buf[i];
+            }
+            gmult(buf, buf);
+            for (int i = 0; i < base::block_size_bytes; ++i) {
+                tag[i] ^= buf[i];
+            }
+        }
+    }
+    auto encrypt(auto &&data) noexcept {
+        std::string out(data.size() + tag_size_bytes, 0);
+        encrypt(data, out);
+        return out;
+    }
+    auto decrypt(auto &&data) {
+        auto auth_tag = data.subspan(data.size() - tag_size_bytes);
+        std::string out(data.size() - tag_size_bytes, 0);
+        encrypt<true>(data.subspan(0, data.size() - tag_size_bytes), std::span<uint8_t>((uint8_t*)out.data(), out.size()));
+        if (memcmp(tag.data(), auth_tag.data(), tag_size_bytes) != 0) {
+            throw std::runtime_error{"aes auth tag is incorrect"};
+        }
+        return out;
+    }
+
+    auto ghash(auto &&auth_data, auto &&ciphered_data) {
+    }
+
+    /*
+     *  This 16-entry table of pre-computed constants is used by the
+     *  GHASH multiplier to improve over a strictly table-free but
+     *  significantly slower 128x128 bit multiple within GF(2^128).
+     */
+    static constexpr uint64_t last4[] = {
+        0x0000, 0x1c20, 0x3840, 0x2460, 0x7080, 0x6ca0, 0x48c0, 0x54e0,
+        0xe100, 0xfd20, 0xd940, 0xc560, 0x9180, 0x8da0, 0xa9c0, 0xb5e0  };
+
+    void gmult(auto &&x, auto &&output) {
+        auto lo = x[15] & 0x0f;
+        auto hi = x[15] >> 4;
+        auto zh = HH[lo];
+        auto zl = HL[lo];
+
+        for (int i = 15; i >= 0; i--) {
+            lo = x[i] & 0x0f;
+            hi = x[i] >> 4;
+
+            if (i != 15) {
+                auto rem = zl & 0x0f;
+                zl = (zh << 60) | (zl >> 4);
+                zh = (zh >> 4);
+                zh ^= last4[rem] << 48;
+                zh ^= HH[lo];
+                zl ^= HL[lo];
+            }
+            auto rem = zl & 0x0f;
+            zl = (zh << 60) | (zl >> 4);
+            zh = (zh >> 4);
+            zh ^= last4[rem] << 48;
+            zh ^= HH[hi];
+            zl ^= HL[hi];
+        }
+        *(uint64_t *)(output.data() + 0) = std::byteswap(zh);
+        *(uint64_t *)(output.data() + 8) = std::byteswap(zl);
     }
 };
 
