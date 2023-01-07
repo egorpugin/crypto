@@ -45,6 +45,7 @@ struct tls {
 
             auto &h = header();
             co_await s.async_read_some(boost::asio::buffer(&h, sizeof(header_type)), use_awaitable);
+            std::cout << h.size() << "\n";
             data.resize(sizeof(header_type) + h.size());
             co_await s.async_read_some(boost::asio::buffer((uint8_t*)&h + sizeof(header_type), h.size()), use_awaitable);
 
@@ -155,13 +156,8 @@ struct tls {
 
     void run() {
         boost::asio::co_spawn(ctx, run1(), [](auto eptr) {
-            if (!eptr) {
-                return;
-            }
-            try {
+            if (eptr) {
                 std::rethrow_exception(eptr);
-            } catch (std::exception &e) {
-                std::cerr << e.what() << "\n";
             }
         });
         ctx.run();
@@ -179,6 +175,11 @@ struct tls {
         }
         boost::asio::ip::tcp::socket s{ex};
         co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
+
+        auto remote_ep = s.remote_endpoint();
+        auto remote_ad = remote_ep.address();
+        std::string ss = remote_ad.to_string();
+        std::cout << ss << "\n";
 
         std::vector<boost::asio::const_buffer> buffers;
         buffers.reserve(20);
@@ -277,7 +278,7 @@ struct tls {
             }*/
         } break;
         default:
-            throw std::logic_error{"unimpl"};
+            throw std::logic_error{"unimpl first handshake"};
         }
 
         auto f = [&]() -> boost::asio::awaitable<void> {
@@ -288,6 +289,16 @@ struct tls {
             }
             auto &e = *(Handshake<extensions_type> *)dec.data();
             switch (e.msg_type) {
+            case tls13::HandshakeType::server_hello: {
+                auto &h = buf.content<Handshake<ServerHello>>();
+                auto &h2 = buf.content<ServerHello>();
+                int a = 5;
+                a++;
+                break;
+            }
+            case tls13::HandshakeType::encrypted_extensions: {
+                break;
+            }
             case tls13::HandshakeType::certificate: {
                 break;
             }
