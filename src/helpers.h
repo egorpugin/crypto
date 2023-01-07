@@ -173,7 +173,7 @@ struct bigendian_unsigned {
     using internal_type = std::conditional_t<
         Bytes == 1, uint8_t,
         std::conditional_t<Bytes == 2, uint16_t,
-                           std::conditional_t<Bytes == 4, uint32_t, std::conditional_t<Bytes == 8, uint64_t, bad_type>>>>;
+                           std::conditional_t<Bytes == 4, uint32_t, std::conditional_t<Bytes == 8, uint64_t, bool>>>>;
 
     uint8_t data[Bytes]{};
 
@@ -193,7 +193,10 @@ struct bigendian_unsigned {
         *(internal_type *)data = std::byteswap(v);
     }
     operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
-    operator auto() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
+    operator auto() const requires !std::same_as<internal_type, bad_type> {
+        auto d = *(internal_type*)data;
+        return std::byteswap(d);
+    }
 };
 template <auto Bytes>
 auto operator+(auto &&v, const bigendian_unsigned<Bytes> &l) {
@@ -243,6 +246,9 @@ struct be_stream {
         be_stream s{p,len};
         step(len);
         return s;
+    }
+    void skip(auto len) {
+        step(len);
     }
     void step(auto len) {
         p += len;

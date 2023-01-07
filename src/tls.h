@@ -306,6 +306,13 @@ struct tls {
                 memcpy(peer, ksh.key, 32);
                 break;
             }
+            case ExtensionType::supported_versions: {
+                tls_version ver = s.read();
+                if (ver != tls13::tls_version::tls13) {
+                    throw std::runtime_error{"bad tls version"s};
+                }
+                break;
+            }
             default:
                 s.step(len2);
                 std::cout << "unhandled ext: " << (string)NAMEOF_ENUM(type) << "\n";
@@ -328,34 +335,57 @@ struct tls {
                 break;
             }
             case parameters::handshake_type::certificate: {
-                //read_extensions(s);
+                auto s2 = s.substream((uint32_t)h.length);
+                uint8_t certificate_request_context = s2.read();
+                s2.step(certificate_request_context);
+                length<3> len = s2.read();
+                while (s2) {
+                    // read one cert
+                    length<3> len = s2.read();
+                    // If the corresponding certificate type extension
+                    // ("server_certificate_type" or "client_certificate_type") was not negotiated in EncryptedExtensions,
+                    // or the X .509 certificate type was negotiated,
+                    // then each CertificateEntry contains a DER - encoded X .509 certificate.
+                    CertificateType type = tls13::CertificateType::X509; //s2.read();
+                    switch (type) {
+                    case tls13::CertificateType::X509: {
+                        uint32_t len2 = len;
+                        s2.step(len2);
+                        read_extensions(s2);
+                        break;
+                    }
+                    default:
+                        throw std::logic_error{
+                            format("cert type is not implemented: {}", (string)NAMEOF_ENUM(type))};
+                    }
+                }
                 break;
             }
             case parameters::handshake_type::certificate_verify: {
+                parameters::signature_scheme scheme = s.read();
+                uint16_t len = s.read();
+                s.skip(len);
                 break;
             }
             case parameters::handshake_type::finished: {
+                // verify_data
+                s.skip(hash::digest_size_bytes);
                 auth_ok = true;
                 traffic = handshake.make_master_keys(this->h);
                 break;
             }
             default:
-                throw std::logic_error{format("msg_type is not implemented: {}", (string)NAMEOF_ENUM(h.msg_type))};
+                throw std::logic_error{format("msg_type is not implemented: {}", std::to_string((int)h.msg_type))};
             }
         }
     }
     boost::asio::awaitable<void> handle_handshake_application_data(auto &s) {
         using namespace tls13;
 
-        auto key2 = std::span<uint8_t>{shared, 32}; // ecdhe?
-        auto ecdhe = key2;
         std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
-        auto salt0 = zero_bytes;
-        auto psk = salt0; // zero psk
-
-        auto early_secret = hkdf_extract<hash>(salt0, psk);
-        auto derived1 = derive_secret<hash>(early_secret, "derived"s); // handshake_secret?
-        auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe);   // pre master key?
+        auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
+        auto derived1 = derive_secret<hash>(early_secret, "derived"s);
+        auto handshake_secret = hkdf_extract<hash>(derived1, shared);
         handshake.make_keys(handshake_secret, h);
 
         auto dec = decrypt_handshake();

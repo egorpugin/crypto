@@ -407,6 +407,12 @@ struct ClientHello {
     }
 };
 
+enum class CertificateType : uint8_t {
+    X509 = 0,
+    OpenPGP_RESERVED = 1,
+    RawPublicKey = 2,
+};
+
 #pragma pack(pop)
 
 } // namespace crypto::tls::tls13
