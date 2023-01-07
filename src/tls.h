@@ -325,8 +325,7 @@ struct tls {
         co_await buf.receive(s);
         auto dec = decrypt(traffic);
 
-        int a = 5;
-        a++;
+        std::cout << dec;
     }
     void read_extensions(auto &&in) {
         using namespace tls13;
@@ -370,9 +369,7 @@ struct tls {
             Handshake &h = s.read();
             {
                 h_premessage = this->h;
-                int sz = (int)h.length;
-                //sz += sizeof(h);
-                this->h.update((uint8_t *)&h, sz);
+                this->h.update((uint8_t *)&h, (uint32_t)h.length + sizeof(h));
             }
             switch (h.msg_type) {
             case parameters::handshake_type::server_hello: {

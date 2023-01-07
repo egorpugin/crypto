@@ -198,8 +198,8 @@ struct bigendian_unsigned {
     void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
     }
-    inline operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
-    inline operator auto() const requires !std::same_as<internal_type, bad_type> {
+    operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
+    operator auto() const requires !std::same_as<internal_type, bad_type> {
         auto d = *(internal_type*)data;
         return std::byteswap(d);
     }
