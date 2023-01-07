@@ -90,6 +90,12 @@ struct bytes_concept {
     auto &operator[](int i) { return data()[i]; }
     auto operator[](int i) const { return data()[i]; }
     void operator+=(int i) { p += i; }
+    bool operator==(const bytes_concept &rhs) const {
+        if (sz != rhs.sz) {
+            return false;
+        }
+        return memcmp(data(), rhs.data(), sz) == 0;
+    }
 };
 
 template <typename... Ts>
@@ -192,8 +198,8 @@ struct bigendian_unsigned {
     void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
     }
-    operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
-    operator auto() const requires !std::same_as<internal_type, bad_type> {
+    inline operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
+    inline operator auto() const requires !std::same_as<internal_type, bad_type> {
         auto d = *(internal_type*)data;
         return std::byteswap(d);
     }
@@ -253,6 +259,11 @@ struct be_stream {
     void step(auto len) {
         p += len;
         this->len -= len;
+    }
+    bytes_concept span(auto len) {
+        std::span<uint8_t> s((uint8_t*)p, len);
+        step(len);
+        return s;
     }
     explicit operator bool() { return len != 0; }
     //operator uint16_t() { return read(); }

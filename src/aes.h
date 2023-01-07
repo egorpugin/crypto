@@ -541,7 +541,7 @@ struct aes_gcm {
                 break;
         }
     }
-    auto encrypt(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
+    auto encrypt1(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
         array<base::block_size_bytes> Ek;
         while (!input.empty()) {
             inc_counter();
@@ -555,17 +555,17 @@ struct aes_gcm {
         }
     }
     auto encrypt(auto &&data, auto &&auth_data) {
-        std::string out(data.size() + tag_size_bytes + 1, 0);
-        encrypt(data, out);
+        std::string out(data.size(), 0);
+        encrypt1(std::span<uint8_t>((uint8_t*)data.data(), data.size()), std::span<uint8_t>((uint8_t*)out.data(), out.size()));
         auto auth_tag = make_tag(auth_data, out);
+        out.resize(out.size() + tag_size_bytes);
         memcpy(out.data() + data.size(), auth_tag.data(), tag_size_bytes);
         return out;
     }
     auto decrypt(auto &&data, auto &&auth_data) {
         auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
         std::string out(data.size() - tag_size_bytes, 0);
-        encrypt(ciphered_data, std::span<uint8_t>((uint8_t*)out.data(), out.size()));
-        out.resize(out.size() - 1);
+        encrypt1(ciphered_data, std::span<uint8_t>((uint8_t*)out.data(), out.size()));
         auto check_tag = make_tag(auth_data, ciphered_data);
         auto auth_tag = data.subspan(data.size() - tag_size_bytes);
         if (memcmp(check_tag.data(), auth_tag.data(), tag_size_bytes) != 0) {
