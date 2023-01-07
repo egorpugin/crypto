@@ -103,7 +103,11 @@ struct CipherSuite {
 
     uint16 suite;
 
-    auto &operator=(uint16_t v) {
+    constexpr CipherSuite() = default;
+    constexpr CipherSuite(uint16_t v) {
+        suite = std::byteswap(v);
+    }
+    constexpr auto &operator=(uint16_t v) {
         suite = std::byteswap(v);
         return *this;
     }
@@ -214,7 +218,10 @@ struct signature_algorithms {
 */
 
     length<2> length{sizeof(scheme)};
-    SignatureScheme scheme = 0x0708;
+    SignatureScheme scheme = 0x0302; // ecdsa_sha1
+    //SignatureScheme scheme = 0x0708; // ed25519
+    //SignatureScheme scheme = 0x0304; // google works (passes more)
+    //SignatureScheme scheme = 0x0104; // rsa_pkcs1_sha256
 };
 enum class NamedGroup : uint16 {
     // Elliptic Curve Groups (ECDHE)

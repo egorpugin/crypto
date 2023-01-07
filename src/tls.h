@@ -14,8 +14,17 @@
 namespace crypto {
 
 struct tls {
-    using hash = sha2<256>;
-    using aes = aes_gcm<128>;
+    template <typename Cipher, typename Hash, auto Suite>
+    struct suite_ {
+        using cipher_type = Cipher;
+        using hash_type = Hash;
+        static constexpr tls13::CipherSuite suite() { return Suite; }
+    };
+
+    //using suite_type = suite_<aes_gcm<128>,sha2<256>,tls13::CipherSuite::TLS_AES_128_GCM_SHA256>;
+    using suite_type = suite_<aes_gcm<256>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384>;
+    using cipher = suite_type::cipher_type;
+    using hash = suite_type::hash_type;
 
     struct status_ {
         struct empty{};
@@ -102,17 +111,17 @@ struct tls {
         using sequence_number = uint64_t;
         array<hash::digest_size_bytes> secret;
         sequence_number record_id{-1ULL};
-        array<aes::key_size_bytes> key;
-        array<aes::iv_size_bytes> iv;
+        array<cipher::key_size_bytes> key;
+        array<cipher::iv_size_bytes> iv;
 
         auto bump_nonce() {
             auto v = ++record_id;
             v = std::byteswap(v);
             auto iv = this->iv;
-            (*(uint64_t *)&iv[aes::iv_size_bytes - sizeof(sequence_number)]) ^= v;
+            (*(uint64_t *)&iv[cipher::iv_size_bytes - sizeof(sequence_number)]) ^= v;
             return iv;
         }
-        array<aes::iv_size_bytes> next_nonce() {
+        array<cipher::iv_size_bytes> next_nonce() {
             return bump_nonce();
         }
         void make_keys(auto &&input_secret, auto &&h) {
@@ -123,14 +132,14 @@ struct tls {
             s += " ";
             s += "traffic";
             secret = derive_secret<hash>(input_secret, s, h);
-            key = hkdf_expand_label<hash, aes::key_size_bytes>(secret, "key");
-            iv = hkdf_expand_label<hash, aes::iv_size_bytes>(secret, "iv");
+            key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
         }
     };
     template <auto Type>
     struct server_peer_data : peer_data<"s"_s, Type> {
         auto decrypt(auto &&ciphered_text, auto &&auth_data) {
-            aes a{this->key, this->next_nonce()};
+            cipher a{this->key, this->next_nonce()};
             return a.decrypt(ciphered_text, auth_data);
         }
     };
@@ -153,7 +162,6 @@ struct tls {
     tls(auto &&url) : url{url} {
         get_random_secure_bytes(priv);
     }
-
     void run() {
         boost::asio::co_spawn(ctx, run1(), [](auto eptr) {
             if (eptr) {
@@ -187,7 +195,8 @@ struct tls {
         Handshake<ClientHello<1>> client_hello;
         get_random_secure_bytes(client_hello.message.legacy_session_id.data);
         get_random_secure_bytes(client_hello.message.random);
-        client_hello.message.cipher_suites_[0] = CipherSuite::TLS_AES_128_GCM_SHA256;
+        client_hello.message.cipher_suites_[0] = suite_type::suite();
+        //client_hello.message.cipher_suites_[0] = CipherSuite::TLS_CHACHA20_POLY1305_SHA256;
 
         Extension<server_name> sn;
         sn.e.server_name_ = url;
@@ -244,7 +253,7 @@ struct tls {
 
         auto key2 = std::span<uint8_t>{shared, 32}; // ecdhe?
         auto ecdhe = key2;
-        std::array<uint8_t, 32> zero_bytes{};
+        std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
         auto salt0 = zero_bytes;
         auto psk = salt0; // zero psk
 

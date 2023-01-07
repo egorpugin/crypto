@@ -514,7 +514,7 @@ struct aes_gcm : aes_ecb<KeyLength> {
     // https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf (7.1)
     // also https://github.com/mko-x/SharedAES-GCM/blob/master/Sources/gcm.c#L275
     static inline constexpr auto iv_size_bytes = 12; // 8 + 4
-    static inline constexpr auto tag_size_bytes = base::block_size_bytes;
+    static inline constexpr auto tag_size_bytes = 16;
 
     std::array<uint8_t, base::block_size_bytes> counter{};
     std::array<uint8_t, base::block_size_bytes> Ek0;
