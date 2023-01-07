@@ -454,11 +454,11 @@ struct aes_base : aes_data {
 };
 
 template <auto KeyLength>
-struct aes_ecb : protected aes_base<aes_parameters(KeyLength)> {
+struct aes_ecb : aes_base<aes_parameters(KeyLength)> {
     using base = aes_base<aes_parameters(KeyLength)>;
-    static inline constexpr auto key_size_bytes = base::key_size_bytes;
 
     unsigned char round_keys[4 * base::Nb * (base::Nr + 1)];
+    aes_ecb() = default;
     explicit aes_ecb(auto &&k) {
         this->KeyExpansion(k, round_keys);
     }
@@ -466,7 +466,7 @@ struct aes_ecb : protected aes_base<aes_parameters(KeyLength)> {
         this->EncryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
     }
     auto encrypt(auto &&in) noexcept {
-        std::array<uint8_t, base::block_size_bytes> out;
+        array<base::block_size_bytes> out;
         this->EncryptBlock((const unsigned char *)&in, (unsigned char *)out.data(), round_keys);
         return out;
     }
@@ -507,24 +507,32 @@ struct aes_cfb : aes_ecb<KeyLength> {
 
 // mostly tls 1.3 variant with additional length etc.
 template <auto KeyLength>
-struct aes_gcm : aes_ecb<KeyLength> {
+struct aes_gcm {
     using base = aes_ecb<KeyLength>;
+
     // when iv_size_bytes != there is non implemented special handling of Ek0
     // see
     // https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf (7.1)
     // also https://github.com/mko-x/SharedAES-GCM/blob/master/Sources/gcm.c#L275
     static inline constexpr auto iv_size_bytes = 12; // 8 + 4
     static inline constexpr auto tag_size_bytes = 16;
+    static inline constexpr auto key_size_bytes = base::key_size_bytes;
 
-    std::array<uint8_t, base::block_size_bytes> counter{};
-    std::array<uint8_t, base::block_size_bytes> Ek0;
-    std::array<uint8_t, base::block_size_bytes> h{};
+    aes_ecb<KeyLength> aes;
+    array<base::block_size_bytes> counter;
+    array<base::block_size_bytes> Ek0;
+    array<base::block_size_bytes> h0{}, h;
 
-    aes_gcm(auto &&k, const std::array<uint8_t, iv_size_bytes> &iv) : base{k} {
+    aes_gcm() = default;
+    aes_gcm(auto &&k) : aes{k} {
+        h0 = aes.encrypt(h0);
+    }
+    void set_iv(auto &&iv) {
+        counter = array<base::block_size_bytes>{};
         memcpy(counter.data(), iv.data(), iv.size());
         inc_counter();
-        Ek0 = base::encrypt(counter);
-        h = base::encrypt(h);
+        Ek0 = aes.encrypt(counter);
+        h = h0;
     }
     void inc_counter() {
         // BUG: overflow is possible!
@@ -534,10 +542,10 @@ struct aes_gcm : aes_ecb<KeyLength> {
         }
     }
     auto encrypt(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
-        std::array<uint8_t, base::block_size_bytes> Ek;
+        array<base::block_size_bytes> Ek;
         while (!input.empty()) {
             inc_counter();
-            Ek = base::encrypt(counter);
+            Ek = aes.encrypt(counter);
             auto sz = std::min(input.size(), base::block_size_bytes);
             for (int i = 0; i < sz; ++i) {
                 output[i] = Ek[i] ^ input[i];
@@ -578,7 +586,7 @@ struct aes_gcm : aes_ecb<KeyLength> {
     auto ghash(bytes_concept auth_data, bytes_concept ciphered_data) {
         uint64_t ciphered_len = ciphered_data.size() * 8;
         uint64_t auth_len = auth_data.size() * 8;
-        std::array<uint8_t, base::block_size_bytes> buf{};
+        array<base::block_size_bytes> buf{};
         while (!auth_data.empty()) {
             auto sz = std::min(auth_data.size(), base::block_size_bytes);
             for (int i = 0; i < sz; i++) {
@@ -596,7 +604,7 @@ struct aes_gcm : aes_ecb<KeyLength> {
             ciphered_data = ciphered_data.subspan(sz);
         }
         if (ciphered_len || auth_len) {
-            std::array<uint8_t, base::block_size_bytes> work_buf;
+            array<base::block_size_bytes> work_buf;
             *(uint64_t *)(work_buf.data() + 0) = std::byteswap(auth_len);
             *(uint64_t *)(work_buf.data() + 8) = std::byteswap(ciphered_len);
             for (int i = 0; i < base::block_size_bytes; ++i) {

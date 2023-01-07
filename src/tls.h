@@ -113,6 +113,7 @@ struct tls {
         sequence_number record_id{-1ULL};
         array<cipher::key_size_bytes> key;
         array<cipher::iv_size_bytes> iv;
+        cipher c;
 
         auto bump_nonce() {
             auto v = ++record_id;
@@ -134,13 +135,14 @@ struct tls {
             secret = derive_secret<hash>(input_secret, s, h);
             key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
             iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
+            c = cipher{key};
         }
     };
     template <auto Type>
     struct server_peer_data : peer_data<"s"_s, Type> {
         auto decrypt(auto &&ciphered_text, auto &&auth_data) {
-            cipher a{this->key, this->next_nonce()};
-            return a.decrypt(ciphered_text, auth_data);
+            this->c.set_iv(this->next_nonce());
+            return this->c.decrypt(ciphered_text, auth_data);
         }
     };
     template <auto Type>
@@ -203,6 +205,7 @@ struct tls {
         client_hello.message.extensions.add(sn);
         client_hello.message.extensions.add<supported_versions>();
         client_hello.message.extensions.add<signature_algorithms>();
+        //client_hello.message.extensions.add<signature_algorithms_cert>();
         client_hello.message.extensions.add<supported_groups>();
         auto &k = client_hello.message.extensions.add<key_share>();
         curve25519(priv, k.e.key);

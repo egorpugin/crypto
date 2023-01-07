@@ -217,11 +217,28 @@ struct signature_algorithms {
     ed448 = 0x0808,
 */
 
-    length<2> length{sizeof(scheme)};
-    SignatureScheme scheme = 0x0302; // ecdsa_sha1
+    length<2> length{5 * sizeof(SignatureScheme)};
+    SignatureScheme scheme[5] = {0x0708, 0x0302, 0x0304, 0x0104, 0x0305};
+    //SignatureScheme scheme = 0x0302; // ecdsa_sha1
     //SignatureScheme scheme = 0x0708; // ed25519
     //SignatureScheme scheme = 0x0304; // google works (passes more)
     //SignatureScheme scheme = 0x0104; // rsa_pkcs1_sha256
+};
+struct signature_algorithms_cert {
+    static constexpr extension_type_type extension_type = 50;
+    using SignatureScheme = uint16;
+/*
+    ecdsa_secp256r1_sha256 = 0x0403,
+    ecdsa_secp384r1_sha384 = 0x0503,
+    ecdsa_secp521r1_sha512 = 0x0603,
+
+    // EdDSA algorithms
+    ed25519 = 0x0807,
+    ed448 = 0x0808,
+*/
+
+    length<2> length{4 * sizeof(SignatureScheme)};
+    SignatureScheme scheme[4] = {0x0708,0x0302,0x0304,0x0104};
 };
 enum class NamedGroup : uint16 {
     // Elliptic Curve Groups (ECDHE)
@@ -316,6 +333,7 @@ using extension_list = type_list<
     padding,
     supported_versions,
     signature_algorithms,
+    signature_algorithms_cert,
     supported_groups,
     key_share,
     psk_key_exchange_modes

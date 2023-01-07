@@ -10,6 +10,7 @@
 #include "random.h"
 #include "ec.h"
 #include "hmac.h"
+#include "chacha20.h"
 
 #include <array>
 #include <iostream>
@@ -419,6 +420,24 @@ void test_hmac() {
     );
 }
 
+void test_chacha20() {
+    using namespace crypto;
+
+    uint8_t key[32]{};
+    uint32_t counter{1};
+    uint8_t nonce[12]{};
+
+    using byte = uint8_t;
+
+    byte plaintext_1[127]{};
+    byte out1[127]{};
+    byte out2[127]{};
+
+    chacha20(key, counter, nonce, plaintext_1, out1, 127);
+    chacha20(key, counter, nonce, out1, out2, 127);
+    cmp_l(plaintext_1,out2);
+}
+
 #ifdef _MSC_VER
 void test_tls() {
     using namespace crypto;
@@ -428,23 +447,23 @@ void test_tls() {
         try {
             tls t{url};
             t.run();
-            std::cout << "ok" << "\n";
+            std::cout << "ok" << "\n\n";
         } catch (std::exception &e) {
-            std::cerr << e.what() << "\n";
+            std::cerr << e.what() << "\n\n";
         }
     };
 
-    run("software-network.org");
-    run("letsencrypt.org");
-    run("example.com");
-    run("google.com");
-    run("gosuslugi.ru");
-    run("github.com");
-    run("gmail.com");
-    run("youtube.com");
-    run("twitch.com");
-    run("tls13.akamai.io");
-    run("tls13.1d.pw");
+    //run("software-network.org");
+    //run("letsencrypt.org");
+    //run("example.com");
+    //run("google.com");
+    //run("gosuslugi.ru");
+    //run("github.com");
+    //run("gmail.com");
+    //run("youtube.com");
+    //run("twitch.com");
+    //run("tls13.akamai.io");
+    //run("tls13.1d.pw");
     run("localhost");
 }
 #endif
@@ -456,5 +475,6 @@ int main() {
     //test_sm4();
     //test_25519();
     //test_hmac();
+    //test_chacha20();
     test_tls();
 }
