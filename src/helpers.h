@@ -166,4 +166,68 @@ struct static_string {
 template<static_string s>
 constexpr auto operator""_s() { return s; }
 
+template <auto Bytes>
+struct bigendian_unsigned {
+    struct bad_type {};
+    using max_type = uint64_t;
+    using internal_type = std::conditional_t<
+        Bytes == 1, uint8_t,
+        std::conditional_t<Bytes == 2, uint16_t,
+                           std::conditional_t<Bytes == 4, uint32_t, std::conditional_t<Bytes == 8, uint64_t, bad_type>>>>;
+
+    uint8_t data[Bytes]{};
+
+    bigendian_unsigned() = default;
+    bigendian_unsigned(int v) {
+        *this = v;
+    }
+    template <typename E>
+    bigendian_unsigned(E v) requires std::is_enum_v<E> {
+        *this = std::to_underlying(v);
+    }
+
+    void operator=(uint32_t v) requires (Bytes == 3) {
+        *(uint32_t*)data |= std::byteswap(v << 8);
+    }
+    void operator=(internal_type v) requires (Bytes != 3) {
+        *(internal_type *)data = std::byteswap(v);
+    }
+    operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
+    operator auto() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
+};
+template <auto Bytes>
+auto operator+(auto &&v, const bigendian_unsigned<Bytes> &l) {
+    return v + (typename bigendian_unsigned<Bytes>::internal_type)l;
+}
+template <auto Bytes>
+auto operator+(const bigendian_unsigned<Bytes> &l, auto &&v) {
+    return v + (typename bigendian_unsigned<Bytes>::internal_type)l;
+}
+
+struct be_stream {
+    struct reader {
+        be_stream &s;
+        template <typename E>
+        operator E() requires(std::is_enum_v<E>) {
+            auto v = *(std::underlying_type_t<E> *)s.p;
+            s.p += sizeof(v);
+            v = std::byteswap(v);
+            return (E)v;
+        }
+        operator uint16_t() {
+            auto v = *(uint16_t *)s.p;
+            s.p += sizeof(v);
+            v = std::byteswap(v);
+            return v;
+        }
+    };
+
+    uint8_t *p;
+    auto read() {
+        return reader{*this};
+    }
+    //operator uint16_t() { return read(); }
+    //operator auto() { return read(); }
+};
+
 } // namespace crypto

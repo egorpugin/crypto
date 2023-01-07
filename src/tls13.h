@@ -13,6 +13,10 @@
 #include <type_traits>
 #include <variant>
 
+namespace crypto::parameters {
+#include "tls_parameters.h"
+}
+
 namespace crypto::tls13 {
 
 #pragma pack(push, 1)
@@ -20,39 +24,12 @@ namespace crypto::tls13 {
 using uint8 = uint8_t;
 using uint16 = uint16_t;
 using uint32 = uint32_t;
+using uint64 = uint64_t;
 
 template <auto Bytes>
-struct length {
-    using bad_type = uint64_t;
-    using internal_type = std::conditional_t<Bytes == 1, uint8,
-                           std::conditional_t<Bytes == 2, uint16,
-        std::conditional_t<Bytes == 4, uint32, bad_type>>
-    >;
+using length = bigendian_unsigned<Bytes>;
 
-    uint8 data[Bytes]{};
-
-    length() = default;
-    length(int v) {
-        *this = v;
-    }
-
-    void operator=(uint32_t v) requires (Bytes == 3) {
-        *(uint32_t*)data |= std::byteswap(v << 8);
-    }
-    void operator=(internal_type v) requires (Bytes != 3) {
-        *(internal_type *)data = std::byteswap(v);
-    }
-    operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
-    operator auto() const requires !std::same_as<internal_type, bad_type> { return std::byteswap(*(internal_type*)data); }
-};
-template <auto Bytes>
-auto operator+(auto &&v, const length<Bytes> &l) {
-    return v + (uint32_t)l;
-}
-template <auto Bytes>
-auto operator+(const length<Bytes> &l, auto &&v) {
-    return v + (uint32_t)l;
-}
+using ube16 = bigendian_unsigned<2>;
 
 template <typename T, auto N, auto MinDataLength, auto MaxDataLength>
 struct repeated {
@@ -81,7 +58,6 @@ struct repeated {
 //template <auto Bytes>
 //using opaque = repeated<uint8, Bytes>;
 
-using ProtocolVersion = uint16;
 using Random = std::array<uint8,32>;
 
 struct CipherSuite {
@@ -115,25 +91,6 @@ struct CipherSuite {
 template <auto N>
 using cipher_suite = repeated<CipherSuite, N, 2, (1<<16)-2>;
 
-enum class ContentType : uint8 {
-    invalid = 0,
-    change_cipher_spec = 20,
-    alert = 21,
-    handshake = 22,
-    application_data = 23,
-    heartbeat = 24, /* RFC 6520 */
-};
-
-struct client_tag{};
-struct server_tag{};
-struct empty {
-    static constexpr auto content_type = ContentType::invalid;
-};
-
-template <typename T>
-constexpr bool is_client = std::same_as<T,client_tag>;
-
-
 
 
 
@@ -165,6 +122,12 @@ enum class ExtensionType : uint16 {
     signature_algorithms_cert = 50, /* RFC 8446 */
     key_share = 51,                 /* RFC 8446 */
 };
+
+enum class tls_version : uint16_t {
+    tls12 = 0x0303,
+    tls13 = 0x0304,
+};
+using ProtocolVersion = ube16;
 
 using extension_type_type = uint16;
 
@@ -202,7 +165,7 @@ struct supported_versions {
     static constexpr extension_type_type extension_type = 43;
 
     length<1> length{sizeof(supported_version)};
-    ProtocolVersion supported_version = 0x0403; // tls13
+    ProtocolVersion supported_version = tls_version::tls13; // tls13
 };
 struct signature_algorithms {
     static constexpr extension_type_type extension_type = 13;
@@ -240,25 +203,6 @@ struct signature_algorithms_cert {
     length<2> length{4 * sizeof(SignatureScheme)};
     SignatureScheme scheme[4] = {0x0708,0x0302,0x0304,0x0104};
 };
-enum class NamedGroup : uint16 {
-    // Elliptic Curve Groups (ECDHE)
-    // obsolete_RESERVED(0x0001..0x0016),
-    secp256r1 = 0x0017,
-    secp384r1 = 0x0018,
-    secp521r1 = 0x0019,
-    // obsolete_RESERVED(0x001A..0x001C),
-    x25519 = 0x001D,
-    x448 = 0x001E,
-
-    // Finite Field Groups (DHE)
-    ffdhe2048 = 0x0100,
-    ffdhe3072 = 0x0101,
-    ffdhe4096 = 0x0102,
-    ffdhe6144 = 0x0103,
-    ffdhe8192 = 0x0104,
-
-    //curveSM2 = {41};
-};
 struct supported_groups {
     static constexpr extension_type_type extension_type = 10;
     using NamedGroup = uint16;
@@ -282,13 +226,8 @@ struct key_share {
 struct psk_key_exchange_modes {
     static constexpr extension_type_type extension_type = 45;
 
-    enum class PskKeyExchangeMode : uint8 {
-        psk_ke = 0,
-        psk_dhe_ke = 1,
-    };
-
     length<1> length{sizeof(mode)};
-    PskKeyExchangeMode mode{PskKeyExchangeMode::psk_dhe_ke};
+    parameters::psk_key_exchange_mode mode{parameters::psk_key_exchange_mode::psk_dhe_ke};
 };
 struct padding {
     static constexpr extension_type_type extension_type = 21;
@@ -370,77 +309,18 @@ struct extensions_type {
 
 
 
-enum class HandshakeType : uint8 {
-    hello_request_RESERVED = 0,
-    client_hello = 1,
-    server_hello = 2,
-    hello_verify_request_RESERVED = 3,
-    new_session_ticket = 4,
-    end_of_early_data = 5,
-    hello_retry_request_RESERVED = 6,
-    encrypted_extensions = 8,
-    certificate = 11,
-    server_key_exchange_RESERVED = 12,
-    certificate_request = 13,
-    server_hello_done_RESERVED = 14,
-    certificate_verify = 15,
-    client_key_exchange_RESERVED = 16,
-    finished = 20,
-    certificate_url_RESERVED = 21,
-    certificate_status_RESERVED = 22,
-    supplemental_data_RESERVED = 23,
-    key_update = 24,
-    message_hash = 254,
-};
 
 struct Alert {
-    enum class Level : uint8 { warning = 1, fatal = 2 };
+    enum class level_type : uint8 { warning = 1, fatal = 2 };
 
-    enum class Description : uint8 {
-        close_notify = 0,
-        unexpected_message = 10,
-        bad_record_mac = 20,
-        decryption_failed_RESERVED = 21,
-        record_overflow = 22,
-        decompression_failure_RESERVED = 30,
-        handshake_failure = 40,
-        no_certificate_RESERVED = 41,
-        bad_certificate = 42,
-        unsupported_certificate = 43,
-        certificate_revoked = 44,
-        certificate_expired = 45,
-        certificate_unknown = 46,
-        illegal_parameter = 47,
-        unknown_ca = 48,
-        access_denied = 49,
-        decode_error = 50,
-        decrypt_error = 51,
-        export_restriction_RESERVED = 60,
-        protocol_version = 70,
-        insufficient_security = 71,
-        internal_error = 80,
-        inappropriate_fallback = 86,
-        user_canceled = 90,
-        no_renegotiation_RESERVED = 100,
-        missing_extension = 109,
-        unsupported_extension = 110,
-        certificate_unobtainable_RESERVED = 111,
-        unrecognized_name = 112,
-        bad_certificate_status_response = 113,
-        bad_certificate_hash_value_RESERVED = 114,
-        unknown_psk_identity = 115,
-        certificate_required = 116,
-        no_application_protocol = 120,
-    };
-
-    Level level;
-    Description description;
+    level_type level;
+    parameters::alerts description;
 };
 
 struct ServerHello {
-    static constexpr auto message_type = HandshakeType::server_hello;
+    static constexpr auto message_type = parameters::handshake_type::server_hello;
 
-    ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
+    ProtocolVersion legacy_version = tls_version::tls12;
     Random random;
     repeated<uint8, 32, 0, 32> legacy_session_id; //<0..32>;
     CipherSuite cipher_suite;
@@ -471,8 +351,8 @@ int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
 }
 
 struct TLSPlaintext {
-    ContentType type;
-    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
+    parameters::content_type type;
+    ProtocolVersion legacy_record_version = tls_version::tls12;
     length<2> length;
 
     size_t size() const { return (int)length; }
@@ -480,13 +360,13 @@ struct TLSPlaintext {
 
 struct {
     //opaque content[TLSPlaintext.length];
-    ContentType type;
+    parameters::content_type type;
     //uint8 zeros[length_of_padding];
 } TLSInnerPlaintext;
 
 struct TLSCiphertext {
-    ContentType opaque_type = ContentType::application_data;     /* 23 */
-    ProtocolVersion legacy_record_version = 0x0303; /* TLS v1.2 */
+    parameters::content_type opaque_type;
+    ProtocolVersion legacy_record_version = tls_version::tls12;
     uint16 length;
     //opaque encrypted_record[1];
 };
@@ -495,9 +375,9 @@ struct TLSCiphertext {
 
 template <typename MessageType>
 struct Handshake {
-    static constexpr auto content_type = ContentType::handshake;
+    static constexpr auto content_type = parameters::content_type::handshake;
 
-    HandshakeType msg_type = MessageType::message_type;
+    parameters::handshake_type msg_type = MessageType::message_type;
     length<3> length;
     MessageType message;
 
@@ -527,7 +407,7 @@ struct Handshake {
 
 template <auto NumberOfCipherSuites>
 struct ClientHello {
-    static constexpr auto message_type = HandshakeType::client_hello;
+    static constexpr auto message_type = parameters::handshake_type::client_hello;
 
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random{};
@@ -539,181 +419,6 @@ struct ClientHello {
     int make_buffers(auto &&vec) {
         return make_buffers1(vec, *this, extensions);
     }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-// unused
-
-struct KeyShareEntry {
-    //NamedGroup group;
-    // opaque key_exchange<1..2^16-1>;
-};
-
-struct KeyShareClientHello {
-    // KeyShareEntry client_shares<0..2^16-1>;
-};
-
-struct {
-    //NamedGroup selected_group;
-} KeyShareHelloRetryRequest;
-
-struct {
-    KeyShareEntry server_share;
-} KeyShareServerHello;
-
-struct {
-    uint8 legacy_form = 4;
-    // opaque X[coordinate_length];
-    // opaque Y[coordinate_length];
-} UncompressedPointRepresentation;
-
-struct {
-} Empty;
-
-struct EarlyDataIndication {
-    /*select (Handshake.msg_type) {
-    case new_session_ticket:   uint32 max_early_data_size;
-    case client_hello:         Empty;
-    case encrypted_extensions: Empty;
-    };*/
-};
-
-struct {
-    // opaque identity<1..2^16-1>;
-    // uint32 obfuscated_ticket_age;
-} PskIdentity;
-
-// opaque PskBinderEntry<32..255>;
-
-struct {
-    // PskIdentity identities<7..2^16-1>;
-    // PskBinderEntry binders<33..2^16-1>;
-} OfferedPsks;
-
-struct {
-    /*select (Handshake.msg_type) {
-    case client_hello: OfferedPsks;
-    case server_hello: uint16 selected_identity;
-    };*/
-} PreSharedKeyExtension;
-
-// B.3.1.1.  Version Extension
-
-struct {
-    /*select (Handshake.msg_type) {
-        case client_hello:
-            ProtocolVersion versions<2..254>;
-
-        case server_hello: // and HelloRetryRequest
-            ProtocolVersion selected_version;
-    };*/
-} SupportedVersions;
-
-// B.3.1.2.  Cookie Extension
-
-struct {
-    // opaque cookie<1..2^16-1>;
-} Cookie;
-
-
-// B.3.1.4.  Supported Groups Extension
-
-struct {
-    // NamedGroup named_group_list<2..2^16-1>;
-} NamedGroupList;
-
-// B.3.2.  Server Parameters Messages
-
-// opaque DistinguishedName<1..2^16-1>;
-
-struct {
-    // DistinguishedName authorities<3..2^16-1>;
-} CertificateAuthoritiesExtension;
-
-struct {
-    // opaque certificate_extension_oid<1..2^8-1>;
-    // opaque certificate_extension_values<0..2^16-1>;
-} OIDFilter;
-
-struct {
-    // OIDFilter filters<0..2^16-1>;
-} OIDFilterExtension;
-
-struct {
-} PostHandshakeAuth;
-
-struct {
-    // opaque certificate_request_context<0..2^8-1>;
-    // Extension extensions<2..2^16-1>;
-} CertificateRequest;
-
-// B.3.3.  Authentication Messages
-
-enum class CertificateType : uint8 {
-    X509 = 0,
-    OpenPGP_RESERVED = 1,
-    RawPublicKey = 2,
-};
-
-struct {
-    /*select (certificate_type) {
-        case RawPublicKey:
-        // From RFC 7250 ASN.1_subjectPublicKeyInfo
-        opaque ASN1_subjectPublicKeyInfo<1..2^24-1>;
-
-        case X509:
-        opaque cert_data<1..2^24-1>;
-    };
-    Extension extensions<0..2^16-1>;*/
-} CertificateEntry;
-
-struct {
-    // opaque certificate_request_context<0..2^8-1>;
-    // CertificateEntry certificate_list<0..2^24-1>;
-} Certificate;
-
-struct {
-    //SignatureScheme algorithm;
-    // opaque signature<0..2^16-1>;
-} CertificateVerify;
-
-struct {
-    // opaque verify_data[Hash.length];
-} Finished;
-
-// B.3.4.  Ticket Establishment
-
-struct {
-    uint32 ticket_lifetime;
-    uint32 ticket_age_add;
-    // opaque ticket_nonce<0..255>;
-    // opaque ticket<1..2^16-1>;
-    // Extension extensions<0..2^16-2>;
-} NewSessionTicket;
-
-// B.3.5.  Updating Keys
-
-struct {
-} EndOfEarlyData;
-
-enum class KeyUpdateRequest : uint8 {
-    update_not_requested = 0,
-    update_requested = 1,
-};
-
-struct KeyUpdate {
-    KeyUpdateRequest request_update;
 };
 
 #pragma pack(pop)

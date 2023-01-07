@@ -456,7 +456,7 @@ void test_tls() {
     //run("software-network.org");
     //run("letsencrypt.org");
     //run("example.com");
-    //run("google.com");
+    run("google.com");
     //run("gosuslugi.ru");
     //run("github.com");
     //run("gmail.com");
@@ -464,7 +464,7 @@ void test_tls() {
     //run("twitch.com");
     //run("tls13.akamai.io");
     //run("tls13.1d.pw");
-    run("localhost");
+    //run("localhost");
 }
 #endif
 

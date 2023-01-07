@@ -17,4 +17,13 @@ void build(Solution &s) {
     // example:
     // t += "org.sw.demo.someproject"_dep;
 
+    {
+        auto &t = s.addTarget<Executable>("tlsparams");
+        t.PackageDefinitions = true;
+        t += cpp23;
+        t += "tools/tlsparams.cpp";
+        //t += "pub.egorpugin.primitives.http"_dep;
+        t += "pub.egorpugin.primitives.sw.main"_dep;
+        t += "org.sw.demo.zeux.pugixml"_dep;
+    }
 }
