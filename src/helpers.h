@@ -210,22 +210,45 @@ struct be_stream {
         template <typename E>
         operator E() requires(std::is_enum_v<E>) {
             auto v = *(std::underlying_type_t<E> *)s.p;
-            s.p += sizeof(v);
+            s.step(sizeof(v));
             v = std::byteswap(v);
             return (E)v;
         }
+        template <typename T>
+        operator T&() {
+            auto &v = *(T *)s.p;
+            s.step(sizeof(T));
+            return v;
+        }
         operator uint16_t() {
             auto v = *(uint16_t *)s.p;
-            s.p += sizeof(v);
+            s.step(sizeof(v));
             v = std::byteswap(v);
             return v;
         }
     };
 
-    uint8_t *p;
+    const uint8_t *p;
+    size_t len;
+
+    be_stream() = default;
+    be_stream(const uint8_t *p) : p{p} {}
+    be_stream(const uint8_t *p, auto len) : p{p},len{len} {}
+    be_stream(auto &&v) : be_stream{(const uint8_t*)v.data(),v.size()} {}
+
     auto read() {
         return reader{*this};
     }
+    auto substream(auto len) {
+        be_stream s{p,len};
+        step(len);
+        return s;
+    }
+    void step(auto len) {
+        p += len;
+        this->len -= len;
+    }
+    explicit operator bool() { return len != 0; }
     //operator uint16_t() { return read(); }
     //operator auto() { return read(); }
 };

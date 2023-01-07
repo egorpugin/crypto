@@ -53,6 +53,7 @@ struct tls {
     hash h;
     //ec25519
     uint8_t priv[32], peer[32], shared[32];
+    array<hash::digest_size_bytes> master_secret;
 
     struct buf_type {
         using header_type = tls13::TLSPlaintext;
@@ -164,12 +165,22 @@ struct tls {
     };
     template <auto Type>
     struct peer_pair {
+        array<hash::digest_size_bytes> secret;
         server_peer_data<Type> server;
         client_peer_data<Type> client;
 
         void make_keys(auto &&input_secret, auto &&h) {
+            secret = input_secret;
             server.make_keys(input_secret, h);
             client.make_keys(input_secret, h);
+        }
+        auto make_master_keys(auto &&h) {
+            auto derived2 = derive_secret<hash>(secret, "derived"s);
+            std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
+            auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
+            peer_pair<"ap"_s> traffic;
+            traffic.make_keys(master_secret, h);
+            return traffic;
         }
     };
     peer_pair<"hs"_s> handshake;
@@ -208,33 +219,37 @@ struct tls {
         std::vector<boost::asio::const_buffer> buffers;
         buffers.reserve(20);
 
-        Handshake<ClientHello<all_suites::size()>> client_hello;
-        get_random_secure_bytes(client_hello.message.legacy_session_id.data);
-        get_random_secure_bytes(client_hello.message.random);
+        ClientHello<all_suites::size()> message;
+        get_random_secure_bytes(message.legacy_session_id.data);
+        get_random_secure_bytes(message.random);
         int csid{};
         all_suites::for_each([&](auto &&s) {
-            client_hello.message.cipher_suites_[csid++] = s.suite();
+            message.cipher_suites_[csid++] = s.suite();
         });
-        //client_hello.message.cipher_suites_[0] = CipherSuite::TLS_CHACHA20_POLY1305_SHA256;
+        //message.cipher_suites_[0] = CipherSuite::TLS_CHACHA20_POLY1305_SHA256;
 
         Extension<server_name> sn;
         sn.e.server_name_ = url;
-        client_hello.message.extensions.add(sn);
-        client_hello.message.extensions.add<supported_versions>();
-        client_hello.message.extensions.add<signature_algorithms>();
-        //client_hello.message.extensions.add<signature_algorithms_cert>();
-        client_hello.message.extensions.add<supported_groups>();
-        auto &k = client_hello.message.extensions.add<key_share>();
+        message.extensions.add(sn);
+        message.extensions.add<supported_versions>();
+        message.extensions.add<signature_algorithms>();
+        //message.extensions.add<signature_algorithms_cert>();
+        message.extensions.add<supported_groups>();
+        auto &k = message.extensions.add<key_share>();
         curve25519(priv, k.e.key);
         Extension<padding> p;
-        client_hello.message.extensions.add(p);
+        message.extensions.add(p);
 
         TLSPlaintext msg;
         msg.type = parameters::content_type::handshake;
         buffers.emplace_back(&msg, sizeof(msg));
 
-        auto sz = client_hello.make_buffers(buffers);
-        msg.length = sz;
+        Handshake client_hello;
+        client_hello.msg_type = parameters::handshake_type::client_hello;
+        buffers.emplace_back(&client_hello, sizeof(client_hello));
+        auto sz = message.make_buffers(buffers);
+        client_hello.length = sz;
+        msg.length = sz + sizeof(client_hello);
         for (auto &&b : buffers | std::views::drop(1)) {
             h.update(b);
         }
@@ -268,32 +283,66 @@ struct tls {
         h.update(dec);
         return dec;
     }
-    void read_extensions(uint8_t *p) {
+    void read_extensions(auto &&in) {
         using namespace tls13;
 
-        be_stream s{p};
-        uint16_t len = s.read();
-        while (len) {
+        uint16_t len = in.read();
+        auto s = in.substream(len);
+        while (s) {
             ExtensionType type = s.read();
             uint16_t len2 = s.read();
-            len -= len2;
             switch (type) {
-            case tls13::ExtensionType::supported_groups:
-            {
-                uint16_t len = s.read();
-                auto n = len / sizeof(tls13::ExtensionType);
+            case tls13::ExtensionType::supported_groups: {
+                //uint16_t len = s.read();
+                auto n = len2 / sizeof(tls13::ExtensionType);
                 while (n--) {
                     parameters::supported_groups g = s.read();
-                    std::cout << "group: " << std::hex << (uint16_t)g << "\n";
+                    std::cout << "group: " << std::hex << (string)NAMEOF_ENUM(g) << "\n";
                 }
                 break;
             }
+            case ExtensionType::key_share: {
+                key_share::entry &ksh = s.read();
+                memcpy(peer, ksh.key, 32);
+                break;
+            }
             default:
-                std::cout << "unhandled ext: " << (uint16_t)type << "\n";
+                s.step(len2);
+                std::cout << "unhandled ext: " << (string)NAMEOF_ENUM(type) << "\n";
             }
         }
     }
-    void read_messages() {
+    void read_handshake(be_stream s) {
+        using namespace tls13;
+
+        while (s) {
+            Handshake &h = s.read();
+            switch (h.msg_type) {
+            case parameters::handshake_type::server_hello: {
+                ServerHello &sh = s.read();
+                read_extensions(s);
+                break;
+            }
+            case parameters::handshake_type::encrypted_extensions: {
+                read_extensions(s);
+                break;
+            }
+            case parameters::handshake_type::certificate: {
+                //read_extensions(s);
+                break;
+            }
+            case parameters::handshake_type::certificate_verify: {
+                break;
+            }
+            case parameters::handshake_type::finished: {
+                auth_ok = true;
+                traffic = handshake.make_master_keys(this->h);
+                break;
+            }
+            default:
+                throw std::logic_error{format("msg_type is not implemented: {}", (string)NAMEOF_ENUM(h.msg_type))};
+            }
+        }
     }
     boost::asio::awaitable<void> handle_handshake_application_data(auto &s) {
         using namespace tls13;
@@ -305,58 +354,23 @@ struct tls {
         auto psk = salt0; // zero psk
 
         auto early_secret = hkdf_extract<hash>(salt0, psk);
-        // auto binder_key = derive_secret(early_secret, "ext binder"|"res binder"s, ""s);
-        // auto client_early_traffic_secret = derive_secret(early_secret, "c e traffic"s, ""s);
         auto derived1 = derive_secret<hash>(early_secret, "derived"s); // handshake_secret?
         auto handshake_secret = hkdf_extract<hash>(derived1, ecdhe);   // pre master key?
         handshake.make_keys(handshake_secret, h);
-        auto derived2 = derive_secret<hash>(handshake_secret, "derived"s);
-        auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
 
         auto dec = decrypt_handshake();
-        if (dec.size() == 0) {
+        if (dec.empty()) {
             co_return;
         }
-        auto &e = *(Handshake<extensions_type> *)dec.data();
-        switch (e.msg_type) {
-        case parameters::handshake_type::encrypted_extensions: {
-            read_extensions((uint8_t*)&e.message);
-        } break;
-        default:
-            throw std::logic_error{"unimpl first handshake"};
-        }
+        read_handshake(dec);
 
         auto f = [&]() -> boost::asio::awaitable<void> {
             co_await buf.receive(s);
             auto dec = decrypt_handshake();
-            if (dec.size() == 0) {
+            if (dec.empty()) {
                 co_return;
             }
-            auto &e = *(Handshake<extensions_type> *)dec.data();
-            switch (e.msg_type) {
-            case parameters::handshake_type::server_hello: {
-                auto &h = buf.content<Handshake<ServerHello>>();
-                auto &h2 = buf.content<ServerHello>();
-                int a = 5;
-                a++;
-                break;
-            }
-            case parameters::handshake_type::encrypted_extensions: {
-                break;
-            }
-            case parameters::handshake_type::certificate: {
-                break;
-            }
-            case parameters::handshake_type::certificate_verify: {
-                break;
-            }
-            case parameters::handshake_type::finished:
-                auth_ok = true;
-                traffic.make_keys(master_secret, h);
-                break;
-            default:
-                throw std::logic_error{"unimpl"};
-            }
+            read_handshake(dec);
         };
         while (!auth_ok) {
             co_await f();
@@ -366,26 +380,7 @@ struct tls {
         using namespace tls13;
 
         this->h.update(buf.content_raw());
-        auto &h = buf.content<Handshake<ServerHello>>();
-        switch (h.msg_type) {
-        case parameters::handshake_type::server_hello: {
-            auto &sh = h.message;
-            auto p = (uint8_t*)&sh.extensions.extensions;
-            auto ext = (ExtensionType)std::byteswap(*(std::underlying_type_t<ExtensionType> *)p);
-            p += sizeof(ExtensionType);
-            switch (ext) {
-            case ExtensionType::key_share: {
-                p += sizeof(Extension<key_share>::length);
-                auto &ksh = *(key_share::entry *)p;
-                memcpy(peer, ksh.key, 32);
-            } break;
-            default:
-                throw std::logic_error{"no key_share as first ext"};
-            }
-        } break;
-        default:
-            throw std::logic_error{format("msg_type is not implemented: {}", (string)NAMEOF_ENUM(h.msg_type))};
-        }
+        read_handshake(buf.content_raw());
     }
 };
 

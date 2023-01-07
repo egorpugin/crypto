@@ -325,11 +325,7 @@ struct ServerHello {
     repeated<uint8, 32, 0, 32> legacy_session_id; //<0..32>;
     CipherSuite cipher_suite;
     uint8 legacy_compression_method;
-    extensions_type extensions;
-
-    auto recv_size() {
-        return sizeof(*this) - sizeof(extensions) + 2;
-    }
+    //extensions_type extensions;
 };
 
 using content_type = std::variant<Alert, ServerHello>;
@@ -373,21 +369,11 @@ struct TLSCiphertext {
 
 // B.3.  Handshake Protocol
 
-template <typename MessageType>
 struct Handshake {
     static constexpr auto content_type = parameters::content_type::handshake;
 
-    parameters::handshake_type msg_type = MessageType::message_type;
+    parameters::handshake_type msg_type;
     length<3> length;
-    MessageType message;
-
-    auto recv_size() {
-        return sizeof(*this) - sizeof(message);
-    }
-
-    int make_buffers(auto &&vec) {
-        return make_buffers1(vec, *this, message);
-    }
 
     /*select (Handshake.msg_type) {
         case server_hello:          ServerHello;
