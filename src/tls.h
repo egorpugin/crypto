@@ -14,6 +14,13 @@
 #include <iostream>
 #include <map>
 
+/*
+* security notes
+* - we must check incoming keys for special values, etc.
+* - check that points lie on the curves
+* - timing attacks?
+*/
+
 namespace crypto {
 
 /*
@@ -562,7 +569,7 @@ struct tls {
             }
             case tls13::ExtensionType::key_share: {
                 parameters::supported_groups group = s.read();
-                if (group != parameters::supported_groups::x25519) {
+                if (group != group_name) {
                     throw std::runtime_error{"unknown group"};
                 }
                 uint16_t len = s.read();

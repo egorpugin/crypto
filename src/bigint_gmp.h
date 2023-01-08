@@ -1,6 +1,6 @@
 #pragma once
 
-#include "bigint.h"
+#include "helpers.h"
 
 // what about timing attacks & gmp?
 #include <gmpxx.h>
@@ -30,6 +30,15 @@ struct bigint : mpz_class {
         b %= m;
         return b;
     }
+    template <auto N>
+    operator array<N>() const {
+        array<N> d;
+        auto ptr = mpz_export(d.data(), 0, 1, 1, 0, 0, *this);
+        if (ptr != d.data()) {
+            throw std::runtime_error{"bigint error"};
+        }
+        return d;
+    }
 };
 
 auto operator""_bi(const char *p, size_t len) {
@@ -40,6 +49,12 @@ template <auto N>
 bigint bytes_to_bigint(uint8_t (&v)[N], int order = 1) {
     bigint b;
     mpz_import(b.__get_mp(), N, order, sizeof(v[0]), 0, 0, v);
+    return b;
+}
+template <auto N>
+bigint bytes_to_bigint(const array<N> &v, int order = 1) {
+    bigint b;
+    mpz_import(b.__get_mp(), N, order, sizeof(v[0]), 0, 0, v.data());
     return b;
 }
 

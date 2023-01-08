@@ -141,23 +141,49 @@ struct secp256r1 {
             "0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"sv,
         }};
 
-    static inline constexpr auto key_size = 32;
+#pragma pack(push, 1)
+    struct key_type {
+        uint8_t legacy{4};
+        array<32> x;
+        array<32> y;
+    };
+#pragma pack(pop)
+
+    static inline constexpr auto key_size = sizeof(key_type);
     using private_key_type = array<key_size>;
     using public_key_type = private_key_type;
 
     private_key_type private_key;
 
     auto public_key() {
-        public_key_type public_key;
-        //curve25519_f(private_key.data(), public_key.data());
-        return public_key;
+        auto c = parameters.curve();
+        auto m = bytes_to_bigint(private_key);
+        auto p = m * c.G;
+        return key_type{4,p.x,p.y};
     }
     auto public_key(auto &&out) {
-        //curve25519_f(private_key.data(), out);
+        auto k = public_key();
+        /*for (int i = 0; i < 16; ++i) {
+            std::swap(k.x[i], k.x[32 - 1 - i]);
+            std::swap(k.y[i], k.y[32 - 1 - i]);
+        }*/
+        memcpy(out, (uint8_t *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
-        public_key_type shared_secret;
-        //curve25519_f(private_key.data(), peer_public_key.data(), shared_secret.data());
+        array<32> shared_secret;
+        auto &k = *(key_type *)peer_public_key.data();
+        /*for (int i = 0; i < 16; ++i) {
+            std::swap(k.x[i], k.x[32 - 1 - i]);
+            std::swap(k.y[i], k.y[32 - 1 - i]);
+        }*/
+        auto c = parameters.curve();
+        ec_field_point p{c.ec};
+        p.x = bytes_to_bigint(k.x);
+        p.y = bytes_to_bigint(k.y);
+        auto m = bytes_to_bigint(private_key);
+        auto p2 = m * p;
+        key_type k2{4,p2.x,p2.y};
+        memcpy(shared_secret.data(), (uint8_t *)&k2.x, 32);
         return shared_secret;
     }
 };
