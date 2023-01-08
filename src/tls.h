@@ -46,10 +46,10 @@ struct tls {
     >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;
-    using key_exchange = curve25519;
-    static inline constexpr auto group_name = parameters::supported_groups::x25519;
-    //using key_exchange = ec::secp256r1;
-    //static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
+    //using key_exchange = curve25519;
+    //static inline constexpr auto group_name = parameters::supported_groups::x25519;
+    using key_exchange = ec::secp256r1;
+    static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
     using hash = suite_type::hash_type;
 
     struct status_ {
@@ -84,13 +84,7 @@ struct tls {
                 throw std::runtime_error{"too big tls packet"};
             }
             data.resize(sizeof(header_type) + h.size());
-            auto p = data.data() + sizeof(h);
-            auto sz = h.size();
-            while (sz) {
-               auto n = co_await s.async_read_some(boost::asio::buffer(p, sz), use_awaitable);
-               sz -= n;
-               p += n;
-            }
+            co_await s.async_receive(boost::asio::buffer(data.data() + sizeof(header_type), h.size()), use_awaitable);
 
             switch (h.type) {
             case parameters::content_type::alert:
@@ -510,6 +504,8 @@ struct tls {
 
             client_hello.length = 508;
             msg.length = 512;
+
+            h.update((uint8_t*)&client_hello, 512);
 
             co_await s.async_send(boost::asio::buffer(w.buf, 512+sizeof(msg)), use_awaitable);
 

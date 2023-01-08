@@ -455,8 +455,8 @@ void test_tls() {
 
     //run("software-network.org");
     //run("letsencrypt.org");
-    //run("example.com");
-     run("google.com");
+    run("example.com");
+    //run("google.com");
     // run("gosuslugi.ru");
     // run("github.com");
     // run("gmail.com");
