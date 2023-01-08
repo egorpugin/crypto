@@ -36,6 +36,22 @@ struct tls {
         static constexpr auto suite() { return SuiteId; }
     };
 
+    template <typename T, auto Value>
+    struct pair {
+        using type = T;
+        static inline constexpr auto value = Value;
+    };
+    template <typename KeyExchange, typename ... KeyExchanges>
+    struct key_exchanges {
+        using default_key_exchange = KeyExchange;
+        static constexpr auto size() { return sizeof...(KeyExchange) + 1; }
+
+        static void for_each(auto &&f) {
+            f(KeyExchange{});
+            (f(KeyExchanges{}),...);
+        }
+    };
+
     template <typename DefaultSuite, typename ... Suites>
     struct suites {
         using default_suite = DefaultSuite;
@@ -53,15 +69,17 @@ struct tls {
     >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;
-    //using key_exchange = curve25519;
-    //static inline constexpr auto group_name = parameters::supported_groups::x25519;
-    using key_exchange = ec::secp256r1;
-    static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
-    //using key_exchange = ec::secp384r1;
-    //static inline constexpr auto group_name = parameters::supported_groups::secp384r1;
-    //using key_exchange = ec::secp521r1;
-    //static inline constexpr auto group_name = parameters::supported_groups::secp521r1;
+
+    using all_key_exchanges = key_exchanges<
+        pair<curve25519,parameters::supported_groups::x25519>,
+        pair<ec::secp256r1,parameters::supported_groups::secp256r1>,
+        pair<ec::secp384r1,parameters::supported_groups::secp384r1>,
+        pair<ec::secp521r1,parameters::supported_groups::secp521r1>
+    >;
+
     using hash = suite_type::hash_type;
+    using key_exchange = curve25519;
+    static inline constexpr auto group_name = parameters::supported_groups::x25519;
 
     struct status_ {
         struct empty{};
