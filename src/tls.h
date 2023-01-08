@@ -440,7 +440,6 @@ struct tls {
             message.extensions.add(sn);
             message.extensions.add<supported_versions>();
             message.extensions.add<signature_algorithms>();
-            // message.extensions.add<signature_algorithms_cert>();
             message.extensions.add<supported_groups>();
             auto &k = message.extensions.add<key_share>();
             curve25519(priv, k.e.key);

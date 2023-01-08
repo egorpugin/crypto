@@ -66,7 +66,16 @@ int main(int argc, char *argv[]) {
             auto r = q.node();
             std::string v = r.select_node("./value").node().first_child().value();
             std::string d = r.select_node("./description").node().first_child().value();
+            std::optional<bool> rec;
+            if (auto n = r.select_node("./rec").node()) {
+                rec = n.first_child().value() == "Y"s;
+            } else if (auto n = r.select_node("./recommended").node(); n && n.first_child()) {
+                rec = n.first_child().value() == "Y"s;
+            }
             std::replace(d.begin(), d.end(), '\n', ' ');
+            boost::replace_all(d, "  ", " ");
+            boost::replace_all(d, "(renamed from \"NewSessionTicket\")", "");
+            boost::trim(d);
             boost::replace_all(v, ",0x", "");
             boost::trim(v);
             auto fs = " -*\"()";
@@ -84,11 +93,17 @@ int main(int argc, char *argv[]) {
                     en.bytes = 2;
                 }
             }
-            if (v.empty()) {
-                en.add_line("    "s + d + ",");
-            } else {
-                en.add_line("    "s + d + " = "s + v + ",");
+            std::string srec;
+            if (rec) {
+                srec = " // "s + (*rec ? "recommended" : "not recommended");
             }
+            std::string line;
+            if (v.empty()) {
+                line = std::format("    {:88},    {}", d, srec);
+            } else {
+                line = std::format("    {:70} = {:15},    {}", d, v, srec);
+            }
+            en.add_line(line);
         }
     }
     std::cout << e.s;

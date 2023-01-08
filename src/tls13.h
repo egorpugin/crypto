@@ -1,8 +1,6 @@
 // https://www.rfc-editor.org/rfc/rfc8446
 // https://tls.dxdt.ru/tls.html
 // https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
-// https://commandlinefanatic.com/cgi-bin/showarticle.cgi?article=art080
-// https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20180125_TLSv1.3_Andy_Brodie.pdf
 
 #pragma once
 
@@ -55,9 +53,6 @@ struct repeated {
     T &operator[](int i){return data[i];}
 };
 
-//template <auto Bytes>
-//using opaque = repeated<uint8, Bytes>;
-
 using Random = std::array<uint8,32>;
 
 struct CipherSuite {
@@ -90,10 +85,6 @@ struct CipherSuite {
 };
 template <auto N>
 using cipher_suite = repeated<CipherSuite, N, 2, (1<<16)-2>;
-
-
-
-
 
 enum class ExtensionType : uint16 {
     server_name = 0,
@@ -180,9 +171,10 @@ struct signature_algorithms {
     ed448 = 0x0808,
 */
 
-    length<2> length{5 * sizeof(SignatureScheme)};
-    SignatureScheme scheme[5] = {
-        0x0708, 0x0302, 0x0304, 0x0104, 0x0305
+    length<2> length{8 * sizeof(SignatureScheme)};
+    SignatureScheme scheme[8] = {
+        0x0708, 0x0302, 0x0304, 0x0305, 0x0306, 0x0104,
+        0x0408, 0x0908
     };
     //SignatureScheme scheme = 0x0302; // ecdsa_sha1
     //SignatureScheme scheme = 0x0708; // ed25519
@@ -203,14 +195,26 @@ struct signature_algorithms_cert {
 */
 
     length<2> length{4 * sizeof(SignatureScheme)};
-    SignatureScheme scheme[4] = {0x0708,0x0302,0x0304,0x0104};
+    SignatureScheme scheme[4] = {
+        0x0708,0x0302,0x0304,0x0104
+    };
 };
 struct supported_groups {
     static constexpr extension_type_type extension_type = 10;
     using NamedGroup = uint16;
 
-    length<2> length{sizeof(scheme)};
-    NamedGroup scheme = 0x1D00;
+    length<2> length{sizeof(NamedGroup) * 2};
+    NamedGroup scheme[2] = {
+        0x1D00, //x25519
+        //0x1600, //secp256k1
+        0x1700, //secp256r1
+        // gost
+        //0x3200, //GC512A
+        //0x3300, //GC512A
+        //0x3400, //GC512A
+        //0x3500, //GC512A
+        //0x3600, //GC512A
+    };
 };
 struct key_share {
     static constexpr extension_type_type extension_type = 51;
@@ -306,12 +310,6 @@ struct extensions_type {
     }
 };
 
-
-
-
-
-
-
 struct Alert {
     enum class level_type : uint8 { warning = 1, fatal = 2 };
 
@@ -327,7 +325,6 @@ struct ServerHello {
     repeated<uint8, 32, 0, 32> legacy_session_id; //<0..32>;
     CipherSuite cipher_suite;
     uint8 legacy_compression_method;
-    //extensions_type extensions;
 };
 
 using content_type = std::variant<Alert, ServerHello>;
@@ -356,20 +353,11 @@ struct TLSPlaintext {
     size_t size() const { return (int)length; }
 };
 
-struct {
-    //opaque content[TLSPlaintext.length];
-    parameters::content_type type;
-    //uint8 zeros[length_of_padding];
-} TLSInnerPlaintext;
-
 struct TLSCiphertext {
     parameters::content_type opaque_type;
     ProtocolVersion legacy_record_version = tls_version::tls12;
     uint16 length;
-    //opaque encrypted_record[1];
 };
-
-// B.3.  Handshake Protocol
 
 struct Handshake {
     static constexpr auto content_type = parameters::content_type::handshake;
@@ -378,20 +366,11 @@ struct Handshake {
     length<3> length;
 
     /*select (Handshake.msg_type) {
-        case server_hello:          ServerHello;
         case end_of_early_data:     EndOfEarlyData;
-        case encrypted_extensions:  EncryptedExtensions;
         case certificate_request:   CertificateRequest;
-        case certificate:           Certificate;
         case certificate_verify:    CertificateVerify;
-        case finished:              Finished;
-        case new_session_ticket:    NewSessionTicket;
-        case key_update:            KeyUpdate;
     };*/
 };
-
-// B.3.1.  Key Exchange Messages
-
 
 template <auto NumberOfCipherSuites>
 struct ClientHello {

@@ -453,17 +453,17 @@ void test_tls() {
         }
     };
 
-    run("software-network.org");
-    run("letsencrypt.org");
+    //run("software-network.org");
+    //run("letsencrypt.org");
     run("example.com");
-    run("google.com");
-    run("gosuslugi.ru");
-    run("github.com");
-    run("gmail.com");
-    run("youtube.com");
-    run("twitch.com");
-    run("tls13.akamai.io");
-    run("tls13.1d.pw");
+    // run("google.com");
+    // run("gosuslugi.ru");
+    // run("github.com");
+    // run("gmail.com");
+    // run("youtube.com");
+    // run("twitch.tv");
+    // run("tls13.akamai.io");
+    // run("tls13.1d.pw");
     //run("localhost");
 }
 #endif
@@ -473,7 +473,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    //test_25519();
+    test_25519();
     //test_hmac();
     //test_chacha20();
     test_tls();
