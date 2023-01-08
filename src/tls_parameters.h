@@ -537,7 +537,7 @@ enum class handshake_type : uint8_t {
     client_hello = 1,
     server_hello = 2,
     hello_verify_request_RESERVED = 3,
-    // new_session_ticket (renamed from "NewSessionTicket") = 4,
+    new_session_ticket = 4,
     end_of_early_data = 5,
     hello_retry_request_RESERVED = 6,
     // Unassigned = 7,

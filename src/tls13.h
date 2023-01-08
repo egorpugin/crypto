@@ -1,6 +1,6 @@
-// https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
 // https://www.rfc-editor.org/rfc/rfc8446
 // https://tls.dxdt.ru/tls.html
+// https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml
 // https://commandlinefanatic.com/cgi-bin/showarticle.cgi?article=art080
 // https://owasp.org/www-chapter-london/assets/slides/OWASPLondon20180125_TLSv1.3_Andy_Brodie.pdf
 
@@ -181,7 +181,9 @@ struct signature_algorithms {
 */
 
     length<2> length{5 * sizeof(SignatureScheme)};
-    SignatureScheme scheme[5] = {0x0708, 0x0302, 0x0304, 0x0104, 0x0305};
+    SignatureScheme scheme[5] = {
+        0x0708, 0x0302, 0x0304, 0x0104, 0x0305
+    };
     //SignatureScheme scheme = 0x0302; // ecdsa_sha1
     //SignatureScheme scheme = 0x0708; // ed25519
     //SignatureScheme scheme = 0x0304; // google works (passes more)
@@ -411,6 +413,11 @@ enum class CertificateType : uint8_t {
     X509 = 0,
     OpenPGP_RESERVED = 1,
     RawPublicKey = 2,
+};
+
+enum class KeyUpdateRequest : uint8 {
+    update_not_requested = 0,
+    update_requested = 1,
 };
 
 #pragma pack(pop)
