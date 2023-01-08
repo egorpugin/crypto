@@ -48,8 +48,8 @@ struct tls {
     };
 
     using all_suites = suites<
-        //suite_<aes_gcm<128>,sha2<256>,tls13::CipherSuite::TLS_AES_128_GCM_SHA256>
-        suite_<aes_gcm<256>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384>
+        suite_<aes_gcm<128>,sha2<256>,tls13::CipherSuite::TLS_AES_128_GCM_SHA256>
+        //suite_<aes_gcm<256>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384>
     >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;
@@ -57,6 +57,10 @@ struct tls {
     //static inline constexpr auto group_name = parameters::supported_groups::x25519;
     using key_exchange = ec::secp256r1;
     static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
+    //using key_exchange = ec::secp384r1;
+    //static inline constexpr auto group_name = parameters::supported_groups::secp384r1;
+    //using key_exchange = ec::secp521r1;
+    //static inline constexpr auto group_name = parameters::supported_groups::secp521r1;
     using hash = suite_type::hash_type;
 
     struct status_ {

@@ -131,21 +131,24 @@ struct parameters {
     }
 };
 
-struct secp256r1 {
-    static inline constexpr ec::parameters<string_view> parameters{
-        .p = "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff"sv,
-        .a = "0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc"sv,
-        .b = "0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"sv,
-        .G = {
-            "0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"sv,
-            "0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"sv,
-        }};
+template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy>
+struct secp {
+    static inline const auto parameters =
+        ec::parameters<string_view>{.p = P,
+                                .a = A,
+                                .b = B,
+                                .G = {
+                                    Gx,
+                                    Gy,
+                                }};
+
+    static inline constexpr auto point_size_bytes = ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
 
 #pragma pack(push, 1)
     struct key_type {
         uint8_t legacy{4};
-        array<32> x;
-        array<32> y;
+        array<point_size_bytes> x;
+        array<point_size_bytes> y;
     };
 #pragma pack(pop)
 
@@ -163,19 +166,11 @@ struct secp256r1 {
     }
     auto public_key(auto &&out) {
         auto k = public_key();
-        /*for (int i = 0; i < 16; ++i) {
-            std::swap(k.x[i], k.x[32 - 1 - i]);
-            std::swap(k.y[i], k.y[32 - 1 - i]);
-        }*/
         memcpy(out, (uint8_t *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
-        array<32> shared_secret;
+        array<point_size_bytes> shared_secret;
         auto &k = *(key_type *)peer_public_key.data();
-        /*for (int i = 0; i < 16; ++i) {
-            std::swap(k.x[i], k.x[32 - 1 - i]);
-            std::swap(k.y[i], k.y[32 - 1 - i]);
-        }*/
         auto c = parameters.curve();
         ec_field_point p{c.ec};
         p.x = bytes_to_bigint(k.x);
@@ -183,9 +178,34 @@ struct secp256r1 {
         auto m = bytes_to_bigint(private_key);
         auto p2 = m * p;
         key_type k2{4,p2.x,p2.y};
-        memcpy(shared_secret.data(), (uint8_t *)&k2.x, 32);
+        memcpy(shared_secret.data(), (uint8_t *)&k2.x, point_size_bytes);
         return shared_secret;
     }
 };
+
+// https://neuromancer.sk/std/secg/secp256r1
+using secp256r1 = secp<256,
+                       "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff"_s,
+                       "0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc"_s,
+                       "0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"_s,
+
+                       "0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"_s,
+                       "0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"_s>;
+
+using secp384r1 = secp<384,
+                       "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff"_s,
+                       "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000fffffffc"_s,
+                       "0xb3312fa7e23ee7e4988e056be3f82d19181d9c6efe8141120314088f5013875ac656398d8a2ed19d2a85c8edd3ec2aef"_s,
+
+                       "0xaa87ca22be8b05378eb1c71ef320ad746e1d3b628ba79b9859f741e082542a385502f25dbf55296c3a545e3872760ab7"_s,
+                       "0x3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f"_s>;
+
+using secp521r1 = secp<521,
+                       "0x01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_s,
+                       "0x01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc"_s,
+                       "0x0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00"_s,
+
+                       "0x00c6858e06b70404e9cd9e3ecb662395b4429c648139053fb521f828af606b4d3dbaa14b5e77efe75928fe1dc127a2ffa8de3348b3c1856a429bf97e7e31c2e5bd66"_s,
+                       "0x011839296a789a3bc0045c8a5fb42c7d1bd998f54449579b446817afbd17273e662c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650"_s>;
 
 } // namespace crypto::ec
