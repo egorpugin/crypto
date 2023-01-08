@@ -6,6 +6,7 @@
 #include "ec25519.h"
 #include "aes.h"
 #include "hmac.h"
+#include "ec.h"
 
 #include <boost/asio.hpp>
 #include <nameof.hpp>
@@ -21,11 +22,11 @@ namespace crypto {
  * http header size limit = 8K
  */
 struct tls {
-    template <typename Cipher, typename Hash, auto Suite>
+    template <typename Cipher, typename Hash, auto SuiteId>
     struct suite_ {
         using cipher_type = Cipher;
         using hash_type = Hash;
-        static constexpr auto suite() { return Suite; }
+        static constexpr auto suite() { return SuiteId; }
     };
 
     template <typename DefaultSuite, typename ... Suites>
@@ -45,6 +46,10 @@ struct tls {
     >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;
+    using key_exchange = curve25519;
+    static inline constexpr auto group_name = parameters::supported_groups::x25519;
+    //using key_exchange = ec::secp256r1;
+    //static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
     using hash = suite_type::hash_type;
 
     struct status_ {
@@ -58,8 +63,8 @@ struct tls {
     boost::asio::io_context ctx;
     bool auth_ok{};
     hash h;
-    // ec25519 data
-    uint8_t priv[32], peer[32], shared[32];
+    key_exchange private_key;
+    key_exchange::public_key_type peer_public_key;
 
     struct buf_type {
         using header_type = tls13::TLSPlaintext;
@@ -319,8 +324,37 @@ struct tls {
         }
     };
 
+    struct packet_writer {
+        uint8_t buf[2048]{};
+        uint8_t *p = buf;
+
+        template <typename T, auto N>
+        T *next() {
+            auto r = (T *)p;
+            for (int i = 0; i < N; ++i) {
+                r[i] = T{};
+            }
+            p += sizeof(T) * N;
+            return r;
+        }
+        template <typename T>
+        T &next() {
+            auto &r = *(T *)p;
+            r = T{};
+            p += sizeof(T);
+            return r;
+        }
+        template <typename T>
+        operator T&() {
+            return next<T>();
+        }
+        void operator+=(auto &&v) {
+            memcpy(p, v.data(), v.size());
+            p += v.size();
+        }
+    };
+
     tls(auto &&url) : url{url} {
-        get_random_secure_bytes(priv);
     }
     void run() {
         boost::asio::co_spawn(ctx, run1(), [](auto eptr) {
@@ -357,7 +391,7 @@ struct tls {
         auto remote_ep = s.remote_endpoint();
         auto remote_ad = remote_ep.address();
         std::string ss = remote_ad.to_string();
-        //std::cout << ss << "\n";
+        std::cout << ss << "\n";
 
         co_await init_ssl(s);
 
@@ -423,47 +457,65 @@ struct tls {
         using boost::asio::use_awaitable;
 
         {
-            std::vector<boost::asio::const_buffer> buffers;
-            buffers.reserve(20);
+            packet_writer w;
+            TLSPlaintext &msg = w;
+            msg.type = parameters::content_type::handshake;
 
-            ClientHello<all_suites::size()> message;
-            get_random_secure_bytes(message.legacy_session_id.data);
-            get_random_secure_bytes(message.random);
-            int csid{};
-            all_suites::for_each([&](auto &&s) {
-                message.cipher_suites_[csid++] = s.suite();
+            Handshake &client_hello = w;
+            client_hello.msg_type = parameters::handshake_type::client_hello;
+
+            ClientHello &hello = w;
+            get_random_secure_bytes(hello.legacy_session_id.data);
+            get_random_secure_bytes(hello.random);
+
+            ube16 &ciphers_len = w;
+            ciphers_len = sizeof(ube16) * all_suites::size();
+            auto client_suites = w.next<ube16, all_suites::size()>();
+            all_suites::for_each([&, i = 0](auto &&s) mutable {
+                client_suites[i++] = s.suite();
             });
             // message.cipher_suites_[0] = CipherSuite::TLS_CHACHA20_POLY1305_SHA256;
 
-            Extension<server_name> sn;
-            sn.e.server_name_ = url;
-            message.extensions.add(sn);
-            message.extensions.add<supported_versions>();
-            message.extensions.add<signature_algorithms>();
-            message.extensions.add<supported_groups>();
-            auto &k = message.extensions.add<key_share>();
-            curve25519(priv, k.e.key);
-            Extension<padding> p;
-            message.extensions.add(p);
+            uint8_t &legacy_compression_methods_len = w;
+            legacy_compression_methods_len = 1;
+            uint8_t &legacy_compression_methods = w;
 
-            TLSPlaintext msg;
-            msg.type = parameters::content_type::handshake;
-            buffers.emplace_back(&msg, sizeof(msg));
+            ube16 &extensions_len = w;
+            auto exts_start = w.p;
 
-            Handshake client_hello;
-            client_hello.msg_type = parameters::handshake_type::client_hello;
-            buffers.emplace_back(&client_hello, sizeof(client_hello));
-            auto sz = message.make_buffers(buffers);
-            client_hello.length = sz;
-            msg.length = sz + sizeof(client_hello);
-            for (auto &&b : buffers | std::views::drop(1)) {
-                h.update(b);
-            }
-            co_await s.async_send(buffers, use_awaitable);
+            server_name &sn = w;
+            w += url;
+            sn.server_name_length += url.size();
+            sn.server_name_list_length += url.size();
+            sn.len += url.size();
+
+            supported_versions &sv = w;
+            signature_algorithms &sa = w;
+            supported_groups &sg = w;
+            ube16 &g = w;
+            g = group_name;
+            sg.length = sizeof(g);
+            sg.len += sizeof(g);
+
+            key_share<key_exchange::key_size> &k = w;
+            k.e.scheme = group_name;
+            get_random_secure_bytes(private_key.private_key);
+            private_key.public_key(k.e.key);
+
+            padding &p = w;
+            auto plen = 512 - (w.p - (uint8_t*)&client_hello);
+            w.p += plen;
+            p.len = plen;
+            extensions_len = w.p - exts_start;
+
+            client_hello.length = 508;
+            msg.length = 512;
+
+            co_await s.async_send(boost::asio::buffer(w.buf, 512+sizeof(msg)), use_awaitable);
 
             co_await buf.receive(s);
             read_handshake(buf.content_raw());
-            curve25519(priv, peer, shared);
+            auto shared = private_key.shared_secret(peer_public_key);
             co_await buf.receive(s);
             handshake.make_handshake_keys(shared, h);
             co_await handle_handshake_application_data(s);
@@ -518,7 +570,10 @@ struct tls {
                     throw std::runtime_error{"unknown group"};
                 }
                 uint16_t len = s.read();
-                memcpy(peer, s.p, len);
+                if (len != peer_public_key.size()) {
+                    throw std::runtime_error{"key size mismatch"};
+                }
+                memcpy(peer_public_key.data(), s.p, len);
                 s.step(len);
                 break;
             }

@@ -12,6 +12,11 @@ struct bigint : mpz_class {
     using mpz_class::operator=;
 
     bigint(const char *c) : mpz_class{c} {}
+    bigint(string_view sv) {
+        std::string s;
+        s += sv;
+        mpz_init_set_str(*this, s.data(), 0);
+    }
 
     operator mpz_ptr() { return __get_mp(); }
     operator mpz_srcptr() const { return __get_mp(); }

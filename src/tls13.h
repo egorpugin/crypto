@@ -120,46 +120,25 @@ enum class tls_version : uint16_t {
 };
 using ProtocolVersion = ube16;
 
-using extension_type_type = uint16;
-
-template <typename E>
-struct Extension {
-    extension_type_type extension_type = std::byteswap(E::extension_type);
-    length<2> length;
-    E e;
-
-    int make_buffers(auto &&vec) {
-        return make_buffers1(vec, *this, e);
-    }
-};
-
 struct server_name {
-    static constexpr uint16 extension_type = 0;
-
     enum NameType : uint8 { host_name = 0 };
 
-    length<2> server_name_list_length;
+    ube16 extension_type = ExtensionType::server_name;
+    ube16 len = sizeof(server_name_list_length) + sizeof(name_type) + sizeof(server_name_length);
+    ube16 server_name_list_length = sizeof(name_type) + sizeof(server_name_length);
     NameType name_type{host_name};
-    length<2> server_name_length;
-    string server_name_;
-
-    int make_buffers(auto &&vec) {
-        server_name_length = server_name_.size();
-        server_name_list_length = sizeof(name_type) + sizeof(server_name_length) + server_name_length;
-
-        vec.emplace_back(this, sizeof(*this) - sizeof(server_name_));
-        vec.emplace_back(server_name_.data(), server_name_.size());
-        return server_name_list_length + sizeof(server_name_list_length);
-    }
+    ube16 server_name_length;
 };
 struct supported_versions {
-    static constexpr extension_type_type extension_type = 43;
-
+    ube16 extension_type = ExtensionType::supported_versions;
+    ube16 len = sizeof(length) + sizeof(supported_version);
     length<1> length{sizeof(supported_version)};
     ProtocolVersion supported_version = tls_version::tls13; // tls13
 };
 struct signature_algorithms {
-    static constexpr extension_type_type extension_type = 13;
+    ube16 extension_type = ExtensionType::signature_algorithms;
+    ube16 len = sizeof(length) + sizeof(scheme);
+
     using SignatureScheme = uint16;
 /*
     ecdsa_secp256r1_sha256 = 0x0403,
@@ -181,133 +160,28 @@ struct signature_algorithms {
     //SignatureScheme scheme = 0x0304; // google works (passes more)
     //SignatureScheme scheme = 0x0104; // rsa_pkcs1_sha256
 };
-struct signature_algorithms_cert {
-    static constexpr extension_type_type extension_type = 50;
-    using SignatureScheme = uint16;
-/*
-    ecdsa_secp256r1_sha256 = 0x0403,
-    ecdsa_secp384r1_sha384 = 0x0503,
-    ecdsa_secp521r1_sha512 = 0x0603,
-
-    // EdDSA algorithms
-    ed25519 = 0x0807,
-    ed448 = 0x0808,
-*/
-
-    length<2> length{4 * sizeof(SignatureScheme)};
-    SignatureScheme scheme[4] = {
-        0x0708,0x0302,0x0304,0x0104
-    };
-};
 struct supported_groups {
-    static constexpr extension_type_type extension_type = 10;
-    using NamedGroup = uint16;
-
-    length<2> length{sizeof(NamedGroup) * 2};
-    NamedGroup scheme[2] = {
-        0x1D00, //x25519
-        //0x1600, //secp256k1
-        0x1700, //secp256r1
-        // gost
-        //0x3200, //GC512A
-        //0x3300, //GC512A
-        //0x3400, //GC512A
-        //0x3500, //GC512A
-        //0x3600, //GC512A
-    };
+    ube16 extension_type = ExtensionType::supported_groups;
+    ube16 len = sizeof(length);
+    ube16 length;
 };
+template <auto KeySize>
 struct key_share {
-    static constexpr extension_type_type extension_type = 51;
-    using NamedGroup = uint16;
+    ube16 extension_type = ExtensionType::key_share;
+    ube16 len = sizeof(length) + sizeof(e);
 
     struct entry {
-        NamedGroup scheme = 0x1D00;
-        ::crypto::tls13::length<2> length{sizeof(key)};
-        uint8 key[32];
+        ube16 scheme;
+        ::crypto::tls13::length<2> length{KeySize};
+        uint8 key[KeySize];
     };
 
     length<2> length{sizeof(e)}; // only on client
     entry e;
 };
-struct psk_key_exchange_modes {
-    static constexpr extension_type_type extension_type = 45;
-
-    length<1> length{sizeof(mode)};
-    parameters::psk_key_exchange_mode mode{parameters::psk_key_exchange_mode::psk_dhe_ke};
-};
 struct padding {
-    static constexpr extension_type_type extension_type = 21;
-
-    uint8_t padding_[512]{};
-
-    int make_buffers(auto &&vec) {
-        int sz{};
-        for (auto &&v : vec | std::views::drop(1)) {
-            sz += v.size();
-        }
-        vec.emplace_back(padding_, sizeof(*this) - sz);
-        return vec.back().size();
-    }
-};
-
-template <typename... Types>
-struct type_list {
-    using variant_type = variant<Types...>;
-    using variant_pointer_type = variant<Types*...>;
-
-    template <template <typename> typename T>
-    using wrap_list = type_list<T<Types>...>;
-
-    //static variant_type make_type(auto type) {
-        //variant_type v;
-    //}
-};
-
-template <template <typename> typename T, typename... Types>
-struct wrap_type_list {
-    using variant_type = variant<T<Types>...>;
-    using variant_pointer_type = variant<T<Types *>...>;
-
-    // static variant_type make_type(auto type) {
-    // variant_type v;
-    //}
-};
-
-using extension_list = type_list<
-    server_name,
-    padding,
-    supported_versions,
-    signature_algorithms,
-    signature_algorithms_cert,
-    supported_groups,
-    key_share,
-    psk_key_exchange_modes
->::wrap_list<Extension>;
-using extension_type = extension_list::variant_type;
-
-struct extensions_type {
-    length<2> length;
-    std::vector<extension_type> extensions;
-
-    int make_buffers(auto &&vec) {
-        vec.emplace_back(this, sizeof(length));
-        int sz{};
-        for (auto &&e : extensions) {
-            visit(e, [&](auto &&v) {
-                sz += v.make_buffers(vec);
-            });
-        }
-        length = sz;
-        return sz + sizeof(length);
-    }
-
-    template <typename T>
-    T &add() {
-        return std::get<Extension<T>>(extensions.emplace_back(Extension<T>{})).e;
-    }
-    void add(auto &&v) {
-        extensions.emplace_back(v);
-    }
+    ube16 extension_type = ExtensionType::padding;
+    ube16 len;
 };
 
 struct Alert {
@@ -326,8 +200,6 @@ struct ServerHello {
     CipherSuite cipher_suite;
     uint8 legacy_compression_method;
 };
-
-using content_type = std::variant<Alert, ServerHello>;
 
 int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
     auto sz_obj = sizeof(obj) - sizeof(variable_field);
@@ -350,7 +222,7 @@ struct TLSPlaintext {
     ProtocolVersion legacy_record_version = tls_version::tls12;
     length<2> length;
 
-    size_t size() const { return (int)length; }
+    size_t size() const { return (size_t)length; }
 };
 
 struct TLSCiphertext {
@@ -372,20 +244,12 @@ struct Handshake {
     };*/
 };
 
-template <auto NumberOfCipherSuites>
 struct ClientHello {
     static constexpr auto message_type = parameters::handshake_type::client_hello;
 
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random{};
     repeated<uint8, 32, 0, 32> legacy_session_id;//<0..32>;
-    cipher_suite<NumberOfCipherSuites> cipher_suites_;
-    repeated<uint8, 1, 1, (1 << 8) - 1> legacy_compression_methods{}; //<1..2^8-1>;
-    extensions_type extensions;
-
-    int make_buffers(auto &&vec) {
-        return make_buffers1(vec, *this, extensions);
-    }
 };
 
 enum class CertificateType : uint8_t {

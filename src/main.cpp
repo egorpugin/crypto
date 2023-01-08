@@ -312,17 +312,17 @@ void test_25519() {
     {
         auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
         {
-            ec::weierstrass c{
-                "0xc1c627e1638fdc8e24299bb041e4e23af4bb5424",
-                "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab",
-                "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"
+            ec::parameters<string_view> p{
+                .p = "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"sv,
+                .a = "0xc1c627e1638fdc8e24299bb041e4e23af4bb5424"sv,
+                .b = "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab"sv,
+                .G{
+                    "0x010aff82b3ac72569ae645af3b527be133442131"sv,
+                    "0x46b8ec1e6d71e5ecb549614887d57a287df573cc"sv,
+                }
             };
-            ec::point p{
-                c,
-                "0x010aff82b3ac72569ae645af3b527be133442131",
-                "0x46b8ec1e6d71e5ecb549614887d57a287df573cc"
-            };
-            auto r = m * p;
+            auto c = p.curve();
+            auto r = m * c.G;
             cmp_base(r.x, "0x41da1a8f74ff8d3f1ce20ef3e9d8865c96014fe3"_bi);
             cmp_base(r.y, "0x73ca143c9badedf2d9d3c7573307115ccfe04f13"_bi);
         }
@@ -332,7 +332,7 @@ void test_25519() {
                 "0x01914dc5f39d6da3b1fa841fdc891674fa439bd4",
                 "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9d"
             };
-            ec::point p{
+            ec::ec_field_point p{
                 c,
                 "0x70ee7b94f7d52ed6b1a1d3201e2d85d3b82a9810",
                 "0x0b23823cd6dc3df20979373e5662f7083f6aa56f"
@@ -352,7 +352,7 @@ void test_25519() {
                 "0x5fbff498aa938ce739b8e022fbafef40563f6e6a3472fc2a514c0ce9dae23b7e",
                 "0x8000000000000000000000000000000000000000000000000000000000000431"
             };
-            ec::point p{
+            ec::ec_field_point p{
                 c,
                 "2",
                 "0x8e2a8a0e65147d4bd6316030e16d19c85c97f0a9ca267122b96abbcea7e8fc8"
@@ -370,7 +370,7 @@ void test_25519() {
                 "0x1cff0806a31116da29d8cfa54e57eb748bc5f377e49400fdd788b649eca1ac4361834013b2ad7322480a89ca58e0cf74bc9e540c2add6897fad0a3084f302adc",
                 "0x4531acd1fe0023c7550d267b6b2fee80922b14b2ffb90f04d4eb7c09b5d2d15df1d852741af4704a0458047e80e4546d35b8336fac224dd81664bbf528be6373"
             };
-            ec::point p{
+            ec::ec_field_point p{
                 c,
                 "0x24d19cc64572ee30f396bf6ebbfd7a6c5213b3b3d7057cc825f91093a68cd762fd60611262cd838dc6b60aa7eee804e28bc849977fac33b4b530f1b120248a9a",
                 "0x2bb312a43bd2ce6e0d020613c857acddcfbf061e91e5f2c3f32447c259f39b2c83ab156d77f1496bf7eb3351e1ee4e43dc1a18b91b24640b6dbb92cb1add371e"
@@ -455,8 +455,8 @@ void test_tls() {
 
     //run("software-network.org");
     //run("letsencrypt.org");
-    run("example.com");
-    // run("google.com");
+    //run("example.com");
+     run("google.com");
     // run("gosuslugi.ru");
     // run("github.com");
     // run("gmail.com");
@@ -473,7 +473,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    test_25519();
+    //test_25519();
     //test_hmac();
     //test_chacha20();
     test_tls();

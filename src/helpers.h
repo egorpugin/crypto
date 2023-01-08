@@ -192,6 +192,12 @@ struct bigendian_unsigned {
         *this = std::to_underlying(v);
     }
 
+    auto &operator+=(auto v) {
+        uint64_t x = *this;
+        x += v;
+        *this = x;
+        return *this;
+    }
     void operator=(uint32_t v) requires (Bytes == 3) {
         *(uint32_t*)data |= std::byteswap(v << 8);
     }
