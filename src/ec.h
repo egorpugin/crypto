@@ -133,14 +133,13 @@ struct parameters {
 
 template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy>
 struct secp {
-    static inline const auto parameters =
-        ec::parameters<string_view>{.p = P,
-                                .a = A,
-                                .b = B,
-                                .G = {
-                                    Gx,
-                                    Gy,
-                                }};
+    static inline const auto parameters = ec::parameters<string_view>{.p = P,
+                                                                      .a = A,
+                                                                      .b = B,
+                                                                      .G = {
+                                                                          Gx,
+                                                                          Gy,
+                                                                      }};
 
     static inline constexpr auto point_size_bytes = ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
 

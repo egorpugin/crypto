@@ -76,9 +76,8 @@ struct tls {
     using cipher = suite_type::cipher_type;
 
     using all_key_exchanges = key_exchanges<
-        pair<curve25519,parameters::supported_groups::x25519>, // ok
-        pair<ec::secp256r1,parameters::supported_groups::secp256r1>, // ok
-        pair<ec::secp384r1,parameters::supported_groups::secp384r1> // many sites do not support
+        pair<curve25519,parameters::supported_groups::x25519>,
+        pair<ec::secp256r1,parameters::supported_groups::secp256r1>
     >;
 
     using hash = suite_type::hash_type;
