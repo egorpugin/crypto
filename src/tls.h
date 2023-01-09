@@ -65,16 +65,16 @@ struct tls {
     };
 
     using all_suites = suites<
-        suite_<aes_gcm<128>,sha2<256>,tls13::CipherSuite::TLS_AES_128_GCM_SHA256>
-        //suite_<aes_gcm<256>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384>
+        suite_<aes_gcm<128>,sha2<256>,tls13::CipherSuite::TLS_AES_128_GCM_SHA256> // ok
+        //suite_<aes_gcm<256>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384> // ok
     >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;
 
     using all_key_exchanges = key_exchanges<
-        pair<curve25519,parameters::supported_groups::x25519>,
-        pair<ec::secp256r1,parameters::supported_groups::secp256r1>,
-        pair<ec::secp384r1,parameters::supported_groups::secp384r1>
+        pair<curve25519,parameters::supported_groups::x25519>, // ok
+        pair<ec::secp256r1,parameters::supported_groups::secp256r1>, // ok
+        pair<ec::secp384r1,parameters::supported_groups::secp384r1> // many sites do not support
     >;
 
     using hash = suite_type::hash_type;
@@ -145,13 +145,13 @@ struct tls {
             return std::span<uint8_t>(data.data() + sizeof(header_type), header().size());
         }
         void handle_alert() {
-            handle_alert(content<tls13::Alert>());
+            handle_alert(content<tls13::alert>());
         }
-        void handle_alert(tls13::Alert &a) {
-            if (a.level == tls13::Alert::level_type::fatal) {
+        void handle_alert(tls13::alert &a) {
+            if (a.level == tls13::alert::level_type::fatal) {
                 throw std::runtime_error{format("fatal tls error: {} ({})", (string)NAMEOF_ENUM(a.description),
                                                 std::to_underlying(a.description))};
-            } else if (a.level == tls13::Alert::level_type::warning) {
+            } else if (a.level == tls13::alert::level_type::warning) {
                 throw std::runtime_error{format("tls warning: {} ({})", (string)NAMEOF_ENUM(a.description),
                                                 std::to_underlying(a.description))};
             }
@@ -466,7 +466,7 @@ struct tls {
         if (dec.back() != (!auth_ok ? (uint8_t)parameters::content_type::handshake
                                     : (uint8_t)parameters::content_type::application_data)) {
             if (dec.back() == (uint8_t)parameters::content_type::alert) {
-                buf.handle_alert(*(tls13::Alert *)dec.data());
+                buf.handle_alert(*(tls13::alert *)dec.data());
             }
             if (dec.back() == (uint8_t)parameters::content_type::handshake) {
                 dec.resize(dec.size() - 1);

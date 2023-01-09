@@ -99,16 +99,14 @@ struct signature_algorithms {
 /*
     ecdsa_secp256r1_sha256 = 0x0403,
     ecdsa_secp384r1_sha384 = 0x0503,
-    ecdsa_secp521r1_sha512 = 0x0603,
 
     // EdDSA algorithms
     ed25519 = 0x0807,
-    ed448 = 0x0808,
 */
 
-    length<2> length{8 * sizeof(SignatureScheme)};
-    SignatureScheme scheme[8] = {
-        0x0708, 0x0302, 0x0304, 0x0305, 0x0306, 0x0104,
+    length<2> length{7 * sizeof(SignatureScheme)};
+    SignatureScheme scheme[7] = {
+        0x0708, 0x0302, 0x0304, 0x0305, 0x0104,
         0x0408, 0x0908
     };
     //SignatureScheme scheme = 0x0302; // ecdsa_sha1
@@ -140,7 +138,7 @@ struct padding {
     ube16 len;
 };
 
-struct Alert {
+struct alert {
     enum class level_type : uint8_t { warning = 1, fatal = 2 };
 
     level_type level;
@@ -148,8 +146,6 @@ struct Alert {
 };
 
 struct ServerHello {
-    static constexpr auto message_type = parameters::handshake_type::server_hello;
-
     ProtocolVersion legacy_version = tls_version::tls12;
     Random random;
     uint8_t legacy_session_id_len{32};
@@ -157,22 +153,6 @@ struct ServerHello {
     CipherSuite cipher_suite;
     uint8_t legacy_compression_method;
 };
-
-int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
-    auto sz_obj = sizeof(obj) - sizeof(variable_field);
-    vec.emplace_back(&obj, sz_obj);
-    int variable_field_size{};
-    if constexpr (requires { variable_field.make_buffers(vec); }) {
-        variable_field_size = variable_field.make_buffers(vec);
-    } else {
-        variable_field_size = sizeof(variable_field);
-        vec.emplace_back(&variable_field, variable_field_size);
-    }
-    if constexpr (requires { obj.length; }) {
-        obj.length = variable_field_size;
-    }
-    return sz_obj + variable_field_size;
-}
 
 struct TLSPlaintext {
     parameters::content_type type;
@@ -189,8 +169,6 @@ struct TLSCiphertext {
 };
 
 struct Handshake {
-    static constexpr auto content_type = parameters::content_type::handshake;
-
     parameters::handshake_type msg_type;
     length<3> length;
 
@@ -202,8 +180,6 @@ struct Handshake {
 };
 
 struct ClientHello {
-    static constexpr auto message_type = parameters::handshake_type::client_hello;
-
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random{};
     uint8_t legacy_session_id_len{32};

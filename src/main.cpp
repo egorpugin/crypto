@@ -6,7 +6,6 @@
 #ifdef _MSC_VER
 #include "tls.h"
 #endif
-#include "x25519.h"
 #include "random.h"
 #include "ec.h"
 #include "hmac.h"
@@ -306,7 +305,7 @@ void test_sm4() {
     }
 }
 
-void test_25519() {
+void test_ec() {
     using namespace crypto;
 
     //std::cout << std::hex;
@@ -383,23 +382,6 @@ void test_25519() {
             cmp_base(r.y, "0x37c7c90cd40b0f5621dc3ac1b751cfa0e2634fa0503b3d52639f5d7fb72afd61ea199441d943ffe7f0c70a2759a3cdb84c114e1f9339fdf27f35eca93677beec"_bi);
         }
     }
-
-    return;
-
-    //auto r = m * P;
-    //std::cout << r << "\n";
-
-    x25519 x;
-    auto [prk, pubk] = x.keygen();
-
-    std::cout << prk << "\n";
-    std::cout << pubk << "\n";
-
-    if (prk == pubk) {
-        std::cout << "ok\n";
-    }
-    int a = 5;
-    a++;
 }
 
 void test_hmac() {
@@ -480,7 +462,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    //test_25519();
+    //test_ec();
     //test_hmac();
     //test_chacha20();
     test_tls();
