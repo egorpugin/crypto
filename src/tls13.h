@@ -26,20 +26,18 @@ using ube16 = bigendian_unsigned<2>;
 
 using Random = std::array<uint8_t,32>;
 
+// selected ciphers:
+// aes+gcm, chacha20+poly1305, russian gost, chineese sm4
+// no ccm when gcm is present
 enum class CipherSuite : uint16_t {
     TLS_AES_128_GCM_SHA256 = 0x1301,
     TLS_AES_256_GCM_SHA384 = 0x1302,
     TLS_CHACHA20_POLY1305_SHA256 = 0x1303, // todo
-    //TLS_AES_128_CCM_SHA256 = 0x1304, // no
-    //TLS_AES_128_CCM_8_SHA256 = 0x1305, // no
 
     TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103, // todo
-    //TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104, // no
     TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105, // todo
-    //TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106, // no
 
     TLS_SM4_GCM_SM3 = 0x00C6, // todo
-    //TLS_SM4_CCM_SM3 = 0x00C7, // no
 };
 
 enum class ExtensionType : uint16_t {

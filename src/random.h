@@ -8,13 +8,6 @@
 
 namespace crypto {
 
-/*auto get_random_secure_bytes1(unsigned n) {
-    HCRYPTPROV hCryptProv;
-    std::vector<uint8_t> v;
-    v.resize(n);
-    CryptGenRandom(hCryptProv, 32, v.data());
-    return v;
-}*/
 auto get_random_secure_bytes(unsigned n) {
     std::vector<uint8_t> v;
     v.resize(n);
