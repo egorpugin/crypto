@@ -11,6 +11,7 @@
 #include <boost/asio.hpp>
 #include <nameof.hpp>
 
+#include <fstream>
 #include <iostream>
 #include <map>
 
@@ -73,23 +74,17 @@ struct tls {
     using all_key_exchanges = key_exchanges<
         pair<curve25519,parameters::supported_groups::x25519>,
         pair<ec::secp256r1,parameters::supported_groups::secp256r1>,
-        pair<ec::secp384r1,parameters::supported_groups::secp384r1>,
-        pair<ec::secp521r1,parameters::supported_groups::secp521r1>
+        pair<ec::secp384r1,parameters::supported_groups::secp384r1>
     >;
 
     using hash = suite_type::hash_type;
-    using key_exchange = curve25519;
-    static inline constexpr auto group_name = parameters::supported_groups::x25519;
+    using key_exchange = ec::secp256r1;
+    static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
 
-    struct status_ {
-        struct empty{};
-        struct handshake{};
-        struct auth_ok{};
-    };
-    //using status_type = std::variant<status_::empty,status_::handshake>;
-
-    std::string url;
+    std::string url_internal;
     boost::asio::io_context ctx;
+    boost::asio::ip::tcp::socket s{ctx};
+
     bool auth_ok{};
     hash h;
     key_exchange private_key;
@@ -102,18 +97,18 @@ struct tls {
         bool crypted_exchange{};
 
         buf_type() {
-            data.resize(10000);
+            data.resize(400000);
         }
         boost::asio::awaitable<void> receive(auto &s) {
             using boost::asio::use_awaitable;
 
             auto &h = header();
-            co_await s.async_receive(boost::asio::buffer(&h, sizeof(header_type)), use_awaitable);
+            co_await async_read(s, boost::asio::buffer(&h, sizeof(header_type)), use_awaitable);
             if (h.size() > 40'000) {
                 throw std::runtime_error{"too big tls packet"};
             }
             data.resize(sizeof(header_type) + h.size());
-            co_await s.async_receive(boost::asio::buffer(data.data() + sizeof(header_type), h.size()), use_awaitable);
+            auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), h.size()), use_awaitable);
 
             switch (h.type) {
             case parameters::content_type::alert:
@@ -163,6 +158,9 @@ struct tls {
         }
     };
     buf_type buf;
+
+    struct tls_data {
+    };
 
     template <auto Peer, auto Type>
     struct peer_data {
@@ -262,7 +260,7 @@ struct tls {
         }
         boost::asio::awaitable<void> receive(auto &&s, auto &&transport) {
             auto app = [&]() -> boost::asio::awaitable<size_t> {
-                auto dec = co_await transport.receive_tls_message(s);
+                auto dec = co_await transport.receive_tls_message();
                 response.append((char *)dec.data(), dec.size());
                 co_return dec.size();
             };
@@ -377,7 +375,7 @@ struct tls {
         }
     };
 
-    tls(auto &&url) : url{url} {
+    tls(auto &&url) : url_internal{url} {
     }
     void run() {
         boost::asio::co_spawn(ctx, run1(), [](auto eptr) {
@@ -399,44 +397,67 @@ struct tls {
         return dec;
     }
     boost::asio::awaitable<void> run1() {
+        auto m = co_await open_url(url_internal);
+        std::ofstream{"d:/dev/crypto/.sw/" + url_internal + ".txt"} << m.response;
+        int i = 0;
+        while (!m.headers["Location"].empty()) {
+            string url{m.headers["Location"].begin(),m.headers["Location"].end()};
+            m = co_await open_url(url);
+            std::ofstream{"d:/dev/crypto/.sw/" + url_internal + "." + std::to_string(++i) + ".txt"} << m.response;
+        }
+    }
+    boost::asio::awaitable<http_message> open_url(auto &&url) {
         using namespace tls13;
         using boost::asio::use_awaitable;
         auto ex = co_await boost::asio::this_coro::executor;
 
+        buf.crypted_exchange = false;
+        auth_ok = false;
+        s.close();
+        h = hash{};
+        handshake = decltype(handshake){};
+        traffic = decltype(traffic){};
+
+        string host = url;
+        if (host.starts_with("http://")) {
+            host = host.substr(7);
+        }
+        if (host.starts_with("https://")) {
+            host = host.substr(8);
+        }
+        host = host.substr(0, host.find('/'));
+
         boost::asio::ip::tcp::resolver r{ex};
-        auto result = co_await r.async_resolve({url,url=="localhost"s?"11111":"443"}, use_awaitable);
+        auto result = co_await r.async_resolve({host, host == "localhost"sv ? "11111" : "443"}, use_awaitable);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
-        boost::asio::ip::tcp::socket s{ex};
         co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
 
         auto remote_ep = s.remote_endpoint();
         auto remote_ad = remote_ep.address();
         std::string ss = remote_ad.to_string();
-        std::cout << ss << "\n";
+        // std::cout << ss << "\n";
 
-        co_await init_ssl(s);
+        co_await init_ssl(host);
 
         string req = "GET / HTTP/1.1\r\n";
         req += "Host: "s + url + "\r\n";
-        //req += "Transfer-Encoding: chunked\r\n";
+        // req += "Transfer-Encoding: chunked\r\n";
         req += "\r\n";
-        auto m = co_await http_query(s, req);
-
-        int a = 5;
-        a++;
+        co_return co_await http_query(req);
     }
-    boost::asio::awaitable<http_message> http_query(auto &s, auto &&q) {
-        co_await send_message(s, q);
-        co_return co_await receive_http_message(s);
+    boost::asio::awaitable<http_message> http_query(auto &&q) {
+        co_await send_message(q);
+        co_return co_await receive_http_message();
     }
-    boost::asio::awaitable<http_message> receive_http_message(auto &s) {
+    boost::asio::awaitable<http_message> receive_http_message() {
         http_message m;
         co_await m.receive(s, *this);
         co_return m;
     }
-    boost::asio::awaitable<std::string> receive_tls_message(auto &s) {
+
+    boost::asio::awaitable<std::string> receive_tls_message() {
         co_await buf.receive(s);
         auto dec = decrypt(traffic);
         while (dec.back() == 0) {
@@ -450,7 +471,7 @@ struct tls {
             if (dec.back() == (uint8_t)parameters::content_type::handshake) {
                 dec.resize(dec.size() - 1);
                 read_handshake(dec);
-                co_return co_await receive_tls_message(s);
+                co_return co_await receive_tls_message();
             } else {
                 throw std::runtime_error{"bad content type"};
             }
@@ -458,7 +479,7 @@ struct tls {
         dec.resize(dec.size() - 1);
         co_return dec;
     }
-    boost::asio::awaitable<void> send_message(auto &s, std::string buf) {
+    boost::asio::awaitable<void> send_message(std::string buf) {
         using namespace tls13;
         using boost::asio::use_awaitable;
 
@@ -475,7 +496,7 @@ struct tls {
         buffers.emplace_back(out.data(), out.size());
         co_await s.async_send(buffers, use_awaitable);
     }
-    boost::asio::awaitable<void> init_ssl(auto &s) {
+    boost::asio::awaitable<void> init_ssl(const string &url) {
         using namespace tls13;
         using boost::asio::use_awaitable;
 
@@ -488,7 +509,7 @@ struct tls {
             client_hello.msg_type = parameters::handshake_type::client_hello;
 
             ClientHello &hello = w;
-            get_random_secure_bytes(hello.legacy_session_id.data);
+            get_random_secure_bytes(hello.legacy_session_id);
             get_random_secure_bytes(hello.random);
 
             ube16 &ciphers_len = w;
@@ -506,11 +527,13 @@ struct tls {
             ube16 &extensions_len = w;
             auto exts_start = w.p;
 
-            server_name &sn = w;
-            w += url;
-            sn.server_name_length += url.size();
-            sn.server_name_list_length += url.size();
-            sn.len += url.size();
+            if (!url.empty()) {
+                server_name &sn = w;
+                w += url;
+                sn.server_name_length += url.size();
+                sn.server_name_list_length += url.size();
+                sn.len += url.size();
+            }
 
             supported_versions &sv = w;
             signature_algorithms &sa = w;
@@ -543,7 +566,7 @@ struct tls {
             auto shared = private_key.shared_secret(peer_public_key);
             co_await buf.receive(s);
             handshake.make_handshake_keys(shared, h);
-            co_await handle_handshake_application_data(s);
+            co_await handle_handshake_application_data();
             traffic = handshake.make_master_keys(h);
         }
 
@@ -674,11 +697,11 @@ struct tls {
                 break;
             }
             case parameters::handshake_type::new_session_ticket: {
-                uint32 ticket_lifetime = s.read();
-                uint32 ticket_age_add = s.read();
-                uint8 len = s.read();
+                uint32_t ticket_lifetime = s.read();
+                uint32_t ticket_age_add = s.read();
+                uint8_t len = s.read();
                 auto ticket_nonce = s.span(len);
-                uint16 len2 = s.read();
+                uint16_t len2 = s.read();
                 auto ticket = s.span(len2);
                 read_extensions(s);
                 break;
@@ -701,7 +724,7 @@ struct tls {
             this->h.update((uint8_t *)&h, (uint32_t)h.length + sizeof(h));
         }
     }
-    boost::asio::awaitable<void> handle_handshake_application_data(auto &s) {
+    boost::asio::awaitable<void> handle_handshake_application_data() {
         auto d = [&]() {
             auto dec = decrypt(handshake);
             while (dec.back() == 0) {

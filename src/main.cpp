@@ -52,7 +52,9 @@ auto cmp_base = [](auto &&left, auto &&right) {
     } __;
     ++total;
     success += !!r;
-    std::cout << (r ? "ok" : "false") << "\n";
+    if (!r) {
+        std::cout << "false" << "\n";
+    }
 };
 auto cmp_l = [](auto &&left, auto &&right) {
     return cmp_base(memcmp(left, right, 16), 0);
@@ -443,28 +445,33 @@ void test_tls() {
     using namespace crypto;
 
     auto run = [](auto &&url) {
-        std::cout << "connecting to " << url << "\n";
+        //std::cout << "connecting to " << url << "\n";
         try {
             tls t{url};
             t.run();
-            std::cout << "ok" << "\n\n";
+            //std::cout << "ok" << "\n\n";
+            cmp_base(0, 0);
         } catch (std::exception &e) {
+            std::cout << "connecting to " << url << "\n";
             std::cerr << e.what() << "\n\n";
+            cmp_base(0, 1);
         }
     };
 
-    //run("software-network.org");
-    //run("letsencrypt.org");
-    //run("example.com");
-    //run("google.com");
-    //run("gosuslugi.ru");
-    //run("github.com");
-    //run("gmail.com");
-    //run("youtube.com");
-    //run("twitch.tv");
-    //run("tls13.akamai.io");
-    //run("tls13.1d.pw");
-    run("localhost");
+    run("software-network.org");
+    run("letsencrypt.org");
+    run("example.com");
+    run("google.com");
+    run("gosuslugi.ru"); // does not support tls13
+    run("www.sberbank.ru"); // does not support tls13
+    run("nalog.gov.ru");
+    run("github.com");
+    run("gmail.com");
+    run("youtube.com");
+    run("twitch.tv");
+    run("tls13.akamai.io");
+    run("tls13.1d.pw");
+    //run("localhost");
 }
 #endif
 

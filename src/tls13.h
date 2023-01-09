@@ -19,74 +19,30 @@ namespace crypto::tls13 {
 
 #pragma pack(push, 1)
 
-using uint8 = uint8_t;
-using uint16 = uint16_t;
-using uint32 = uint32_t;
-using uint64 = uint64_t;
-
 template <auto Bytes>
 using length = bigendian_unsigned<Bytes>;
 
 using ube16 = bigendian_unsigned<2>;
 
-template <typename T, auto N, auto MinDataLength, auto MaxDataLength>
-struct repeated {
-    static consteval unsigned log2floor(auto x) {
-        return x == 1 ? 0 : 1 + log2floor(x >> 1);
-    }
-    static consteval unsigned length_size() {
-        auto bits = log2floor(MaxDataLength) + 1;
-        auto bytes = bits / 8;
-        if (!bytes) {
-            bytes = 1;
-        }
-        return bytes;
-    }
+using Random = std::array<uint8_t,32>;
 
-    length<length_size()> length{sizeof(data)};
-    T data[N]{};
+enum class CipherSuite : uint16_t {
+    TLS_AES_128_GCM_SHA256 = 0x1301,
+    TLS_AES_256_GCM_SHA384 = 0x1302,
+    TLS_CHACHA20_POLY1305_SHA256 = 0x1303, // todo
+    //TLS_AES_128_CCM_SHA256 = 0x1304, // no
+    //TLS_AES_128_CCM_8_SHA256 = 0x1305, // no
 
-    repeated() = default;
-    repeated(T) = delete;
-    void operator=(auto) = delete;
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103, // todo
+    //TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104, // no
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105, // todo
+    //TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106, // no
 
-    T &operator[](int i){return data[i];}
+    TLS_SM4_GCM_SM3 = 0x00C6, // todo
+    //TLS_SM4_CCM_SM3 = 0x00C7, // no
 };
 
-using Random = std::array<uint8,32>;
-
-struct CipherSuite {
-    enum : uint16 {
-        TLS_AES_128_GCM_SHA256 = 0x1301,
-        TLS_AES_256_GCM_SHA384 = 0x1302,
-        TLS_CHACHA20_POLY1305_SHA256 = 0x1303,
-        TLS_AES_128_CCM_SHA256 = 0x1304,
-        TLS_AES_128_CCM_8_SHA256 = 0x1305,
-
-        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103,
-        TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104,
-        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105,
-        TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
-
-        TLS_SM4_GCM_SM3 = 0x00C6,
-        TLS_SM4_CCM_SM3 = 0x00C7,
-    };
-
-    uint16 suite;
-
-    constexpr CipherSuite() = default;
-    constexpr CipherSuite(uint16_t v) {
-        suite = std::byteswap(v);
-    }
-    constexpr auto &operator=(uint16_t v) {
-        suite = std::byteswap(v);
-        return *this;
-    }
-};
-template <auto N>
-using cipher_suite = repeated<CipherSuite, N, 2, (1<<16)-2>;
-
-enum class ExtensionType : uint16 {
+enum class ExtensionType : uint16_t {
     server_name = 0,
     supported_versions = 43,
     signature_algorithms = 13,
@@ -121,7 +77,7 @@ enum class tls_version : uint16_t {
 using ProtocolVersion = ube16;
 
 struct server_name {
-    enum NameType : uint8 { host_name = 0 };
+    enum NameType : uint8_t { host_name = 0 };
 
     ube16 extension_type = ExtensionType::server_name;
     ube16 len = sizeof(server_name_list_length) + sizeof(name_type) + sizeof(server_name_length);
@@ -139,7 +95,7 @@ struct signature_algorithms {
     ube16 extension_type = ExtensionType::signature_algorithms;
     ube16 len = sizeof(length) + sizeof(scheme);
 
-    using SignatureScheme = uint16;
+    using SignatureScheme = uint16_t;
 /*
     ecdsa_secp256r1_sha256 = 0x0403,
     ecdsa_secp384r1_sha384 = 0x0503,
@@ -173,10 +129,10 @@ struct key_share {
     struct entry {
         ube16 scheme;
         ::crypto::tls13::length<2> length{KeySize};
-        uint8 key[KeySize];
+        uint8_t key[KeySize];
     };
 
-    length<2> length{sizeof(e)}; // only on client
+    length<2> length{sizeof(e)}; // client only
     entry e;
 };
 struct padding {
@@ -185,7 +141,7 @@ struct padding {
 };
 
 struct Alert {
-    enum class level_type : uint8 { warning = 1, fatal = 2 };
+    enum class level_type : uint8_t { warning = 1, fatal = 2 };
 
     level_type level;
     parameters::alerts description;
@@ -196,9 +152,10 @@ struct ServerHello {
 
     ProtocolVersion legacy_version = tls_version::tls12;
     Random random;
-    repeated<uint8, 32, 0, 32> legacy_session_id; //<0..32>;
+    uint8_t legacy_session_id_len{32};
+    uint8_t legacy_session_id[32];
     CipherSuite cipher_suite;
-    uint8 legacy_compression_method;
+    uint8_t legacy_compression_method;
 };
 
 int make_buffers1(auto &&vec, auto &&obj, auto &&variable_field) {
@@ -228,7 +185,7 @@ struct TLSPlaintext {
 struct TLSCiphertext {
     parameters::content_type opaque_type;
     ProtocolVersion legacy_record_version = tls_version::tls12;
-    uint16 length;
+    uint16_t length;
 };
 
 struct Handshake {
@@ -249,7 +206,8 @@ struct ClientHello {
 
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random{};
-    repeated<uint8, 32, 0, 32> legacy_session_id;//<0..32>;
+    uint8_t legacy_session_id_len{32};
+    uint8_t legacy_session_id[32];
 };
 
 enum class CertificateType : uint8_t {
@@ -258,7 +216,7 @@ enum class CertificateType : uint8_t {
     RawPublicKey = 2,
 };
 
-enum class KeyUpdateRequest : uint8 {
+enum class KeyUpdateRequest : uint8_t {
     update_not_requested = 0,
     update_requested = 1,
 };
