@@ -24,6 +24,10 @@
 
 namespace crypto {
 
+//<typename RawSocket> // tcp or udp
+struct tls_socket {
+};
+
 /*
  * some info:
  * tls packet size limit = 32K
@@ -102,14 +106,15 @@ struct tls {
         boost::asio::awaitable<void> receive(auto &s) {
             using boost::asio::use_awaitable;
 
-            auto &h = header();
-            co_await async_read(s, boost::asio::buffer(&h, sizeof(header_type)), use_awaitable);
-            if (h.size() > 40'000) {
+            co_await async_read(s, boost::asio::buffer(&header(), sizeof(header_type)), use_awaitable);
+            if (header().size() > 40'000) {
                 throw std::runtime_error{"too big tls packet"};
             }
-            data.resize(sizeof(header_type) + h.size());
-            auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), h.size()), use_awaitable);
+            data.resize(sizeof(header_type) + header().size());
+            auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), header().size()), use_awaitable);
 
+            // after we get stable memory
+            auto &h = header();
             switch (h.type) {
             case parameters::content_type::alert:
                 handle_alert();
@@ -441,12 +446,14 @@ struct tls {
 
         co_await init_ssl(host);
 
+        // http layer
         string req = "GET / HTTP/1.1\r\n";
         req += "Host: "s + url + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
         req += "\r\n";
         co_return co_await http_query(req);
     }
+    // http layer
     boost::asio::awaitable<http_message> http_query(auto &&q) {
         co_await send_message(q);
         co_return co_await receive_http_message();
@@ -457,6 +464,7 @@ struct tls {
         co_return m;
     }
 
+    // tls layer
     boost::asio::awaitable<std::string> receive_tls_message() {
         co_await buf.receive(s);
         auto dec = decrypt(traffic);
