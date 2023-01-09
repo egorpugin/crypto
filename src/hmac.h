@@ -10,12 +10,6 @@ constexpr auto hmac_b(sha2_base<Settings...>) {
     return sha2_base<Settings...>::small_sha ? 64 : 128;
 }
 
-// not available for sha3?
-/*template <auto DigestSizeBits>
-constexpr auto hmac_b(sha3<DigestSizeBits>) {
-    return sha2<Settings...>::small_sha ? 64 : 128;
-}*/
-
 // https://en.wikipedia.org/wiki/HMAC
 template <typename Hash>
 auto hmac(bytes_concept key, bytes_concept message) {
@@ -28,7 +22,7 @@ auto hmac(bytes_concept key, bytes_concept message) {
         return h.digest();
     };
 
-    std::array<uint8_t, b> k0{};
+    array<b> k0{};
     if (key.size() <= b) {
         memcpy(k0.data(), key.data(), key.size());
     } else {
