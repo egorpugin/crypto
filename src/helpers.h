@@ -78,6 +78,8 @@ struct bytes_concept {
         p = (uint8_t *)s.data();
         sz = s.size();
     }
+    auto begin() const { return p; }
+    auto end() const { return p+sz; }
     auto data() const { return p; }
     auto size() const { return sz; }
     auto empty() const { return size() == 0; }

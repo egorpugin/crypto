@@ -429,7 +429,7 @@ void test_tls() {
     auto run = [](auto &&url) {
         //std::cout << "connecting to " << url << "\n";
         try {
-            tls t{url};
+            http_client t{url};
             t.run();
             //std::cout << "ok" << "\n\n";
             cmp_base(0, 0);
