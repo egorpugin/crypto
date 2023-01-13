@@ -24,7 +24,7 @@ auto to_string_raw = [](auto &&d) {
         s << std::setw(2) << (unsigned int)v;
     }
     // printf("%s\n", s.str().c_str());
-    std::cout << s.str() << "\n";
+    std::cerr << s.str() << "\n";
     return s.str();
 };
 auto to_string = [](auto &&sha) {
@@ -43,7 +43,7 @@ auto cmp_base = [](auto &&left, auto &&right) {
     static int total, success;
     static struct stats {
         ~stats() {
-            std::cout << "\ntotal:  " << total << "\n"
+            std::cerr << "\ntotal:  " << total << "\n"
                 << "passed: " << success << "\n"
                 << "failed: " << total - success << "\n"
                 ;
@@ -52,7 +52,7 @@ auto cmp_base = [](auto &&left, auto &&right) {
     ++total;
     success += !!r;
     if (!r) {
-        std::cout << "false" << "\n";
+        std::cerr << "false" << "\n";
     }
 };
 auto cmp_l = [](auto &&left, auto &&right) {

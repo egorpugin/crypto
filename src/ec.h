@@ -57,7 +57,7 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
-    ec_field_point operator+(ec_field_point q) {
+    ec_field_point operator+(const ec_field_point &q) {
         if (*this == 0) {
             return q;
         }

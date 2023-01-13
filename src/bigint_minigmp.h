@@ -11,7 +11,16 @@ struct bigint {
     mpz_t p;
 
     bigint() {
-        mpz_init(*this);
+        mpz_init_set_ui(*this, 0);
+    }
+    bigint(uint64_t v) {
+        mpz_init_set_ui(*this, v);
+    }
+    bigint(int64_t v) {
+        mpz_init_set_si(*this, v);
+    }
+    bigint(int v) {
+        mpz_init_set_si(*this, v);
     }
     bigint(const char *c) {
         mpz_init_set_str(*this, c, 0);
@@ -20,6 +29,19 @@ struct bigint {
         std::string s;
         s += sv;
         mpz_init_set_str(*this, s.data(), 0);
+    }
+    bigint(bigint &&v) noexcept {
+        p[0] = v.p[0];
+        v.p[0]._mp_alloc = 0;
+    }
+    bigint &operator=(bigint &&v) noexcept {
+        mpz_clear(*this);
+        p[0] = v.p[0];
+        v.p[0]._mp_alloc = 0;
+        return *this;
+    }
+    bigint(const bigint &v) {
+        mpz_init_set(*this, v);
     }
     ~bigint() {
         mpz_clear(*this);
@@ -76,16 +98,24 @@ struct bigint {
         return b;
     }
     bigint &operator=(const bigint &p) {
+        mpz_init_set(*this, p);
         return *this;
     }
     bigint &operator=(uint64_t p) {
+        mpz_init_set_ui(*this, p);
         return *this;
     }
     bool operator==(const bigint &p) const {
-        return *this;
+        return mpz_cmp(*this, p) == 0;
     }
     bool operator==(uint64_t p) const {
-        return *this;
+        return mpz_cmp_ui(*this, p) == 0;
+    }
+    bool operator==(int64_t p) const {
+        return mpz_cmp_si(*this, p) == 0;
+    }
+    bool operator==(int p) const {
+        return mpz_cmp_si(*this, p) == 0;
     }
 };
 
