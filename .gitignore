@@ -9,3 +9,5 @@ a.out
 *.pcap*
 *.txt
 *.xml
+
+*.der

@@ -1,3 +1,3 @@
 #pragma once
 
-#include "bigint_gmp.h"
+#include "bigint_minigmp.h"

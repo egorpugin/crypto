@@ -9,7 +9,7 @@ void build(Solution &s) {
 
     t += "org.sw.demo.boost.asio"_dep;
     t += "org.sw.demo.neargye.nameof"_dep;
-    t += "org.sw.demo.gnu.gmp.cxx"_dep;
+    //t += "org.sw.demo.gnu.gmp.cxx"_dep;
 
     t += "bcrypt.lib"_slib;
 
