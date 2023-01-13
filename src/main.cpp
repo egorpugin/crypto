@@ -462,7 +462,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    //test_ec();
+    test_ec();
     //test_hmac();
     //test_chacha20();
     test_tls();
