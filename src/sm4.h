@@ -5,7 +5,7 @@
 
 namespace crypto {
 
-struct sm4 {
+struct sm4_data {
     static constexpr auto rounds = 32;
     static constexpr uint8_t S[256] = {
         0xd6, 0x90, 0xe9, 0xfe, 0xcc, 0xe1, 0x3d, 0xb7, 0x16, 0xb6, 0x14, 0xc2, 0x28, 0xfb, 0x2c, 0x05, 0x2b, 0x67,
@@ -29,9 +29,14 @@ struct sm4 {
         0xc0c7ced5, 0xdce3eaf1, 0xf8ff060d, 0x141b2229, 0x30373e45, 0x4c535a61, 0x686f767d, 0x848b9299,
         0xa0a7aeb5, 0xbcc3cad1, 0xd8dfe6ed, 0xf4fb0209, 0x10171e25, 0x2c333a41, 0x484f565d, 0x646b7279};
     static constexpr uint64_t FK[4] = {0xa3b1bac6, 0x56aa3350, 0x677d9197, 0xb27022dc};
+};
 
-    struct encrypt{};
-    struct decrypt {};
+struct encrypt {};
+struct decrypt {};
+
+template <typename Mode>
+struct sm4 : sm4_data {
+    static inline constexpr auto encryption = std::same_as<Mode,encrypt>;
 
     static void tau(uint8_t b[4]) noexcept {
         for (int i = 0; i < 4; ++i) {
@@ -49,7 +54,18 @@ struct sm4 {
 
     uint32_t rk[rounds];
 
-    sm4(uint32_t key[4], encrypt) {
+    sm4(uint32_t key[4]) requires encryption {
+        key_expansion(key);
+    }
+    sm4(uint32_t key[4]) requires !encryption {
+        key_expansion(key);
+        for (int i = 0; i < 16; ++i) {
+            std::swap(rk[i], rk[31 - i]);
+        }
+    }
+    sm4(const void *key) : sm4{(uint32_t *)key} {}
+
+    void key_expansion(uint32_t key[4]) {
         uint32_t rk[4];
         for (int i = 0; i < 4; ++i) {
             rk[i] = std::byteswap(key[i]);
@@ -65,12 +81,6 @@ struct sm4 {
             }
         }
     }
-    sm4(uint32_t key[4], decrypt) : sm4{key, encrypt{}} {
-        for (int i = 0; i < 16; ++i) {
-            std::swap(rk[i], rk[31 - i]);
-        }
-    }
-    sm4(const void *key, auto mode) : sm4{(uint32_t *)key, mode} {}
 
     void crypt(uint32_t data[4]) noexcept {
         uint32_t x[4];
@@ -87,9 +97,15 @@ struct sm4 {
             data[i] = std::byteswap(x[4 - i - 1]);
         }
     }
-    void crypt(auto &&in) noexcept {
+    void encrypt(auto &&in) noexcept requires encryption {
+        crypt((uint32_t *)in);
+    }
+    void decrypt(auto &&in) noexcept requires !encryption {
         crypt((uint32_t *)in);
     }
 };
+
+using sm4_encrypt = sm4<encrypt>;
+using sm4_decrypt = sm4<decrypt>;
 
 } // namespace crypto

@@ -1,5 +1,8 @@
 #pragma once
 
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+
 //#include <filesystem>
 #if __has_include(<format>)
 #include <format>

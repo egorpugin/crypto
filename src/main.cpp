@@ -277,29 +277,29 @@ void test_sm4() {
     uint8_t tv_key[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
 
     {
-        sm4 enc{tv_key, sm4::encrypt{}};
-        enc.crypt(tv_plain);
+        sm4_encrypt enc{tv_key};
+        enc.encrypt(tv_plain);
 
         uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
                                0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
         cmp_l(tv_cipher, tv_plain);
 
-        sm4 dec{tv_key, sm4::decrypt{}};
-        dec.crypt(tv_plain);
+        sm4_decrypt dec{tv_key};
+        dec.decrypt(tv_plain);
         cmp_l(tv_key, tv_plain);
     }
     {
-        sm4 enc{tv_key, sm4::encrypt{}};
+        sm4_encrypt enc{tv_key};
         for (int i = 0; i < 1000000; i++) {
-            enc.crypt(tv_plain);
+            enc.encrypt(tv_plain);
         }
         uint8_t tv_cipher[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
                                0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
         cmp_l(tv_cipher, tv_plain);
 
-        sm4 dec{tv_key, sm4::decrypt{}};
+        sm4_decrypt dec{tv_key};
         for (int i = 0; i < 1000000; i++) {
-            dec.crypt(tv_plain);
+            dec.decrypt(tv_plain);
         }
         cmp_l(tv_key, tv_plain);
     }
@@ -462,7 +462,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    test_ec();
+    //test_ec();
     //test_hmac();
     //test_chacha20();
     test_tls();
