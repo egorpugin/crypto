@@ -432,6 +432,9 @@ struct x509 {
     struct certificate_signature {};
     */
     enum {
+        main, // main object
+    };
+    enum {
         certificate,
         certificate_signature_algorithm,
         certificate_signature,
@@ -462,7 +465,12 @@ void test_asn1() {
     asn1 a{f};
     //a.parse();
 
-    a[0];
+    auto pk = a.get<asn1::oid>(x509::main,x509::certificate,x509::subject_public_key_info,x509::public_key_algorithm,0);
+    auto pk = a.get<asn1::bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);
+    {
+    int a = 5;
+    a++;
+    }
 }
 
 void test_tls() {

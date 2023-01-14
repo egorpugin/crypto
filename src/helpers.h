@@ -90,7 +90,8 @@ struct bytes_concept {
         if (sz == -1 || sz >= this->sz) {
             return bytes_concept{p + start, this->sz - start};
         }
-        return bytes_concept{p + start, this->sz - start - sz};
+        sz = std::min<size_t>(this->sz - start, sz);
+        return bytes_concept{p + start, sz};
     }
     auto &operator[](int i) { return data()[i]; }
     auto operator[](int i) const { return data()[i]; }
