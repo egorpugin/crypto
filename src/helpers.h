@@ -3,7 +3,7 @@
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 
-//#include <filesystem>
+#include <filesystem>
 #if __has_include(<format>)
 #include <format>
 using std::format;
@@ -29,8 +29,8 @@ using fmt::format;
 
 namespace crypto {
 
-//namespace fs = std::filesystem;
-//using path = fs::path;
+namespace fs = std::filesystem;
+using path = fs::path;
 using std::string;
 using std::string_view;
 using std::variant;

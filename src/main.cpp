@@ -10,6 +10,7 @@
 #include "ec.h"
 #include "hmac.h"
 #include "chacha20.h"
+#include "asn1.h"
 
 #include <array>
 #include <iostream>
@@ -422,7 +423,48 @@ void test_chacha20() {
     cmp_l(plaintext_1,out2);
 }
 
-#ifdef _MSC_VER
+struct x509 {
+    /*
+    struct certificate {
+        struct version_number {};
+    };
+    struct certificate_signature_algorithm {};
+    struct certificate_signature {};
+    */
+    enum {
+        certificate,
+        certificate_signature_algorithm,
+        certificate_signature,
+    };
+    enum {
+        version_number,
+        serial_number,
+        signature_algorithm_id,
+        issuer_name,
+        validity,
+        subject_name,
+        subject_public_key_info,
+    };
+    enum {
+        not_before,
+        not_after,
+    };
+    enum {
+        public_key_algorithm,
+        subject_public_key,
+    };
+};
+
+void test_asn1() {
+    using namespace crypto;
+
+    mmap_file<uint8_t> f{"d:/dev/crypto/_.gosuslugi.ru.der"};
+    asn1 a{f};
+    //a.parse();
+
+    a[0];
+}
+
 void test_tls() {
     using namespace crypto;
 
@@ -455,7 +497,6 @@ void test_tls() {
     run("tls13.1d.pw");
     //run("localhost");
 }
-#endif
 
 int main() {
     //test_aes();
@@ -465,5 +506,6 @@ int main() {
     //test_ec();
     //test_hmac();
     //test_chacha20();
-    test_tls();
+    test_asn1();
+    //test_tls();
 }
