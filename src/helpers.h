@@ -47,8 +47,9 @@ concept bytes_concept1 = requires (T t) {
 };
 
 struct bytes_concept {
-    uint8_t *p;
-    size_t sz;
+    uint8_t *p{};
+    size_t sz{};
+    bytes_concept() = default;
     bytes_concept(uint8_t *p, size_t sz) : p{p}, sz{sz} {
     }
     bytes_concept(const std::string &s) {

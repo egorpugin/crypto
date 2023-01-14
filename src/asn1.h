@@ -7,36 +7,145 @@ namespace crypto {
 
 // online decoder https://lapo.it/asn1js
 // fields https://learn.microsoft.com/en-us/windows/win32/seccertenroll/about-der-encoding-of-asn-1-types
-struct asn1 {
-    struct container {
-        bytes_concept data;
+struct asn1_container {
+    bytes_concept data;
 
-        operator bytes_concept() const { return data; }
-        /*auto operator==(const auto &rhs) const {
-            return data == rhs.data;
-        }*/
-        auto operator==(const bytes_concept &rhs) const {
-            return data == rhs;
+    operator bytes_concept() const { return data; }
+    auto operator==(const bytes_concept &rhs) const {
+        return data == rhs;
+    }
+
+    static auto get_tag_raw(auto &&data) {
+        return data[0];
+    }
+    static auto get_tag(auto &&data) {
+        auto tag = get_tag_raw(data);
+        tag &= 0b0011'1111;
+        // Universal (00xxxxxx)
+        // Application(01xxxxxx)
+        // Context-specific(10xxxxxx)
+        // Private(11xxxxxx)
+        return tag;
+    }
+    static auto get_next_data(bytes_concept data) {
+        auto tag = get_tag(data);
+        int pos = 1;
+        uint64_t len = 0;
+        if (tag == 0x05) { // null
+            return std::tuple{pos + 1, len};
         }
-        /*template <auto N>
-        auto operator==(const array<N> &rhs) const {
-            return data == rhs;
+        len = data[pos];
+        uint8_t lenbytes = 1;
+        if (len > 0x80) {
+            lenbytes = len ^ 0x80;
+            len = 0;
+            int j = pos + 1;
+            for (int i = 0; i < lenbytes; ++i, ++j) {
+                len |= data[j] << ((lenbytes - 1 - i) * 8);
+            }
+            return std::tuple{j, len};
         }
-        auto operator==(const string &rhs) const {
-            return data == bytes_concept{rhs};
-        }*/
+        return std::tuple{pos + 1, len};
+    }
+    static auto get_next_data2(bytes_concept data) {
+        int pos = 0;
+        uint64_t len = 0;
+        len = data[pos];
+        uint8_t lenbytes = 1;
+        if (len > 0x80) {
+            lenbytes = len ^ 0x80;
+            len = 0;
+            int j = pos + 1;
+            for (int i = 0; i < lenbytes; ++i, ++j) {
+                len |= data[j] << ((lenbytes - 1 - i) * 8);
+            }
+            return std::tuple{j, len};
+        }
+        return std::tuple{pos + 1, len};
+    }
+};
+template <typename Asn1Type>
+struct asn1_iterable : asn1_container {
+    struct converter {
+        bytes_concept data;
+        operator bytes_concept() const {
+            return data;
+        }
+        operator Asn1Type() const {
+            return data;
+        }
+        template <typename T>
+        operator T() const {
+            auto [start, len] = asn1_container::get_next_data(data);
+            return T{data.subspan(start, len)};
+        }
+        bool operator==(auto &&v) const {
+            return data == v;
+        }
     };
-    struct sequence : container {
+    struct iterator {
+        bytes_concept data;
+        auto operator*() const {
+            return converter{data};
+        }
+        void operator++() {
+            auto [start, len] = get_next_data(data);
+            data = data.subspan(start + len);
+        }
+        bool operator==(int) const {
+            return data.size() == 0;
+        }
+    };
+    auto begin() {
+        return iterator{data};
+    }
+    auto end() {
+        return 0;
+    }
+};
+struct asn1 : asn1_iterable<asn1> {
+    using container = asn1_iterable<asn1>;
+    struct sequence : asn1_iterable<asn1> {
         static inline constexpr auto tag = 0x30;
     };
-    struct set : container {
+    struct set : asn1_iterable<asn1> {
         static inline constexpr auto tag = 0x31;
     };
     struct bit_string : container {
         static inline constexpr auto tag = 0x03;
     };
+    struct octet_string : container {
+        static inline constexpr auto tag = 0x04;
+
+        /*struct iterator {
+            bytes_concept data;
+            auto operator*() const {
+                auto [start, len] = get_next_data2(data);
+                return data.subspan(start, len);
+            }
+            void operator++() {
+                auto [start, len] = get_next_data2(data);
+                data = data.subspan(start + len);
+            }
+            bool operator==(int) {
+                return data.size() == 0;
+            }
+        };
+        auto begin() {
+            return iterator{data};
+        }
+        auto end() {
+            return 0;
+        }*/
+    };
     struct printable_string : container {
         static inline constexpr auto tag = 0x13;
+        operator string_view() const {
+            return {(const char *)data.data(), data.size()};
+        }
+    };
+    struct utf8_string : container {
+        static inline constexpr auto tag = 0x0C;
         operator string_view() const {
             return {(const char *)data.data(), data.size()};
         }
@@ -68,43 +177,22 @@ struct asn1 {
         }
     };
 
-    bytes_concept data;
+    asn1() = default;
+    asn1(bytes_concept b) {
+        data = b;
+    }
 
     template <typename T>
-    auto subsequence(bytes_concept data, auto p, auto ... pos) {
+    bool is() const {
+        return get_tag(data) == T::tag;
+    }
+    static auto subsequence1(bytes_concept data, auto p, auto... pos) {
         if (data.empty()) {
             throw std::runtime_error{"empty object"};
         }
-        auto get_next_data = [](bytes_concept data, int expected_tag = -1) {
-            auto tag = data[0];
-            tag &= 0b0011'1111;
-            // Universal (00xxxxxx)
-            // Application(01xxxxxx)
-            // Context-specific(10xxxxxx)
-            // Private(11xxxxxx)
-            if (expected_tag != -1 && data[0] != expected_tag) {
-                throw std::runtime_error{"not a requested type"};
-            }
-            uint64_t len = 0;
-            if (tag == 0x05) { // null
-                return std::tuple{2, len};
-            }
-            len = data[1];
-            uint8_t lenbytes = 1;
-            if (len > 0x80) {
-                lenbytes = len ^ 0x80;
-                len = 0;
-                int j = 2;
-                for (int i = 0; i < lenbytes; ++i, ++j) {
-                    len |= data[j] << ((lenbytes - 1 - i) * 8);
-                }
-                return std::tuple{j, len};
-            }
-            return std::tuple{2,len};
-        };
         auto n = (int)p;
         while (n--) {
-            auto [start,len] = get_next_data(data);
+            auto [start, len] = get_next_data(data);
             data = data.subspan(start + len);
         }
         if constexpr (sizeof...(pos) > 0) {
@@ -112,15 +200,25 @@ struct asn1 {
                 throw std::runtime_error{"not a sequence"};
             }
             auto [start, len] = get_next_data(data);
-            return subsequence<T>(data.subspan(start, len), pos...);
+            return subsequence1(data.subspan(start, len), pos...);
         } else {
-            auto [start, len] = get_next_data(data, T::tag);
-            return T{data.subspan(start, len)};
+            return data;
         }
     }
+    auto subsequence(auto... pos) {
+        return asn1{subsequence1(data, pos...)};
+    }
     template <typename T>
-    T get(auto ... pos) {
-        return subsequence<T>(data, pos...);
+    T get(auto... pos) {
+        auto d = data;
+        if constexpr (sizeof...(pos) > 0) {
+            d = subsequence1(data, pos...);
+            if (get_tag(d) != T::tag) {
+                throw std::runtime_error{"not a requested type"};
+            }
+        }
+        auto [start, len] = get_next_data(d);
+        return T{d.subspan(start, len)};
     }
 };
 

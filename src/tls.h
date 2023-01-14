@@ -563,15 +563,42 @@ struct tls13_ {
                         }
 
                         if (cert_number++ == 0) {
-                            auto string_name = a.get<asn1::oid>(x509::main, x509::certificate, x509::subject_name, 0, 0, 0);
-                            constexpr auto commonName = make_oid<2,5,4,3>();
-                            if (string_name != commonName) {
-                                throw std::runtime_error{"not a common name"};
+                            bool servername_ok{};
+                            auto check_name = [&](auto &&name) {
+                                if (name.is<asn1::printable_string>()) {
+                                    auto s = name.get<asn1::printable_string>();
+                                    servername_ok |= s == servername;
+                                } else if (name.is<asn1::utf8_string>()) {
+                                    auto s = name.get<asn1::utf8_string>();
+                                    servername_ok |= s == servername;
+                                }
+                            };
+                            for (asn1::sequence seq : a.get<asn1::set>(x509::main, x509::certificate, x509::subject_name, 0)) {
+                                auto string_name = seq.get<asn1::oid>(0);
+                                constexpr auto commonName = make_oid<2, 5, 4, 3>();
+                                if (string_name == commonName) {
+                                    check_name(seq.subsequence(1));
+                                }
                             }
-                            auto name = a.get<asn1::printable_string>(x509::main, x509::certificate,
-                                x509::subject_name,0,0,1);
-                            if (name != servername) {
-                                throw std::runtime_error{format("servername mismatch: cert {} != expected {}",(string_view)name,servername)};
+                            if (!servername_ok) {
+                                for (asn1 seq : a.get<asn1::sequence>(x509::main, x509::certificate)) {
+                                    if (seq.data[0] != 0xA3) { // exts
+                                        continue;
+                                    }
+                                    for (asn1 seq2 : seq.get<asn1::sequence>(0)) {
+                                        auto string_name = seq2.get<asn1::oid>(0);
+                                        constexpr auto subjectAltName = make_oid<2,5,29,17>();
+                                        if (string_name != subjectAltName) {
+                                            continue;
+                                        }
+                                        for (auto &&name : seq2.get<asn1::octet_string>(1,0)) {
+                                            servername_ok |= name == servername;
+                                        }
+                                    }
+                                }
+                            }
+                            if (!servername_ok) {
+                                throw std::runtime_error{format("cannot match servername")};
                             }
 
                             int a = 5;
