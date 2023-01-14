@@ -563,8 +563,16 @@ struct tls13_ {
                         }
 
                         if (cert_number++ == 0) {
-                            auto pka = a.get<asn1::set>(x509::main, x509::certificate,
-                                x509::subject_name);
+                            auto string_name = a.get<asn1::oid>(x509::main, x509::certificate, x509::subject_name, 0, 0, 0);
+                            constexpr auto commonName = make_oid<2,5,4,3>();
+                            if (string_name != commonName) {
+                                throw std::runtime_error{"not a common name"};
+                            }
+                            auto name = a.get<asn1::printable_string>(x509::main, x509::certificate,
+                                x509::subject_name,0,0,1);
+                            if (name != servername) {
+                                throw std::runtime_error{format("servername mismatch: cert {} != expected {}",(string_view)name,servername)};
+                            }
 
                             int a = 5;
                             a++;

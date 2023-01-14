@@ -5,58 +5,44 @@
 
 namespace crypto {
 
-// online decoder
-// https://lapo.it/asn1js
+// online decoder https://lapo.it/asn1js
+// fields https://learn.microsoft.com/en-us/windows/win32/seccertenroll/about-der-encoding-of-asn-1-types
 struct asn1 {
-    struct tlv {
-        uint8_t tag;
-        uint8_t len;
-    };
-    using tag_type = uint8_t;
-    enum class tag : tag_type {
-        sequence = 0x30,
-    };
-
-    template <typename ... Types>
-    struct types {
-        using variant_type = std::variant<Types...>;
-
-        static constexpr auto size() {
-            return sizeof...(Types);
-        }
-        static void for_each(auto &&f) {
-            (f(Types{}), ...);
-        }
-    };
-
-    struct sequence;
-    using asn1_types = types<sequence>;
-    struct sequence {
-        static inline constexpr auto tag = 0x30;
-
-        std::unique_ptr<asn1_types> value;
-    };
-    struct set {
-        static inline constexpr auto tag = 0x31;
-
-        std::unique_ptr<asn1_types> value;
-    };
-    struct bit_string {
-        static inline constexpr auto tag = 0x03;
-
-        bytes_concept data;
-    };
-    struct oid {
-        static inline constexpr auto tag = 0x06;
-
+    struct container {
         bytes_concept data;
 
-        auto operator==(const oid &rhs) const {
+        operator bytes_concept() const { return data; }
+        /*auto operator==(const auto &rhs) const {
             return data == rhs.data;
-        }
+        }*/
         auto operator==(const bytes_concept &rhs) const {
             return data == rhs;
         }
+        /*template <auto N>
+        auto operator==(const array<N> &rhs) const {
+            return data == rhs;
+        }
+        auto operator==(const string &rhs) const {
+            return data == bytes_concept{rhs};
+        }*/
+    };
+    struct sequence : container {
+        static inline constexpr auto tag = 0x30;
+    };
+    struct set : container {
+        static inline constexpr auto tag = 0x31;
+    };
+    struct bit_string : container {
+        static inline constexpr auto tag = 0x03;
+    };
+    struct printable_string : container {
+        static inline constexpr auto tag = 0x13;
+        operator string_view() const {
+            return {(const char *)data.data(), data.size()};
+        }
+    };
+    struct oid : container {
+        static inline constexpr auto tag = 0x06;
 
         operator string() const {
             string s;
@@ -81,8 +67,6 @@ struct asn1 {
             return s;
         }
     };
-    using asn1_types = types<sequence>;
-    using asn1_variant = asn1_types::variant_type;
 
     bytes_concept data;
 
@@ -124,7 +108,7 @@ struct asn1 {
             data = data.subspan(start + len);
         }
         if constexpr (sizeof...(pos) > 0) {
-            if ((tag)data[0] != tag::sequence) {
+            if (data[0] != sequence::tag && data[0] != set::tag) {
                 throw std::runtime_error{"not a sequence"};
             }
             auto [start, len] = get_next_data(data);
