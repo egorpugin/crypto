@@ -8,6 +8,7 @@
 #include "hmac.h"
 #include "ec.h"
 #include "gcm.h"
+#include "asn1.h"
 
 #include <boost/asio.hpp>
 #include <nameof.hpp>
@@ -498,6 +499,9 @@ struct tls13_ {
                 uint8_t certificate_request_context = s2.read();
                 s2.step(certificate_request_context);
                 length<3> len = s2.read();
+                static int d = -1;
+                ++d;
+                int cert_number = 0;
                 while (s2) {
                     // read one cert
                     length<3> len = s2.read();
@@ -509,7 +513,63 @@ struct tls13_ {
                     switch (type) {
                     case tls13::CertificateType::X509: {
                         uint32_t len2 = len;
-                        s2.step(len2);
+
+                        auto data = s2.span(len2);
+                        asn1 a{data};
+
+                        // https://www.rfc-editor.org/rfc/rfc8017 pkcs #1
+                        //  1.2.840.113549.1.1.11 sha256WithRSAEncryption
+                        //  1.2.840.113549.1.1.12 sha384WithRSAEncryption
+                        //  1.3.101.112 curveEd25519 (EdDSA 25519 signature algorithm)
+                        // 1.3.6.1.5.5.7.3.1 serverAuth
+
+                        // rsaEncryption (PKCS #1)
+                        constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
+                        constexpr auto ecPublicKey = make_oid<1,2,840,10045,2,1>();
+
+                        auto pka = a.get<asn1::oid>(x509::main, x509::certificate, x509::subject_public_key_info,
+                                                    x509::public_key_algorithm, 0);
+
+                        static int i = 0;
+                        path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, i++);
+                        fs::create_directories(fn.parent_path());
+                        std::ofstream of{fn, std::ios::binary};
+                        of.write((const char *)data.data(), data.size());
+
+                        if (pka == ecPublicKey) {
+                            auto curve = a.get<asn1::oid>(x509::main, x509::certificate, x509::subject_public_key_info,
+                                                          x509::public_key_algorithm, 1);
+                            constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
+                            constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
+                            if (curve == prime256v1) {
+                            } else if (curve == secp384r1) {
+                            } else {
+                                string s = curve;
+                                std::cerr << "unknown x509::public_key_algorithm::curve: " << s << "\n";
+
+                                std::ofstream of{format("d:/dev/crypto/.sw/{}.der", i++), std::ios::binary};
+                                of.write((const char *)data.data(), data.size());
+                                // throw std::runtime_error{"unknown x509::public_key_algorithm::curve"};
+                            }
+                        }
+                        else if (pka == rsaEncryption) {
+                        } else {
+                            string s = pka;
+                            std::cerr << "unknown x509::public_key_algorithm: " << s << "\n";
+
+                            std::ofstream of{format("d:/dev/crypto/.sw/{}.der",i++), std::ios::binary};
+                            of.write((const char *)data.data(), data.size());
+                            //throw std::runtime_error{"unknown x509::public_key_algorithm"};
+                        }
+
+                        if (cert_number++ == 0) {
+                            auto pka = a.get<asn1::set>(x509::main, x509::certificate,
+                                x509::subject_name);
+
+                            int a = 5;
+                            a++;
+                        }
+
                         read_extensions(s2);
                         break;
                     }

@@ -423,41 +423,6 @@ void test_chacha20() {
     cmp_l(plaintext_1,out2);
 }
 
-struct x509 {
-    /*
-    struct certificate {
-        struct version_number {};
-    };
-    struct certificate_signature_algorithm {};
-    struct certificate_signature {};
-    */
-    enum {
-        main, // main object
-    };
-    enum {
-        certificate,
-        certificate_signature_algorithm,
-        certificate_signature,
-    };
-    enum {
-        version_number,
-        serial_number,
-        signature_algorithm_id,
-        issuer_name,
-        validity,
-        subject_name,
-        subject_public_key_info,
-    };
-    enum {
-        not_before,
-        not_after,
-    };
-    enum {
-        public_key_algorithm,
-        subject_public_key,
-    };
-};
-
 void test_asn1() {
     using namespace crypto;
 
@@ -465,7 +430,13 @@ void test_asn1() {
     asn1 a{f};
     //a.parse();
 
-    auto pk = a.get<asn1::oid>(x509::main,x509::certificate,x509::subject_public_key_info,x509::public_key_algorithm,0);
+    //rsaEncryption (PKCS #1)
+    auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
+
+    auto pka = a.get<asn1::oid>(x509::main,x509::certificate,x509::subject_public_key_info,x509::public_key_algorithm,0);
+    if (pka != rsaEncryption) {
+        throw std::runtime_error{"unknown x509::public_key_algorithm"};
+    }
     auto pk = a.get<asn1::bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);
     {
     int a = 5;
@@ -514,6 +485,6 @@ int main() {
     //test_ec();
     //test_hmac();
     //test_chacha20();
-    test_asn1();
-    //test_tls();
+    //test_asn1();
+    test_tls();
 }
