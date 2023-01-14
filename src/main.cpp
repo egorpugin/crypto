@@ -433,11 +433,11 @@ void test_asn1() {
     //rsaEncryption (PKCS #1)
     auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
 
-    auto pka = a.get<asn1::oid>(x509::main,x509::certificate,x509::subject_public_key_info,x509::public_key_algorithm,0);
+    auto pka = a.get<asn1_oid>(x509::main,x509::certificate,x509::subject_public_key_info,x509::public_key_algorithm,0);
     if (pka != rsaEncryption) {
         throw std::runtime_error{"unknown x509::public_key_algorithm"};
     }
-    auto pk = a.get<asn1::bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);
+    auto pk = a.get<asn1_bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);
     {
     int a = 5;
     a++;

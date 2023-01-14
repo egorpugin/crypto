@@ -527,7 +527,7 @@ struct tls13_ {
                         constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
                         constexpr auto ecPublicKey = make_oid<1,2,840,10045,2,1>();
 
-                        auto pka = a.get<asn1::oid>(x509::main, x509::certificate, x509::subject_public_key_info,
+                        auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
                                                     x509::public_key_algorithm, 0);
 
                         static int i = 0;
@@ -537,7 +537,7 @@ struct tls13_ {
                         of.write((const char *)data.data(), data.size());
 
                         if (pka == ecPublicKey) {
-                            auto curve = a.get<asn1::oid>(x509::main, x509::certificate, x509::subject_public_key_info,
+                            auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
                                                           x509::public_key_algorithm, 1);
                             constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
                             constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
@@ -565,33 +565,36 @@ struct tls13_ {
                         if (cert_number++ == 0) {
                             bool servername_ok{};
                             auto check_name = [&](auto &&name) {
-                                if (name.is<asn1::printable_string>()) {
-                                    auto s = name.get<asn1::printable_string>();
+                                if (name.is<asn1_printable_string>()) {
+                                    auto s = name.get<asn1_printable_string>();
                                     servername_ok |= s == servername;
-                                } else if (name.is<asn1::utf8_string>()) {
-                                    auto s = name.get<asn1::utf8_string>();
+                                } else if (name.is<asn1_utf8_string>()) {
+                                    auto s = name.get<asn1_utf8_string>();
                                     servername_ok |= s == servername;
                                 }
                             };
-                            for (asn1::sequence seq : a.get<asn1::set>(x509::main, x509::certificate, x509::subject_name, 0)) {
-                                auto string_name = seq.get<asn1::oid>(0);
+                            for (auto &&seq : a.get<asn1_set>(x509::main, x509::certificate, x509::subject_name, 0)) {
+                                auto s = seq.get<asn1_sequence>();
+                                auto string_name = s.get<asn1_oid>(0);
                                 constexpr auto commonName = make_oid<2, 5, 4, 3>();
                                 if (string_name == commonName) {
-                                    check_name(seq.subsequence(1));
+                                    check_name(s.subsequence(1));
                                 }
                             }
                             if (!servername_ok) {
-                                for (asn1 seq : a.get<asn1::sequence>(x509::main, x509::certificate)) {
+                                for (auto &&seq : a.get<asn1_sequence>(x509::main, x509::certificate)) {
                                     if (seq.data[0] != 0xA3) { // exts
                                         continue;
                                     }
-                                    for (asn1 seq2 : seq.get<asn1::sequence>(0)) {
-                                        auto string_name = seq2.get<asn1::oid>(0);
+                                    for (auto &&seq2 : seq.get<asn1_bit_string>().get<asn1_sequence>(0)) {
+                                        auto s = seq2.get<asn1_sequence>();
+                                        auto string_name = s.get<asn1_oid>(0);
                                         constexpr auto subjectAltName = make_oid<2,5,29,17>();
                                         if (string_name != subjectAltName) {
                                             continue;
                                         }
-                                        for (auto &&name : seq2.get<asn1::octet_string>(1,0)) {
+                                        auto names = s.get<asn1_sequence>(1,0);
+                                        for (auto &&name : names.data_as_strings()) {
                                             servername_ok |= name == servername;
                                         }
                                     }

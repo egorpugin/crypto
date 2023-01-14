@@ -64,16 +64,23 @@ struct asn1_container {
         return std::tuple{pos + 1, len};
     }
 };
-template <typename Asn1Type>
-struct asn1_iterable : asn1_container {
+struct asn1_base : asn1_container {
+    asn1_base() = default;
+    asn1_base(bytes_concept b) {
+        data = b;
+    }
+    asn1_base(const asn1_base &b) {
+        data = b;
+    }
+
     struct converter {
         bytes_concept data;
         operator bytes_concept() const {
             return data;
         }
-        operator Asn1Type() const {
+        /*operator Asn1Type() const {
             return data;
-        }
+        }*/
         template <typename T>
         operator T() const {
             auto [start, len] = asn1_container::get_next_data(data);
@@ -85,8 +92,8 @@ struct asn1_iterable : asn1_container {
     };
     struct iterator {
         bytes_concept data;
-        auto operator*() const {
-            return converter{data};
+        asn1_base operator*() const {
+            return data; // converter{data};
         }
         void operator++() {
             auto [start, len] = get_next_data(data);
@@ -101,85 +108,6 @@ struct asn1_iterable : asn1_container {
     }
     auto end() {
         return 0;
-    }
-};
-struct asn1 : asn1_iterable<asn1> {
-    using container = asn1_iterable<asn1>;
-    struct sequence : asn1_iterable<asn1> {
-        static inline constexpr auto tag = 0x30;
-    };
-    struct set : asn1_iterable<asn1> {
-        static inline constexpr auto tag = 0x31;
-    };
-    struct bit_string : container {
-        static inline constexpr auto tag = 0x03;
-    };
-    struct octet_string : container {
-        static inline constexpr auto tag = 0x04;
-
-        /*struct iterator {
-            bytes_concept data;
-            auto operator*() const {
-                auto [start, len] = get_next_data2(data);
-                return data.subspan(start, len);
-            }
-            void operator++() {
-                auto [start, len] = get_next_data2(data);
-                data = data.subspan(start + len);
-            }
-            bool operator==(int) {
-                return data.size() == 0;
-            }
-        };
-        auto begin() {
-            return iterator{data};
-        }
-        auto end() {
-            return 0;
-        }*/
-    };
-    struct printable_string : container {
-        static inline constexpr auto tag = 0x13;
-        operator string_view() const {
-            return {(const char *)data.data(), data.size()};
-        }
-    };
-    struct utf8_string : container {
-        static inline constexpr auto tag = 0x0C;
-        operator string_view() const {
-            return {(const char *)data.data(), data.size()};
-        }
-    };
-    struct oid : container {
-        static inline constexpr auto tag = 0x06;
-
-        operator string() const {
-            string s;
-            auto p = data.data();
-            auto n1 = *p / 40;
-            auto n2 = *p - n1 * 40;
-            ++p;
-            s += format("{}.{}", n1, n2);
-            while (p - data.data() < data.size()) {
-                if (*p < 0x80) {
-                    s += format(".{}", *p++);
-                } else {
-                    uint64_t v{};
-                    while (*p > 0x80) {
-                        v |= *p++ ^ 0x80;
-                        v <<= 7;
-                    }
-                    v |= *p++;
-                    s += format(".{}", v);
-                }
-            }
-            return s;
-        }
-    };
-
-    asn1() = default;
-    asn1(bytes_concept b) {
-        data = b;
     }
 
     template <typename T>
@@ -196,9 +124,6 @@ struct asn1 : asn1_iterable<asn1> {
             data = data.subspan(start + len);
         }
         if constexpr (sizeof...(pos) > 0) {
-            if (data[0] != sequence::tag && data[0] != set::tag) {
-                throw std::runtime_error{"not a sequence"};
-            }
             auto [start, len] = get_next_data(data);
             return subsequence1(data.subspan(start, len), pos...);
         } else {
@@ -206,7 +131,7 @@ struct asn1 : asn1_iterable<asn1> {
         }
     }
     auto subsequence(auto... pos) {
-        return asn1{subsequence1(data, pos...)};
+        return asn1_base{subsequence1(data, pos...)};
     }
     template <typename T>
     T get(auto... pos) {
@@ -220,6 +145,87 @@ struct asn1 : asn1_iterable<asn1> {
         auto [start, len] = get_next_data(d);
         return T{d.subspan(start, len)};
     }
+
+    auto data_as_strings() {
+        struct x {
+            bytes_concept data;
+            struct iterator {
+                bytes_concept data;
+                auto operator*() const {
+                    auto [start, len] = get_next_data(data);
+                    return data.subspan(start, len);
+                }
+                void operator++() {
+                    auto [start, len] = get_next_data(data);
+                    data = data.subspan(start + len);
+                }
+                bool operator==(int) {
+                    return data.empty();
+                }
+            };
+            auto begin() {
+                return iterator{data};
+            }
+            auto end() {
+                return 0;
+            }
+        };
+        return x{data};
+    }
+};
+struct asn1_sequence : asn1_base {
+    static inline constexpr auto tag = 0x30;
+    using asn1_base::asn1_base;
+};
+struct asn1_set : asn1_base {
+    static inline constexpr auto tag = 0x31;
+};
+struct asn1_bit_string : asn1_base {
+    static inline constexpr auto tag = 0x03;
+};
+struct asn1_octet_string : asn1_base {
+    static inline constexpr auto tag = 0x04;
+};
+struct asn1_printable_string : asn1_base {
+    static inline constexpr auto tag = 0x13;
+    operator string_view() const {
+        return {(const char *)data.data(), data.size()};
+    }
+};
+struct asn1_utf8_string : asn1_base {
+    static inline constexpr auto tag = 0x0C;
+    operator string_view() const {
+        return {(const char *)data.data(), data.size()};
+    }
+};
+struct asn1_oid : asn1_base {
+    static inline constexpr auto tag = 0x06;
+
+    operator string() const {
+        string s;
+        auto p = data.data();
+        auto n1 = *p / 40;
+        auto n2 = *p - n1 * 40;
+        ++p;
+        s += format("{}.{}", n1, n2);
+        while (p - data.data() < data.size()) {
+            if (*p < 0x80) {
+                s += format(".{}", *p++);
+            } else {
+                uint64_t v{};
+                while (*p > 0x80) {
+                    v |= *p++ ^ 0x80;
+                    v <<= 7;
+                }
+                v |= *p++;
+                s += format(".{}", v);
+            }
+        }
+        return s;
+    }
+};
+struct asn1 : asn1_sequence {
+    using asn1_sequence::asn1_sequence;
 };
 
 struct x509 {
