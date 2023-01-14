@@ -23,6 +23,9 @@
 * - timing attacks?
 */
 
+// gost mgm
+// https://files.stroyinf.ru/Data2/1/4293727/4293727270.pdf
+
 namespace crypto {
 
 template <typename RawSocket, template <typename> typename Awaitable> // tcp or udp
@@ -69,7 +72,7 @@ struct tls13_ {
 
     using all_suites = suites<suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256> // ok
                               // suite_<gcm<aes_ecb<128>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384> // ok
-                              // suite_<gcm<sm4>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
+                              // suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
                               >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;

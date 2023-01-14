@@ -12,14 +12,14 @@
 
 namespace crypto {
 
-// mostly tls 1.3 variant with additional length etc.
+// when iv_size_bytes != there is non implemented special handling of Ek0
+// see
+// https://csrc.nist.gov/publications/detail/sp/800-38d/final
+// https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf (7.1)
+// also https://github.com/mko-x/SharedAES-GCM/blob/master/Sources/gcm.c#L275
+//
 template <typename Cipher>
 struct gcm {
-    // when iv_size_bytes != there is non implemented special handling of Ek0
-    // see
-    // https://csrc.nist.gov/publications/detail/sp/800-38d/final
-    // https://nvlpubs.nist.gov/nistpubs/Legacy/SP/nistspecialpublication800-38d.pdf (7.1)
-    // also https://github.com/mko-x/SharedAES-GCM/blob/master/Sources/gcm.c#L275
     static inline constexpr auto block_size_bytes = Cipher::block_size_bytes;
     static inline constexpr auto iv_size_bytes = 12; // 8 + 4
     static inline constexpr auto tag_size_bytes = 16;
