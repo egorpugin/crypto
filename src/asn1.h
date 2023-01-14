@@ -47,22 +47,6 @@ struct asn1_container {
         }
         return std::tuple{pos + 1, len};
     }
-    static auto get_next_data2(bytes_concept data) {
-        int pos = 0;
-        uint64_t len = 0;
-        len = data[pos];
-        uint8_t lenbytes = 1;
-        if (len > 0x80) {
-            lenbytes = len ^ 0x80;
-            len = 0;
-            int j = pos + 1;
-            for (int i = 0; i < lenbytes; ++i, ++j) {
-                len |= data[j] << ((lenbytes - 1 - i) * 8);
-            }
-            return std::tuple{j, len};
-        }
-        return std::tuple{pos + 1, len};
-    }
 };
 struct asn1_base : asn1_container {
     asn1_base() = default;
@@ -78,9 +62,6 @@ struct asn1_base : asn1_container {
         operator bytes_concept() const {
             return data;
         }
-        /*operator Asn1Type() const {
-            return data;
-        }*/
         template <typename T>
         operator T() const {
             auto [start, len] = asn1_container::get_next_data(data);

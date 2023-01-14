@@ -466,7 +466,7 @@ void test_tls() {
     run("example.com");
     run("google.com");
     run("gosuslugi.ru"); // does not support tls13
-    run("www.sberbank.ru"); // does not support tls13
+    run("sberbank.ru"); // does not support tls13
     run("nalog.gov.ru");
     run("github.com");
     run("gmail.com");

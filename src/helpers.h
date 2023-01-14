@@ -103,6 +103,9 @@ struct bytes_concept {
         }
         return memcmp(data(), rhs.data(), sz) == 0;
     }
+    bool contains(uint8_t c) const {
+        return memchr(data(), c, sz);
+    }
 };
 
 template <typename... Ts>

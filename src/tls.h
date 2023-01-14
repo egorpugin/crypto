@@ -530,11 +530,13 @@ struct tls13_ {
                         auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
                                                     x509::public_key_algorithm, 0);
 
-                        static int i = 0;
+                        int i = 0;
                         path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, i++);
-                        fs::create_directories(fn.parent_path());
-                        std::ofstream of{fn, std::ios::binary};
-                        of.write((const char *)data.data(), data.size());
+                        auto write_cert = [&]() {
+                            //fs::create_directories(fn.parent_path());
+                            //std::ofstream of{fn, std::ios::binary};
+                            //of.write((const char *)data.data(), data.size());
+                        };
 
                         if (pka == ecPublicKey) {
                             auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
@@ -547,9 +549,8 @@ struct tls13_ {
                                 string s = curve;
                                 std::cerr << "unknown x509::public_key_algorithm::curve: " << s << "\n";
 
-                                std::ofstream of{format("d:/dev/crypto/.sw/{}.der", i++), std::ios::binary};
-                                of.write((const char *)data.data(), data.size());
-                                // throw std::runtime_error{"unknown x509::public_key_algorithm::curve"};
+                                write_cert();
+                                throw std::runtime_error{"unknown x509::public_key_algorithm::curve"};
                             }
                         }
                         else if (pka == rsaEncryption) {
@@ -557,20 +558,41 @@ struct tls13_ {
                             string s = pka;
                             std::cerr << "unknown x509::public_key_algorithm: " << s << "\n";
 
-                            std::ofstream of{format("d:/dev/crypto/.sw/{}.der",i++), std::ios::binary};
-                            of.write((const char *)data.data(), data.size());
-                            //throw std::runtime_error{"unknown x509::public_key_algorithm"};
+                            write_cert();
+                            throw std::runtime_error{"unknown x509::public_key_algorithm"};
                         }
 
                         if (cert_number++ == 0) {
                             bool servername_ok{};
+                            auto compare_servername = [&](bytes_concept certname) {
+                                if (certname == servername) {
+                                    return true;
+                                }
+                                if (!certname.contains('*')) {
+                                    return false;
+                                }
+                                int npoints{};
+                                for (int
+                                    i = certname.size() - 1,
+                                    j = servername.size() - 1; i >= 0 && j >= 0;
+                                     --i, --j) {
+                                    if (certname[i] == '*' && npoints >= 2) {
+                                        return true;
+                                    }
+                                    if (certname[i] != servername[j]) {
+                                        return false;
+                                    }
+                                    npoints += certname[i] == '.';
+                                }
+                                return false;
+                            };
                             auto check_name = [&](auto &&name) {
                                 if (name.is<asn1_printable_string>()) {
                                     auto s = name.get<asn1_printable_string>();
-                                    servername_ok |= s == servername;
+                                    servername_ok |= compare_servername(s);
                                 } else if (name.is<asn1_utf8_string>()) {
                                     auto s = name.get<asn1_utf8_string>();
-                                    servername_ok |= s == servername;
+                                    servername_ok |= compare_servername(s);
                                 }
                             };
                             for (auto &&seq : a.get<asn1_set>(x509::main, x509::certificate, x509::subject_name, 0)) {
@@ -595,12 +617,13 @@ struct tls13_ {
                                         }
                                         auto names = s.get<asn1_sequence>(1,0);
                                         for (auto &&name : names.data_as_strings()) {
-                                            servername_ok |= name == servername;
+                                            servername_ok |= compare_servername(name);
                                         }
                                     }
                                 }
                             }
                             if (!servername_ok) {
+                                write_cert();
                                 throw std::runtime_error{format("cannot match servername")};
                             }
 
@@ -831,6 +854,18 @@ struct http_client {
             host = host.substr(8);
         }
         host = host.substr(0, host.find('/'));
+        if (host.empty()) {
+            throw std::runtime_error{"bad host"};
+        }
+        while (host.back() == '.') {
+            host.pop_back();
+        }
+        if (host.empty()) {
+            throw std::runtime_error{"bad host"};
+        }
+        if (auto p = host.rfind('.', host.rfind('.') - 1); p != -1) {
+            //host = host.substr(p + 1);
+        }
 
         boost::asio::ip::tcp::resolver r{ex};
         auto result = co_await r.async_resolve({host, host == "localhost"sv ? "11111" : "443"}, use_awaitable);
