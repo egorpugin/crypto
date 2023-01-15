@@ -481,6 +481,7 @@ void test_tls() {
 
 void test_streebog() {
     using namespace crypto;
+
     {
         streebog stb;
 
@@ -541,6 +542,7 @@ void test_streebog() {
             printf("File error: %s\n", "1.txt");
     }
 }
+
 void test_kuznechik() {
     using namespace crypto;
 
@@ -554,18 +556,15 @@ void test_kuznechik() {
     kuznechik::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
                                         0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
 
-    kuznechik::vect res_enc;
-    kuznechik::vect res_dec;
-
     kuznechik k;
     k.expand_key(key1, key2);
     {
-        k.encript(encrypt_test_string, res_enc);
-        cmp_base(decrypt_test_string, res_enc);
+        auto res = k.encrypt(encrypt_test_string);
+        cmp_base(decrypt_test_string, res);
     }
     {
-        k.decript(decrypt_test_string, res_dec);
-        cmp_base(encrypt_test_string, res_dec);
+        auto res = k.decrypt(decrypt_test_string);
+        cmp_base(encrypt_test_string, res);
     }
 }
 
@@ -578,7 +577,7 @@ int main() {
     //test_hmac();
     //test_chacha20();
     //test_asn1();
-    test_tls();
     //test_streebog();
-    //test_kuznechik();
+    test_kuznechik();
+    //test_tls();
 }

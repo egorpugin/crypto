@@ -1,5 +1,6 @@
-#include <iostream>
-#include <array>
+#include "helpers.h"
+
+namespace crypto {
 
 struct kuznechik_data {
     static constexpr auto block_size = 16;
@@ -42,152 +43,134 @@ struct kuznechik_data {
 };
 
 struct kuznechik : kuznechik_data {
-    using vect = std::array<uint8_t, block_size>;
+    using vect = array<block_size>;
 
     vect iter_C[32];
     vect iter_key[10];
 
     void expand_key(const vect &key1, const vect &key2) {
-        vect iter_1;
-        vect iter_2;
-        vect iter_3;
-        vect iter_4;
         get_c();
+        vect iter[4];
+        for (int i = 0; i < block_size; ++i) {
+            iter[0][i] = key1[i];
+            iter[1][i] = key2[i];
+        }
         iter_key[0] = key1;
         iter_key[1] = key2;
-
-        for (int i = 0; i < block_size; ++i) {
-            iter_1[i] = key1[i];
-            iter_2[i] = key2[i];
-        }
-
-         for (int i = 0; i < 4; i++) {
-            kuz_f(iter_1, iter_2, iter_3, iter_4, iter_C[0 + 8 * i]);
-            kuz_f(iter_3, iter_4, iter_1, iter_2, iter_C[1 + 8 * i]);
-            kuz_f(iter_1, iter_2, iter_3, iter_4, iter_C[2 + 8 * i]);
-            kuz_f(iter_3, iter_4, iter_1, iter_2, iter_C[3 + 8 * i]);
-            kuz_f(iter_1, iter_2, iter_3, iter_4, iter_C[4 + 8 * i]);
-            kuz_f(iter_3, iter_4, iter_1, iter_2, iter_C[5 + 8 * i]);
-            kuz_f(iter_1, iter_2, iter_3, iter_4, iter_C[6 + 8 * i]);
-            kuz_f(iter_3, iter_4, iter_1, iter_2, iter_C[7 + 8 * i]);
-            iter_key[2 * i + 2] = iter_1;
-            iter_key[2 * i + 3] = iter_2;
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                f(iter[0], iter[1], iter[2], iter[3], iter_C[j * 2 + 0 + 8 * i]);
+                f(iter[2], iter[3], iter[0], iter[1], iter_C[j * 2 + 1 + 8 * i]);
+            }
+            iter_key[2 * i + 2] = iter[0];
+            iter_key[2 * i + 3] = iter[1];
         }
     }
-
-     void encript(const vect &blk, vect &out_blk) {
-        out_blk = blk;
-        for (int i = 0; i < 9; i++) {
-            kuz_x(iter_key[i], out_blk, out_blk);
-
-            kuz_s(out_blk, out_blk);
-
-            kuz_l(out_blk, out_blk);
+    auto encrypt(const vect &blk) {
+        auto out_blk = blk;
+        for (int i = 0; i < 9; ++i) {
+            x(iter_key[i], out_blk, out_blk);
+            s(out_blk, out_blk);
+            l(out_blk, out_blk);
         }
-        kuz_x(out_blk, iter_key[9], out_blk);
+        x(out_blk, iter_key[9], out_blk);
+        return out_blk;
     }
-
-    void decript(const vect &blk, vect &out_blk) {
-        out_blk = blk;
-        kuz_x(out_blk, iter_key[9], out_blk);
+    auto decrypt(const vect &blk) {
+        auto out_blk = blk;
+        x(out_blk, iter_key[9], out_blk);
         for (int i = 8; i >= 0; i--) {
-            kuz_reverse_l(out_blk, out_blk);
+            reverse_l(out_blk, out_blk);
+            reverse_s(out_blk, out_blk);
+            x(iter_key[i], out_blk, out_blk);
+        }
+        return out_blk;
+    }
 
-            kuz_reverse_s(out_blk, out_blk);
-
-            kuz_x(iter_key[i], out_blk, out_blk);
+    void get_c() {
+        for (int i = 0; i < 32; ++i) {
+            vect iter_num{};
+            iter_num[0] = i + 1;
+            l(iter_num, iter_C[i]);
         }
     }
-
-     void kuz_s(const vect &in_data, vect &out_data) {
-        for (int i = 0; i < block_size; i++)
+    void s(const vect &in_data, vect &out_data) {
+        for (int i = 0; i < block_size; ++i) {
             out_data[i] = Pi[in_data[i]];
+        }
     }
-
-     void kuz_reverse_s(const vect &in_data, vect &out_data) {
-        for (int i = 0; i < block_size; i++)
+    void reverse_s(const vect &in_data, vect &out_data) {
+        for (int i = 0; i < block_size; ++i) {
             out_data[i] = reverse_Pi[in_data[i]];
+        }
     }
-
-     void kuz_x(const vect &a, const vect &b, vect &c) {
-        for (int i = 0; i < block_size; i++)
+    void x(const vect &a, const vect &b, vect &c) {
+        for (int i = 0; i < block_size; ++i) {
             c[i] = a[i] ^ b[i];
+        }
     }
-
-     uint8_t kuz_gf_mul(uint8_t a, uint8_t b) {
+    uint8_t gf_mul(uint8_t a, uint8_t b) {
         uint8_t c = 0;
         uint8_t hi_bit;
-
-        for (int i = 0; i < 8; i++) {
-            if (b & 1)
+        for (int i = 0; i < 8; ++i) {
+            if (b & 1) {
                 c ^= a;
+            }
             hi_bit = a & 0x80;
             a <<= 1;
-            if (hi_bit)
-                a ^= 0xc3; // полином x^8+x^7+x^6+x+1
+            if (hi_bit) {
+                a ^= 0xc3; // polynom x^8+x^7+x^6+x+1
+            }
             b >>= 1;
         }
         return c;
     }
-
-    void kuz_r(vect &state) {
+    void r(vect &state) {
         uint8_t a_15 = 0;
         vect internal;
-        for (int i = 15; i >= 0; i--) {
-            if (i != 0)
+        for (int i = 15; i >= 0; --i) {
+            if (i != 0) {
                 internal[i - 1] = state[i];
-            a_15 ^= kuz_gf_mul(state[i], l_vec[i]);
+            }
+            a_15 ^= gf_mul(state[i], l_vec[i]);
         }
         internal[15] = a_15;
         state = internal;
     }
-
-     void kuz_reverse_r(vect &state) {
-        uint8_t a_0;
-        a_0 = state[15];
+    void reverse_r(vect &state) {
+        auto a_0 = state[15];
         vect internal;
-        for (int i = 0; i < 16; i++) {
+        for (int i = 0; i < 16; ++i) {
             if (i != 0) {
                 internal[i] = state[i - 1];
-                a_0 ^= kuz_gf_mul(internal[i], l_vec[i]);
+                a_0 ^= gf_mul(internal[i], l_vec[i]);
             }
         }
         internal[0] = a_0;
         state = internal;
     }
-
-    void kuz_l(const vect &in_data, vect &out_data) {
-        vect internal;
-        internal = in_data;
-        for (int i = 0; i < 16; i++)
-            kuz_r(internal);
-        out_data = internal;
-    }
-
-     void kuz_reverse_l(const vect &in_data, vect &out_data) {
-        vect internal;
-        internal = in_data;
-        for (int i = 0; i < 16; i++)
-            kuz_reverse_r(internal);
-        out_data = internal;
-    }
-
-    void get_c() {
-        vect iter_num[32];
-        for (int i = 0; i < 32; i++) {
-            iter_num[i] = {};
-            iter_num[i][0] = i + 1;
+    void l(const vect &in_data, vect &out_data) {
+        auto internal = in_data;
+        for (int i = 0; i < 16; ++i) {
+            r(internal);
         }
-        for (int i = 0; i < 32; i++)
-            kuz_l(iter_num[i], iter_C[i]);
+        out_data = internal;
     }
-
-     void kuz_f(const vect &in_key_1, const vect &in_key_2, vect &out_key_1, vect &out_key_2, vect &iter_const) {
+    void reverse_l(const vect &in_data, vect &out_data) {
+        auto internal = in_data;
+        for (int i = 0; i < 16; ++i) {
+            reverse_r(internal);
+        }
+        out_data = internal;
+    }
+    void f(const vect &in_key_1, const vect &in_key_2, vect &out_key_1, vect &out_key_2, vect &iter_const) {
         vect internal;
         out_key_2 = in_key_1;
-        kuz_x(in_key_1, iter_const, internal);
-        kuz_s(internal, internal);
-        kuz_l(internal, internal);
-        kuz_x(internal, in_key_2, out_key_1);
+        x(in_key_1, iter_const, internal);
+        s(internal, internal);
+        l(internal, internal);
+        x(internal, in_key_2, out_key_1);
     }
 };
+
+} // namespace crypto
