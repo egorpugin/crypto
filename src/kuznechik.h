@@ -49,7 +49,11 @@ struct kuznechik : kuznechik_data {
     vect iter_key[10];
 
     void expand_key(const vect &key1, const vect &key2) {
-        get_c();
+        for (int i = 0; i < 32; ++i) {
+            vect iter_num{};
+            iter_num[0] = i + 1;
+            l(iter_num, iter_C[i]);
+        }
         vect iter[4];
         for (int i = 0; i < block_size; ++i) {
             iter[0][i] = key1[i];
@@ -87,13 +91,6 @@ struct kuznechik : kuznechik_data {
         return out_blk;
     }
 
-    void get_c() {
-        for (int i = 0; i < 32; ++i) {
-            vect iter_num{};
-            iter_num[0] = i + 1;
-            l(iter_num, iter_C[i]);
-        }
-    }
     void s(const vect &in_data, vect &out_data) {
         for (int i = 0; i < block_size; ++i) {
             out_data[i] = Pi[in_data[i]];
