@@ -3,16 +3,14 @@
 #include "sha2.h"
 #include "sha3.h"
 #include "sm4.h"
-#ifdef _MSC_VER
 #include "tls.h"
-#endif
 #include "random.h"
 #include "ec.h"
 #include "hmac.h"
 #include "chacha20.h"
 #include "asn1.h"
 #include "streebog.h"
-#include "kuznechik.h"
+#include "kuznyechik.h"
 
 #include <array>
 #include <iostream>
@@ -446,6 +444,88 @@ void test_asn1() {
     }
 }
 
+void test_streebog() {
+    using namespace crypto;
+
+    {
+    streebog stb;
+
+    //---------------------
+    static const unsigned char test_string[63] = {
+        0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
+        0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
+        0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+        0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32};
+
+    stb.init(256);
+    stb.update(test_string, sizeof test_string);
+    stb.completion();
+    streebog::vect hash = {0x9d, 0x15, 0x1e, 0xef, 0xd8, 0x59, 0x0b, 0x89, 0xda, 0xa6, 0xba,
+                           0x6c, 0xb7, 0x4a, 0xf9, 0x27, 0x5d, 0xd0, 0x51, 0x02, 0x6b, 0xb1,
+                           0x49, 0xa4, 0x52, 0xfd, 0x84, 0xe5, 0xe5, 0x7b, 0x55, 0x00};
+    cmp_base(hash, stb.hash);
+    // stb.HashPrint();
+    }
+
+    {
+    streebog stb;
+    const char str[] = "test";
+    uint8_t *buffer = (uint8_t *)malloc(strlen(str));
+    memcpy(buffer, str, strlen(str));
+    stb.init(256);
+    stb.update(buffer, strlen(str));
+    stb.completion();
+    streebog::vect hash = {0x12, 0xa5, 0x08, 0x38, 0x19, 0x1b, 0x55, 0x04, 0xf1, 0xe5, 0xf2,
+                           0xfd, 0x07, 0x87, 0x14, 0xcf, 0x6b, 0x59, 0x2b, 0x9d, 0x29, 0xaf,
+                           0x99, 0xd0, 0xb1, 0x0d, 0x8d, 0x02, 0x88, 0x1c, 0x38, 0x57};
+    cmp_base(hash, stb.hash);
+    // printf("GOST 34.11-2012 \"Stribog\"\nString: %s\n", str);
+    // stb.HashPrint();
+    }
+
+    {
+    streebog stb;
+
+    FILE *file;
+    uint8_t *buffer_file;
+    size_t len;
+    stb.init(256);
+    if ((file = fopen("1.txt", "rb")) != NULL) {
+            buffer_file = (uint8_t *)malloc((size_t)4096);
+            while ((len = fread(buffer_file, (size_t)1, (size_t)4096, file)))
+                stb.update(buffer_file, len);
+            free(buffer_file);
+            stb.completion();
+            fclose(file);
+            streebog::vect hash = {0x12, 0xa5, 0x08, 0x38, 0x19, 0x1b, 0x55, 0x04, 0xf1, 0xe5, 0xf2,
+                                   0xfd, 0x07, 0x87, 0x14, 0xcf, 0x6b, 0x59, 0x2b, 0x9d, 0x29, 0xaf,
+                                   0x99, 0xd0, 0xb1, 0x0d, 0x8d, 0x02, 0x88, 0x1c, 0x38, 0x57};
+            cmp_base(hash, stb.hash);
+            // printf("GOST 34.11-2012 \"Stribog\"\nFile name: %s\n", "1.txt");
+            // stb.HashPrint();
+    } else
+            printf("File error: %s\n", "1.txt");
+    }
+}
+
+void test_kuznechik() {
+    using namespace crypto;
+
+    kuznechik::key_type key1{0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00, 0xff, 0xee, 0xdd,
+                             0xcc, 0xbb, 0xaa, 0x99, 0x88, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45,
+                             0x23, 0x01, 0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe};
+
+    kuznechik::vect encrypt_test_string{0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+                                        0x00, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11};
+    kuznechik::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
+                                        0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
+
+    kuznechik k;
+    k.expand_key(key1);
+    cmp_base(decrypt_test_string, k.encrypt(encrypt_test_string));
+    cmp_base(encrypt_test_string, k.decrypt(decrypt_test_string));
+}
+
 void test_tls() {
     using namespace crypto;
 
@@ -463,109 +543,23 @@ void test_tls() {
         }
     };
 
-    run("software-network.org");
-    run("letsencrypt.org");
-    run("example.com");
-    run("google.com");
-    run("gosuslugi.ru"); // does not support tls13
-    run("sberbank.ru"); // does not support tls13
-    run("nalog.gov.ru");
-    run("github.com");
-    run("gmail.com");
-    run("youtube.com");
-    run("twitch.tv");
-    run("tls13.akamai.io");
-    run("tls13.1d.pw");
+    //run("91.244.183.22"); // https://infotecs.ru/stand_tls/
+    //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
+
+    //run("software-network.org");
+    //run("letsencrypt.org");
+    //run("example.com");
+    //run("google.com");
+    //run("gosuslugi.ru"); // does not support tls13
+    //run("sberbank.ru"); // does not support tls13
+    //run("nalog.gov.ru");
+    //run("github.com");
+    //run("gmail.com");
+    //run("youtube.com");
+    //run("twitch.tv");
+    //run("tls13.akamai.io");
+    //run("tls13.1d.pw");
     //run("localhost");
-}
-
-void test_streebog() {
-    using namespace crypto;
-
-    {
-        streebog stb;
-
-        //---------------------
-        static const unsigned char test_string[63] = {
-            0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
-            0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
-            0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-            0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32};
-
-        stb.init(256);
-        stb.update(test_string, sizeof test_string);
-        stb.completion();
-        streebog::vect hash = {0x9d, 0x15, 0x1e, 0xef, 0xd8, 0x59, 0x0b, 0x89, 0xda, 0xa6, 0xba,
-                                 0x6c, 0xb7, 0x4a, 0xf9, 0x27, 0x5d, 0xd0, 0x51, 0x02, 0x6b, 0xb1,
-                                 0x49, 0xa4, 0x52, 0xfd, 0x84, 0xe5, 0xe5, 0x7b, 0x55, 0x00};
-        cmp_base(hash, stb.hash);
-        //stb.HashPrint();
-    }
-
-    {
-        streebog stb;
-        const char str[] = "test";
-        uint8_t *buffer = (uint8_t *)malloc(strlen(str));
-        memcpy(buffer, str, strlen(str));
-        stb.init(256);
-        stb.update(buffer, strlen(str));
-        stb.completion();
-        streebog::vect hash = {0x12, 0xa5, 0x08, 0x38, 0x19, 0x1b, 0x55, 0x04, 0xf1, 0xe5, 0xf2,
-                                 0xfd, 0x07, 0x87, 0x14, 0xcf, 0x6b, 0x59, 0x2b, 0x9d, 0x29, 0xaf,
-                                 0x99, 0xd0, 0xb1, 0x0d, 0x8d, 0x02, 0x88, 0x1c, 0x38, 0x57};
-        cmp_base(hash, stb.hash);
-        //printf("GOST 34.11-2012 \"Stribog\"\nString: %s\n", str);
-        //stb.HashPrint();
-    }
-
-    {
-        streebog stb;
-
-        FILE *file;
-        uint8_t *buffer_file;
-        size_t len;
-        stb.init(256);
-        if ((file = fopen("1.txt", "rb")) != NULL) {
-            buffer_file = (uint8_t *)malloc((size_t)4096);
-            while ((len = fread(buffer_file, (size_t)1, (size_t)4096, file)))
-                stb.update(buffer_file, len);
-            free(buffer_file);
-            stb.completion();
-            fclose(file);
-            streebog::vect hash = {0x12, 0xa5, 0x08, 0x38, 0x19, 0x1b, 0x55, 0x04, 0xf1, 0xe5, 0xf2,
-                                   0xfd, 0x07, 0x87, 0x14, 0xcf, 0x6b, 0x59, 0x2b, 0x9d, 0x29, 0xaf,
-                                   0x99, 0xd0, 0xb1, 0x0d, 0x8d, 0x02, 0x88, 0x1c, 0x38, 0x57};
-            cmp_base(hash, stb.hash);
-            //printf("GOST 34.11-2012 \"Stribog\"\nFile name: %s\n", "1.txt");
-            //stb.HashPrint();
-        } else
-            printf("File error: %s\n", "1.txt");
-    }
-}
-
-void test_kuznechik() {
-    using namespace crypto;
-
-    kuznechik::key_type key1{0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00,
-                         0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88,
-                         0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01,
-                         0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe};
-
-    kuznechik::vect encrypt_test_string{0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-                                        0x00, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11};
-    kuznechik::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
-                                        0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
-
-    kuznechik k;
-    k.expand_key(key1);
-    {
-        auto res = k.encrypt(encrypt_test_string);
-        cmp_base(decrypt_test_string, res);
-    }
-    {
-        auto res = k.decrypt(decrypt_test_string);
-        cmp_base(encrypt_test_string, res);
-    }
 }
 
 int main() {
@@ -578,6 +572,6 @@ int main() {
     //test_chacha20();
     //test_asn1();
     //test_streebog();
-    test_kuznechik();
-    //test_tls();
+    //test_kuznechik();
+    test_tls();
 }

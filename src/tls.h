@@ -867,8 +867,16 @@ struct http_client {
             //host = host.substr(p + 1);
         }
 
+        string port = "443";
+        if (host == "localhost"sv) {
+            port = "11111";
+        }
+        if (host == "91.244.183.22") {
+            port = "15092";
+        }
+
         boost::asio::ip::tcp::resolver r{ex};
-        auto result = co_await r.async_resolve({host, host == "localhost"sv ? "11111" : "443"}, use_awaitable);
+        auto result = co_await r.async_resolve({host, port}, use_awaitable);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
