@@ -3,8 +3,6 @@
 namespace crypto {
 
 struct kuznechik_data {
-    static constexpr auto block_size = 16;
-
     static constexpr unsigned char Pi[256] = {
         0xFC, 0xEE, 0xDD, 0x11, 0xCF, 0x6E, 0x31, 0x16, 0xFB, 0xC4, 0xFA, 0xDA, 0x23, 0xC5, 0x04, 0x4D, 0xE9, 0x77,
         0xF0, 0xDB, 0x93, 0x2E, 0x99, 0xBA, 0x17, 0x36, 0xF1, 0xBB, 0x14, 0xCD, 0x5F, 0xC1, 0xF9, 0x18, 0x65, 0x5A,
@@ -21,7 +19,6 @@ struct kuznechik_data {
         0x8D, 0x53, 0xAA, 0x90, 0xCA, 0xD8, 0x85, 0x61, 0x20, 0x71, 0x67, 0xA4, 0x2D, 0x2B, 0x09, 0x5B, 0xCB, 0x9B,
         0x25, 0xD0, 0xBE, 0xE5, 0x6C, 0x52, 0x59, 0xA6, 0x74, 0xD2, 0xE6, 0xF4, 0xB4, 0xC0, 0xD1, 0x66, 0xAF, 0xC2,
         0x39, 0x4B, 0x63, 0xB6};
-
     static constexpr unsigned char reverse_Pi[256] = {
         0xA5, 0x2D, 0x32, 0x8F, 0x0E, 0x30, 0x38, 0xC0, 0x54, 0xE6, 0x9E, 0x39, 0x55, 0x7E, 0x52, 0x91, 0x64, 0x03,
         0x57, 0x5A, 0x1C, 0x60, 0x07, 0x18, 0x21, 0x72, 0xA8, 0xD1, 0x29, 0xC6, 0xA4, 0x3F, 0xE0, 0x27, 0x8D, 0x0C,
@@ -38,75 +35,72 @@ struct kuznechik_data {
         0xDD, 0xCD, 0x0B, 0x13, 0x98, 0x02, 0x93, 0x80, 0x90, 0xD0, 0x24, 0x34, 0xCB, 0xED, 0xF4, 0xCE, 0x99, 0x10,
         0x44, 0x40, 0x92, 0x3A, 0x01, 0x26, 0x12, 0x1A, 0x48, 0x68, 0xF5, 0x81, 0x8B, 0xC7, 0xD6, 0x20, 0x0A, 0x08,
         0x00, 0x4C, 0xD7, 0x74};
-
     static constexpr unsigned char l_vec[16] = {1, 148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148};
 };
 
 struct kuznechik : kuznechik_data {
+    static inline constexpr auto block_size = 16;
+    static inline constexpr auto key_size = 32;
+
     using vect = array<block_size>;
+    using key_type = array<key_size>;
 
-    vect iter_C[32];
-    vect iter_key[10];
+    vect round_keys[10];
 
-    void expand_key(const vect &key1, const vect &key2) {
+    void expand_key(const key_type &key) noexcept {
+        vect C[32];
         for (int i = 0; i < 32; ++i) {
             vect iter_num{};
             iter_num[0] = i + 1;
-            l(iter_num, iter_C[i]);
+            C[i] = l(iter_num, r);
         }
         vect iter[4];
-        for (int i = 0; i < block_size; ++i) {
-            iter[0][i] = key1[i];
-            iter[1][i] = key2[i];
-        }
-        iter_key[0] = key1;
-        iter_key[1] = key2;
+        memcpy(iter[0].data(), key.data(), key.size());
+        memcpy(round_keys[0].data(), key.data(), key.size());
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
-                f(iter[0], iter[1], iter[2], iter[3], iter_C[j * 2 + 0 + 8 * i]);
-                f(iter[2], iter[3], iter[0], iter[1], iter_C[j * 2 + 1 + 8 * i]);
+                f(iter[0], iter[1], iter[2], iter[3], C[j * 2 + 0 + 8 * i]);
+                f(iter[2], iter[3], iter[0], iter[1], C[j * 2 + 1 + 8 * i]);
             }
-            iter_key[2 * i + 2] = iter[0];
-            iter_key[2 * i + 3] = iter[1];
+            round_keys[2 * i + 2] = iter[0];
+            round_keys[2 * i + 3] = iter[1];
         }
     }
-    auto encrypt(const vect &blk) {
+    auto encrypt(const vect &blk) noexcept {
         auto out_blk = blk;
         for (int i = 0; i < 9; ++i) {
-            x(iter_key[i], out_blk, out_blk);
-            s(out_blk, out_blk);
-            l(out_blk, out_blk);
+            x(round_keys[i], out_blk, out_blk);
+            out_blk = s(out_blk, Pi);
+            out_blk = l(out_blk, r);
         }
-        x(out_blk, iter_key[9], out_blk);
+        x(round_keys[9], out_blk, out_blk);
         return out_blk;
     }
-    auto decrypt(const vect &blk) {
+    auto decrypt(const vect &blk) noexcept {
         auto out_blk = blk;
-        x(out_blk, iter_key[9], out_blk);
+        x(round_keys[9], out_blk, out_blk);
         for (int i = 8; i >= 0; i--) {
-            reverse_l(out_blk, out_blk);
-            reverse_s(out_blk, out_blk);
-            x(iter_key[i], out_blk, out_blk);
+            out_blk = l(out_blk, reverse_r);
+            out_blk = s(out_blk, reverse_Pi);
+            x(round_keys[i], out_blk, out_blk);
         }
         return out_blk;
     }
 
-    void s(const vect &in_data, vect &out_data) {
+    static auto s(const vect &in_data, auto &&table) noexcept {
+        vect out_data;
         for (int i = 0; i < block_size; ++i) {
-            out_data[i] = Pi[in_data[i]];
+            out_data[i] = table[in_data[i]];
         }
+        return out_data;
     }
-    void reverse_s(const vect &in_data, vect &out_data) {
-        for (int i = 0; i < block_size; ++i) {
-            out_data[i] = reverse_Pi[in_data[i]];
-        }
-    }
-    void x(const vect &a, const vect &b, vect &c) {
+    static void x(const vect &a, const vect &b, vect &c) noexcept {
         for (int i = 0; i < block_size; ++i) {
             c[i] = a[i] ^ b[i];
         }
     }
-    uint8_t gf_mul(uint8_t a, uint8_t b) {
+    // make table in constexpr?
+    static uint8_t gf_mul(uint8_t a, uint8_t b) noexcept {
         uint8_t c = 0;
         uint8_t hi_bit;
         for (int i = 0; i < 8; ++i) {
@@ -122,7 +116,7 @@ struct kuznechik : kuznechik_data {
         }
         return c;
     }
-    void r(vect &state) {
+    static void r(vect &state) noexcept {
         uint8_t a_15 = 0;
         vect internal;
         for (int i = 15; i >= 0; --i) {
@@ -134,7 +128,7 @@ struct kuznechik : kuznechik_data {
         internal[15] = a_15;
         state = internal;
     }
-    void reverse_r(vect &state) {
+    static void reverse_r(vect &state) noexcept {
         auto a_0 = state[15];
         vect internal;
         for (int i = 0; i < 16; ++i) {
@@ -146,26 +140,19 @@ struct kuznechik : kuznechik_data {
         internal[0] = a_0;
         state = internal;
     }
-    void l(const vect &in_data, vect &out_data) {
+    static auto l(const vect &in_data, auto &&f) noexcept {
         auto internal = in_data;
         for (int i = 0; i < 16; ++i) {
-            r(internal);
+            f(internal);
         }
-        out_data = internal;
+        return internal;
     }
-    void reverse_l(const vect &in_data, vect &out_data) {
-        auto internal = in_data;
-        for (int i = 0; i < 16; ++i) {
-            reverse_r(internal);
-        }
-        out_data = internal;
-    }
-    void f(const vect &in_key_1, const vect &in_key_2, vect &out_key_1, vect &out_key_2, vect &iter_const) {
-        vect internal;
+    static void f(const vect &in_key_1, const vect &in_key_2, vect &out_key_1, vect &out_key_2, const vect &iter_const) noexcept {
         out_key_2 = in_key_1;
+        vect internal;
         x(in_key_1, iter_const, internal);
-        s(internal, internal);
-        l(internal, internal);
+        internal = s(internal, Pi);
+        internal = l(internal, r);
         x(internal, in_key_2, out_key_1);
     }
 };
