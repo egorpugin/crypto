@@ -23,7 +23,6 @@ template <auto Bytes>
 using length = bigendian_unsigned<Bytes>;
 
 using ube16 = bigendian_unsigned<2>;
-
 using Random = std::array<uint8_t,32>;
 
 // selected ciphers:
@@ -91,49 +90,21 @@ struct supported_versions {
 };
 struct signature_algorithms {
     ube16 extension_type = ExtensionType::signature_algorithms;
-    ube16 len = sizeof(length) + sizeof(scheme);
-
-    using SignatureScheme = uint16_t;
-/*
-    ecdsa_secp256r1_sha256 = 0x0403,
-    ecdsa_secp384r1_sha384 = 0x0503,
-
-    // EdDSA algorithms
-    ed25519 = 0x0807,
-*/
-
-    length<2> length{7 * sizeof(SignatureScheme)};
-    SignatureScheme scheme[7] = {
-        0x0708, 0x0302, 0x0304, 0x0305, 0x0104,
-        0x0408, 0x0908
-    };
-    //SignatureScheme scheme = 0x0302; // ecdsa_sha1
-    //SignatureScheme scheme = 0x0708; // ed25519
-    //SignatureScheme scheme = 0x0304; // google works (passes more)
-    //SignatureScheme scheme = 0x0104; // rsa_pkcs1_sha256
+    ube16 len = sizeof(length);
+    length<2> length;
 };
 struct supported_groups {
     ube16 extension_type = ExtensionType::supported_groups;
     ube16 len = sizeof(length);
     ube16 length;
 };
-template <auto KeySize>
 struct key_share {
     ube16 extension_type = ExtensionType::key_share;
-    ube16 len = sizeof(length) + sizeof(e);
-
-    struct entry {
-        ube16 scheme;
-        ::crypto::tls13::length<2> length{KeySize};
-        uint8_t key[KeySize];
-    };
-
-    length<2> length{sizeof(e)}; // client only
-    entry e;
+    ube16 length;
 };
 struct padding {
     ube16 extension_type = ExtensionType::padding;
-    ube16 len;
+    ube16 length;
 };
 
 struct alert {

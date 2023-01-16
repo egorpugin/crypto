@@ -543,9 +543,11 @@ void test_tls() {
         }
     };
 
-    //run("91.244.183.22"); // https://infotecs.ru/stand_tls/
+    run("91.244.183.22"); // https://infotecs.ru/stand_tls/
     //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
+    //run("gost.cryptopro.ru");
 
+    //run("infotecs.ru");
     //run("software-network.org");
     //run("letsencrypt.org");
     //run("example.com");

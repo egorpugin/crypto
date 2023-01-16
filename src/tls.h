@@ -71,19 +71,27 @@ struct tls13_ {
         }
     };
 
-    using all_suites = suites<suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256> // ok
+    using all_suites = suites<
+        suite_<gcm<aes_ecb<128>>, sha2<256>,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
+        > // ok
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256> // ok
                               // suite_<gcm<aes_ecb<128>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384> // ok
                               // suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
                               >;
     using suite_type = all_suites::default_suite;
     using cipher = suite_type::cipher_type;
 
-    using all_key_exchanges = key_exchanges<pair<curve25519, parameters::supported_groups::x25519>,
-                                            pair<ec::secp256r1, parameters::supported_groups::secp256r1>>;
+    using all_key_exchanges = key_exchanges<
+        //pair<ec::gostr34102012_512a, parameters::supported_groups::GC512A>,
+        pair<ec::gostr34102012_512b, parameters::supported_groups::GC512B>,
+        pair<curve25519, parameters::supported_groups::x25519>,
+        pair<ec::secp256r1, parameters::supported_groups::secp256r1>
+    >;
 
     using hash = suite_type::hash_type;
-    using key_exchange = ec::secp256r1;
-    static inline constexpr auto group_name = parameters::supported_groups::secp256r1;
+    using key_exchange = all_key_exchanges::default_key_exchange::type;
+    static inline constexpr auto group_name = all_key_exchanges::default_key_exchange::value;
 
     static inline constexpr auto max_tls_package = 40'000;
 
@@ -378,21 +386,76 @@ struct tls13_ {
 
             supported_versions &sv = w;
             signature_algorithms &sa = w;
-            supported_groups &sg = w;
-            ube16 &g = w;
-            g = group_name;
-            sg.length = sizeof(g);
-            sg.len += sizeof(g);
+            for (auto &&a : {
+                parameters::signature_scheme::ecdsa_secp256r1_sha256,
+                parameters::signature_scheme::ecdsa_secp384r1_sha384,
+                parameters::signature_scheme::ed25519,
+                parameters::signature_scheme::ecdsa_sha1,
+                parameters::signature_scheme::rsa_pkcs1_sha256,
+                parameters::signature_scheme::rsa_pss_rsae_sha256,
+                parameters::signature_scheme::rsa_pss_pss_sha256,
 
-            key_share<key_exchange::key_size> &k = w;
-            k.e.scheme = group_name;
-            get_random_secure_bytes(private_key.private_key);
-            private_key.public_key(k.e.key);
+                parameters::signature_scheme::gostr34102012_256a,
+                parameters::signature_scheme::gostr34102012_256b,
+                parameters::signature_scheme::gostr34102012_256c,
+                parameters::signature_scheme::gostr34102012_256d,
+                parameters::signature_scheme::gostr34102012_512a,
+                parameters::signature_scheme::gostr34102012_512b,
+                parameters::signature_scheme::gostr34102012_512c,
+
+                parameters::signature_scheme::sm2sig_sm3,
+                }) {
+                ube16 &v = w;
+                v = a;
+                sa.length += sizeof(v);
+                sa.len += sizeof(v);
+            }
+            supported_groups &sg = w;
+            for (auto &&g : {
+                /*parameters::supported_groups::x25519,
+                parameters::supported_groups::secp256r1,
+
+                parameters::supported_groups::GC256A,
+                parameters::supported_groups::GC256B,
+                parameters::supported_groups::GC256C,
+                parameters::supported_groups::GC256D,
+                parameters::supported_groups::GC512A,
+                parameters::supported_groups::GC512B,
+                parameters::supported_groups::GC512C,
+
+                parameters::supported_groups::curveSM2,*/
+                group_name,
+                }) {
+                ube16 &v = w;
+                v = g;
+                sg.length += sizeof(v);
+                sg.len += sizeof(v);
+            }
+
+            key_share &k = w;
+            {
+                struct entry {
+                    ube16 scheme;
+                    ::crypto::tls13::length<2> length{key_exchange::key_size};
+                    uint8_t key[key_exchange::key_size];
+                };
+
+                ube16 &len = w;
+                k.length += sizeof(len);
+
+                entry &e = w;
+                e.scheme = group_name;
+                get_random_secure_bytes(private_key.private_key);
+                private_key.public_key(e.key);
+
+                len += sizeof(e);
+                k.length += sizeof(e);
+            }
 
             padding &p = w;
             auto plen = 512 - (w.p - (uint8_t *)&client_hello);
             w.p += plen;
-            p.len = plen;
+            p.length = plen;
             extensions_len = w.p - exts_start;
 
             client_hello.length = 508;
@@ -873,6 +936,7 @@ struct http_client {
         }
         if (host == "91.244.183.22") {
             port = "15092";
+            port = "15082";
         }
 
         boost::asio::ip::tcp::resolver r{ex};
@@ -888,6 +952,9 @@ struct http_client {
         std::string ss = remote_ad.to_string();
         // std::cout << ss << "\n";
 
+        if (host == "91.244.183.22") {
+            host = "infotecs.ru";
+        }
         tls_layer = decltype(tls_layer){&s,host};
 
         // http layer
