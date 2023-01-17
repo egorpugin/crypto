@@ -42,6 +42,7 @@ enum class CipherSuite : uint16_t {
 enum class ExtensionType : uint16_t {
     server_name = 0,
     supported_versions = 43,
+    ec_point_formats = 11,
     signature_algorithms = 13,
     supported_groups = 10,
     psk_key_exchange_modes = 45,
@@ -84,9 +85,8 @@ struct server_name {
 };
 struct supported_versions {
     ube16 extension_type = ExtensionType::supported_versions;
-    ube16 len = sizeof(length) + sizeof(supported_version);
-    length<1> length{sizeof(supported_version)};
-    ProtocolVersion supported_version = tls_version::tls13; // tls13
+    ube16 len = sizeof(length);
+    length<1> length{};
 };
 struct signature_algorithms {
     ube16 extension_type = ExtensionType::signature_algorithms;
