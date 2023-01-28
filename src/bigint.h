@@ -63,14 +63,27 @@ struct bigint {
         b %= m;
         return b;
     }
-    template <auto N>
-    operator array<N>() const {
-        array<N> d;
-        auto ptr = mpz_export(d.data(), 0, 1, 1, 0, 0, *this);
-        if (ptr != d.data()) {
+    template <template <auto> typename A, auto N, int Order = 1>
+    A<N> to_array() const {
+        auto size = 1;
+        auto nail = 0;
+        auto numb = 8 * size - nail;
+        auto count1 = (mpz_sizeinbase(*this, 2) + numb - 1) / numb;
+        if (count1 > N) {
             throw std::runtime_error{"bigint error"};
         }
+
+        A<N> d;
+        mpz_export(d.data(), 0, Order, 1, 0, 0, *this);
         return d;
+    }
+    template <auto N, int Order = 1>
+    operator array<N>() const {
+        return to_array<array, N>();
+    }
+    template <auto N>
+    operator array_gost<N>() const {
+        return to_array<array_gost, N, -1>();
     }
 
     bigint operator*(const bigint &p) const {
@@ -121,6 +134,18 @@ struct bigint {
     bool operator==(int p) const {
         return mpz_cmp_si(*this, p) == 0;
     }
+    auto operator<=>(const bigint &p) const {
+        return mpz_cmp(*this, p) <=> 0;
+    }
+    auto operator<=>(uint64_t p) const {
+        return mpz_cmp_ui(*this, p) <=> 0;
+    }
+    auto operator<=>(int64_t p) const {
+        return mpz_cmp_si(*this, p) <=> 0;
+    }
+    auto operator<=>(int p) const {
+        return mpz_cmp_si(*this, p) <=> 0;
+    }
 };
 
 auto operator""_bi(const char *p, size_t len) {
@@ -138,6 +163,32 @@ bigint bytes_to_bigint(const array<N> &v, int order = 1) {
     bigint b;
     mpz_import(b, N, order, sizeof(v[0]), 0, 0, v.data());
     return b;
+}
+template <auto N>
+bigint bytes_to_bigint(const array_gost<N> &v) {
+    return bytes_to_bigint(v, -1);
+}
+
+auto bytes_to_string(auto &&bytes) {
+    std::string s;
+    s.reserve(bytes.size() * 2);
+    for (uint8_t b : bytes) {
+        constexpr auto alph = "0123456789abcdef";
+        s += alph[b >> 4];
+        s += alph[b & 0xF];
+    }
+    return s;
+}
+
+std::ostream &operator<<(std::ostream &o, const bigint &v) {
+    auto size = 1;
+    auto nail = 0;
+    auto numb = 8 * size - nail;
+    auto count1 = (mpz_sizeinbase(v, 2) + numb - 1) / numb;
+
+    std::string d(count1, ' ');
+    mpz_export(d.data(), 0, 1, 1, 0, 0, v);
+    return o << "0x" << bytes_to_string(d);
 }
 
 } // namespace crypto

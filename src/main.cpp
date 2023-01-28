@@ -10,7 +10,7 @@
 #include "chacha20.h"
 #include "asn1.h"
 #include "streebog.h"
-#include "kuznyechik.h"
+#include "grasshopper.h"
 
 #include <array>
 #include <iostream>
@@ -58,6 +58,11 @@ auto cmp_base = [](auto &&left, auto &&right) {
 };
 auto cmp_l = [](auto &&left, auto &&right) {
     return cmp_base(memcmp(left, right, 16), 0);
+};
+auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
+    using type = std::decay_t<decltype(sha)>;
+    to_string2(type{}, "The quick brown fox jumps over the lazy dog", h1);
+    to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
 
 void test_aes() {
@@ -208,11 +213,6 @@ void test_sha3() {
         to_string2(sha, "", "46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be141e96616fb13957692cc7edd0b45ae3dc07223c8e92937bef84bc0eab862853349ec75546f58fb7c2775c38462c5010d846c185c15111e595522a6bcd16cf86f3d122109e3b1fdd943b6aec468a2d621a7c06c6a957c62b54dafc3be87567d677231395f6147293b68ceab7a9e0c58d864e8efde4e1b9a46cbe854713672f5caaae314ed9083dab4b099f8e300f01b8650f1f4b1d8fcf3f3cb53fb8e9eb2ea203bdc970f50ae55428a91f7f53ac266b28419c3778a15fd248d339ede785fb7f5a1aaa96d313eacc890936c173cdcd0fab882c45755feb3aed96d477ff96390bf9a66d1368b208e21f7c10d04a3dbd4e360633e5db4b602601c14cea737db3dcf722632cc77851cbdde2aaf0a33a07b373445df490cc8fc1e4160ff118378f11f0477de055a81a9eda57a4a2cfb0c83929d310912f729ec6cfa36c6ac6a75837143045d791cc85eff5b21932f23861bcf23a52b5da67eaf7baae0f5fb1369db78f3ac45f8c4ac5671d85735cdddb09d2b1e34a1fc066ff4a162cb263d6541274ae2fcc865f618abe27c124cd8b074ccd516301b91875824d09958f341ef274bdab0bae316339894304e35877b0c28a9b1fd166c796b9cc258a064a8f57e27f2a5b8d548a728c9444ecb879adc19de0c1b8587de3e73e15d3ce2db7c9fa7b58ffc0e87251773faf3e8f3e3cf1d4dfa723afd4da9097cb3c866acbefab2c4e85e1918990ff93e0656b5f75b08729c60e6a9d7352b9efd2e33e3d1ba6e6d89edfa671266ece6be7bb5ac948b737e41590abe138ce1869c08680162f08863d174e77");
     }
 
-    auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
-        using type = std::decay_t<decltype(sha)>;
-        to_string2(type{}, "The quick brown fox jumps over the lazy dog", h1);
-        to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
-    };
     {
         sha3<224> sha;
         fox(sha,
@@ -309,8 +309,55 @@ void test_sm4() {
 void test_ec() {
     using namespace crypto;
 
-    //std::cout << std::hex;
+    // std::cout << std::hex;
 
+    // simple
+    {
+        {
+            ec::parameters<string_view> p{.p = "751"sv,
+                                          .a = "-1"sv,
+                                          .b = "188"sv,
+                                          .G{
+                                              "0"sv,
+                                              "376"sv,
+                                          }};
+            auto c = p.curve();
+            auto m = "386"_bi;
+            auto r = m * c.G;
+            cmp_base(r.x, "676"_bi);
+            cmp_base(r.y, "558"_bi);
+        }
+        {
+            ec::parameters<string_view> p{.p = "211"sv,
+                                          .a = "0"sv,
+                                          .b = "-4"sv,
+                                          .G{
+                                              "2"sv,
+                                              "2"sv,
+                                          }};
+            auto c = p.curve();
+            {
+                auto m = "1"_bi;
+                auto r = m * c.G;
+                cmp_base(r.x, "2"_bi);
+                cmp_base(r.y, "2"_bi);
+            }
+            {
+                auto m = "121"_bi;
+                auto r = m * c.G;
+                cmp_base(r.x, "115"_bi);
+                cmp_base(r.y, "48"_bi);
+            }
+            {
+                auto m = "203"_bi;
+                auto r = m * c.G;
+                cmp_base(r.x, "130"_bi);
+                cmp_base(r.y, "203"_bi);
+            }
+        }
+    }
+
+    //
     {
         auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
         {
@@ -448,79 +495,40 @@ void test_streebog() {
     using namespace crypto;
 
     {
-    streebog stb;
-
-    //---------------------
-    static const unsigned char test_string[63] = {
-        0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35,
-        0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31,
-        0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-        0x38, 0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32};
-
-    stb.init(256);
-    stb.update(test_string, sizeof test_string);
-    stb.completion();
-    streebog::vect hash = {0x9d, 0x15, 0x1e, 0xef, 0xd8, 0x59, 0x0b, 0x89, 0xda, 0xa6, 0xba,
-                           0x6c, 0xb7, 0x4a, 0xf9, 0x27, 0x5d, 0xd0, 0x51, 0x02, 0x6b, 0xb1,
-                           0x49, 0xa4, 0x52, 0xfd, 0x84, 0xe5, 0xe5, 0x7b, 0x55, 0x00};
-    cmp_base(hash, stb.hash);
-    // stb.HashPrint();
+        streebog<256> stb;
+        to_string2(stb, "", "3f539a213e97c802cc229d474c6aa32a825a360b2a933a949fd925208d9ce1bb");
     }
-
     {
-    streebog stb;
-    const char str[] = "test";
-    uint8_t *buffer = (uint8_t *)malloc(strlen(str));
-    memcpy(buffer, str, strlen(str));
-    stb.init(256);
-    stb.update(buffer, strlen(str));
-    stb.completion();
-    streebog::vect hash = {0x12, 0xa5, 0x08, 0x38, 0x19, 0x1b, 0x55, 0x04, 0xf1, 0xe5, 0xf2,
-                           0xfd, 0x07, 0x87, 0x14, 0xcf, 0x6b, 0x59, 0x2b, 0x9d, 0x29, 0xaf,
-                           0x99, 0xd0, 0xb1, 0x0d, 0x8d, 0x02, 0x88, 0x1c, 0x38, 0x57};
-    cmp_base(hash, stb.hash);
-    // printf("GOST 34.11-2012 \"Stribog\"\nString: %s\n", str);
-    // stb.HashPrint();
+        streebog<512> stb;
+        to_string2(stb, "", "8e945da209aa869f0455928529bcae4679e9873ab707b55315f56ceb98bef0a7362f715528356ee83cda5f2aac4c6ad2ba3a715c1bcd81cb8e9f90bf4c1c1a8a");
     }
-
     {
-    streebog stb;
-
-    FILE *file;
-    uint8_t *buffer_file;
-    size_t len;
-    stb.init(256);
-    if ((file = fopen("1.txt", "rb")) != NULL) {
-            buffer_file = (uint8_t *)malloc((size_t)4096);
-            while ((len = fread(buffer_file, (size_t)1, (size_t)4096, file)))
-                stb.update(buffer_file, len);
-            free(buffer_file);
-            stb.completion();
-            fclose(file);
-            streebog::vect hash = {0x12, 0xa5, 0x08, 0x38, 0x19, 0x1b, 0x55, 0x04, 0xf1, 0xe5, 0xf2,
-                                   0xfd, 0x07, 0x87, 0x14, 0xcf, 0x6b, 0x59, 0x2b, 0x9d, 0x29, 0xaf,
-                                   0x99, 0xd0, 0xb1, 0x0d, 0x8d, 0x02, 0x88, 0x1c, 0x38, 0x57};
-            cmp_base(hash, stb.hash);
-            // printf("GOST 34.11-2012 \"Stribog\"\nFile name: %s\n", "1.txt");
-            // stb.HashPrint();
-    } else
-            printf("File error: %s\n", "1.txt");
+        streebog<256> stb;
+        fox(stb,
+            "3e7dea7f2384b6c5a3d0e24aaa29c05e89ddd762145030ec22c71a6db8b2c1f4",
+            "36816a824dcbe7d6171aa58500741f2ea2757ae2e1784ab72c5c3c6c198d71da");
+    }
+    {
+        streebog<512> stb;
+        fox(stb,
+            "d2b793a0bb6cb5904828b5b6dcfb443bb8f33efc06ad09368878ae4cdc8245b97e60802469bed1e7c21a64ff0b179a6a1e0bb74d92965450a0adab69162c00fe",
+            "fe0c42f267d921f940faa72bd9fcf84f9f1bd7e9d055e9816e4c2ace1ec83be82d2957cd59b86e123d8f5adee80b3ca08a017599a9fc1a14d940cf87c77df070");
     }
 }
 
-void test_kuznechik() {
+void test_grasshopper() {
     using namespace crypto;
 
-    kuznechik::key_type key1{0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00, 0xff, 0xee, 0xdd,
+    grasshopper::key_type key1{0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00, 0xff, 0xee, 0xdd,
                              0xcc, 0xbb, 0xaa, 0x99, 0x88, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45,
                              0x23, 0x01, 0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe};
 
-    kuznechik::vect encrypt_test_string{0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+    grasshopper::vect encrypt_test_string{0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
                                         0x00, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11};
-    kuznechik::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
+    grasshopper::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
                                         0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
 
-    kuznechik k;
+    grasshopper k;
     k.expand_key(key1);
     cmp_base(decrypt_test_string, k.encrypt(encrypt_test_string));
     cmp_base(encrypt_test_string, k.decrypt(decrypt_test_string));
@@ -569,11 +577,12 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    //test_ec();
+    test_ec();
     //test_hmac();
     //test_chacha20();
     //test_asn1();
-    //test_streebog();
-    //test_kuznechik();
-    test_tls();
+    test_streebog();
+    test_grasshopper();
+    //
+    //test_tls();
 }

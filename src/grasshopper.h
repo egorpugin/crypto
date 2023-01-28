@@ -1,8 +1,10 @@
+#pragma once
+
 #include "helpers.h"
 
 namespace crypto {
 
-struct kuznechik_data {
+struct grasshopper_data {
     static constexpr unsigned char Pi[256] = {
         0xFC, 0xEE, 0xDD, 0x11, 0xCF, 0x6E, 0x31, 0x16, 0xFB, 0xC4, 0xFA, 0xDA, 0x23, 0xC5, 0x04, 0x4D, 0xE9, 0x77,
         0xF0, 0xDB, 0x93, 0x2E, 0x99, 0xBA, 0x17, 0x36, 0xF1, 0xBB, 0x14, 0xCD, 0x5F, 0xC1, 0xF9, 0x18, 0x65, 0x5A,
@@ -38,12 +40,12 @@ struct kuznechik_data {
     static constexpr unsigned char l_vec[16] = {1, 148, 32, 133, 16, 194, 192, 1, 251, 1, 192, 194, 16, 133, 32, 148};
 };
 
-struct kuznechik : kuznechik_data {
-    static inline constexpr auto block_size = 16;
-    static inline constexpr auto key_size = 32;
+struct grasshopper : grasshopper_data {
+    static inline constexpr auto block_size_bytes = 16;
+    static inline constexpr auto key_size_bytes = 32;
 
-    using vect = array<block_size>;
-    using key_type = array<key_size>;
+    using vect = array<block_size_bytes>;
+    using key_type = array<key_size_bytes>;
 
     vect round_keys[10];
 
@@ -89,13 +91,13 @@ struct kuznechik : kuznechik_data {
 
     static auto s(const vect &in_data, auto &&table) noexcept {
         vect out_data;
-        for (int i = 0; i < block_size; ++i) {
+        for (int i = 0; i < block_size_bytes; ++i) {
             out_data[i] = table[in_data[i]];
         }
         return out_data;
     }
     static void x(const vect &a, const vect &b, vect &c) noexcept {
-        for (int i = 0; i < block_size; ++i) {
+        for (int i = 0; i < block_size_bytes; ++i) {
             c[i] = a[i] ^ b[i];
         }
     }

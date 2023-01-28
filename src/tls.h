@@ -9,6 +9,9 @@
 #include "ec.h"
 #include "gcm.h"
 #include "asn1.h"
+#include "grasshopper.h"
+#include "streebog.h"
+#include "mgm.h"
 
 #include <boost/asio.hpp>
 #include <nameof.hpp>
@@ -72,13 +75,14 @@ struct tls13_ {
     };
 
     using all_suites = suites<
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L>,
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S>,
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L>,
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S>,
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC>,
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC>,
-        suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_28147_CNT_IMIT>
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L>
+        suite_<mgm<grasshopper>, streebog<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S>
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L>,
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S>,
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC>,
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC>,
+        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_28147_CNT_IMIT>
+
         //suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256> // ok
                               // suite_<gcm<aes_ecb<128>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384> // ok
                               // suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
@@ -89,13 +93,13 @@ struct tls13_ {
     using all_key_exchanges = key_exchanges<
         //pair<curve25519, parameters::supported_groups::x25519>,
 
-        pair<ec::GC256A, parameters::supported_groups::GC256A>,
-        pair<ec::GC256B, parameters::supported_groups::GC256B>,
-        pair<ec::GC256B, parameters::supported_groups::GC256C>,
-        pair<ec::GC256B, parameters::supported_groups::GC256D>,
-        pair<ec::gostr34102012_512a, parameters::supported_groups::GC512A>,
-        pair<ec::gostr34102012_512b, parameters::supported_groups::GC512B>,
-        pair<ec::gostr34102012_512b, parameters::supported_groups::GC512C>
+        //pair<ec::GC256A, parameters::supported_groups::GC256A>,
+        //pair<ec::GC256B, parameters::supported_groups::GC256B>,
+        //pair<ec::GC256B, parameters::supported_groups::GC256C>,
+        //pair<ec::GC256B, parameters::supported_groups::GC256D>,
+        pair<ec::gostr34102012_512a, parameters::supported_groups::GC512A>
+        //pair<ec::gostr34102012_512b, parameters::supported_groups::GC512B>,
+        //pair<ec::gostr34102012_512b, parameters::supported_groups::GC512C>
 
         //pair<ec::secp256r1, parameters::supported_groups::secp256r1>
     >;
@@ -414,13 +418,13 @@ struct tls13_ {
                      // parameters::supported_groups::x25519,
                      // parameters::supported_groups::secp256r1,
 
-                     parameters::supported_groups::GC256A, parameters::supported_groups::GC256B,
-                     parameters::supported_groups::GC256C, parameters::supported_groups::GC256D,
-                     parameters::supported_groups::GC512A, parameters::supported_groups::GC512B,
-                     parameters::supported_groups::GC512C,
+                     //parameters::supported_groups::GC256A, parameters::supported_groups::GC256B,
+                     //parameters::supported_groups::GC256C, parameters::supported_groups::GC256D,
+                     //parameters::supported_groups::GC512A, parameters::supported_groups::GC512B,
+                     //parameters::supported_groups::GC512C,
 
                      // parameters::supported_groups::curveSM2,
-                     // group_name,
+                     group_name,
                  }) {
                 ube16 &v = w;
                 v = g;
@@ -439,14 +443,16 @@ struct tls13_ {
                 parameters::signature_scheme::rsa_pss_pss_sha256,*/
 
                 parameters::signature_scheme::gostr34102012_256a,
-                parameters::signature_scheme::gostr34102012_256b,
-                parameters::signature_scheme::gostr34102012_256c,
-                parameters::signature_scheme::gostr34102012_256d,
-                parameters::signature_scheme::gostr34102012_512a,
-                parameters::signature_scheme::gostr34102012_512b,
-                parameters::signature_scheme::gostr34102012_512c,
+                //parameters::signature_scheme::gostr34102012_256b,
+                //parameters::signature_scheme::gostr34102012_256c,
+                //parameters::signature_scheme::gostr34102012_256d,
+                //parameters::signature_scheme::gostr34102012_512a,
+                //parameters::signature_scheme::gostr34102012_512b,
+                //parameters::signature_scheme::gostr34102012_512c,
 
                 //parameters::signature_scheme::sm2sig_sm3,
+
+                //key_exchange
                 }) {
                 ube16 &v = w;
                 v = a;
@@ -467,7 +473,7 @@ struct tls13_ {
 
                 entry &e = w;
                 e.scheme = group_name;
-                get_random_secure_bytes(private_key.private_key);
+                private_key.private_key();
                 private_key.public_key(e.key);
 
                 len += sizeof(e);
@@ -961,6 +967,10 @@ struct http_client {
             port = "15082";
             port = "15012";
             port = "15002";
+        }
+        if (auto p = host.rfind(':'); p != -1) {
+            port = host.substr(p+1);
+            host = host.substr(0,p);
         }
 
         boost::asio::ip::tcp::resolver r{ex};

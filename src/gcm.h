@@ -25,20 +25,20 @@ struct gcm {
     static inline constexpr auto tag_size_bytes = 16;
     static inline constexpr auto key_size_bytes = Cipher::key_size_bytes;
 
-    Cipher aes;
+    Cipher c;
     array<block_size_bytes> counter;
     array<block_size_bytes> Ek0;
     array<block_size_bytes> h0{}, h;
 
     gcm() = default;
-    gcm(auto &&k) : aes{k} {
-        h0 = aes.encrypt(h0);
+    gcm(auto &&k) : c{k} {
+        h0 = c.encrypt(h0);
     }
     void set_iv(auto &&iv) {
         counter = array<block_size_bytes>{};
         memcpy(counter.data(), iv.data(), iv.size());
         inc_counter();
-        Ek0 = aes.encrypt(counter);
+        Ek0 = c.encrypt(counter);
         h = h0;
     }
     void inc_counter() {
@@ -52,8 +52,8 @@ struct gcm {
         array<block_size_bytes> Ek;
         while (!input.empty()) {
             inc_counter();
-            Ek = aes.encrypt(counter);
-            auto sz = std::min(input.size(), block_size_bytes);
+            Ek = c.encrypt(counter);
+            auto sz = std::min<int>(input.size(), block_size_bytes);
             for (int i = 0; i < sz; ++i) {
                 output[i] = Ek[i] ^ input[i];
             }
@@ -76,7 +76,7 @@ struct gcm {
         auto check_tag = make_tag(auth_data, ciphered_data);
         auto auth_tag = data.subspan(data.size() - tag_size_bytes);
         if (memcmp(check_tag.data(), auth_tag.data(), tag_size_bytes) != 0) {
-            throw std::runtime_error{"aes auth tag is incorrect"};
+            throw std::runtime_error{"auth tag is incorrect"};
         }
         return out;
     }
@@ -95,7 +95,7 @@ struct gcm {
         uint64_t auth_len = auth_data.size() * 8;
         array<block_size_bytes> buf{};
         while (!auth_data.empty()) {
-            auto sz = std::min(auth_data.size(), block_size_bytes);
+            auto sz = std::min<int>(auth_data.size(), block_size_bytes);
             for (int i = 0; i < sz; i++) {
                 buf[i] ^= auth_data[i];
             }
@@ -103,7 +103,7 @@ struct gcm {
             auth_data = auth_data.subspan(sz);
         }
         while (!ciphered_data.empty()) {
-            auto sz = std::min(ciphered_data.size(), block_size_bytes);
+            auto sz = std::min<int>(ciphered_data.size(), block_size_bytes);
             for (int i = 0; i < sz; ++i) {
                 buf[i] ^= ciphered_data[i];
             }

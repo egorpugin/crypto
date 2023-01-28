@@ -97,7 +97,7 @@ ec_field_point operator*(const bigint &m, const ec_field_point &p) {
     // prevent timing attack
     ec_field_point r0{p.ec};
     ec_field_point r1 = p;
-    for (int bit = mpz_sizeinbase(m, 2) - 0; bit >= 0; --bit) {
+    for (int bit = mpz_sizeinbase(m, 2); bit >= 0; --bit) {
         if (mpz_tstbit(m, bit) == 0) {
             r1 = r0 + r1;
             r0 = r0.double_();
@@ -114,10 +114,12 @@ struct parameters {
     T p;
     T a,b;
     point<T> G;
+    T order;
 
     struct curve_type {
         CurveForm ec;
         ec_field_point G{ec};
+        bigint order;
     };
 
     auto curve() const {
@@ -127,6 +129,7 @@ struct parameters {
         c.ec.b = b;
         c.G.x = G.x;
         c.G.y = G.y;
+        c.order = order;
         return c;
     }
 };
@@ -200,7 +203,7 @@ using secp384r1 = secp<384,
                        "0x3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f"_s>;
 
 // not tested
-template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy>
+template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order>
 struct gost {
     static inline const auto parameters = ec::parameters<string_view>{.p = P,
                                                                       .a = A,
@@ -208,51 +211,63 @@ struct gost {
                                                                       .G = {
                                                                           Gx,
                                                                           Gy,
-                                                                      }};
+                                                                      },
+                                                                      .order = Order
+    };
 
     static inline constexpr auto point_size_bytes =
         ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
 
 #pragma pack(push, 1)
     struct key_type {
-        array<point_size_bytes> x;
-        array<point_size_bytes> y;
+        array_gost<point_size_bytes> x;
+        array_gost<point_size_bytes> y;
     };
 #pragma pack(pop)
 
     static inline constexpr auto key_size = sizeof(key_type);
-    using private_key_type = array<key_size>;
-    using public_key_type = private_key_type;
+    using private_key_type = array_gost<point_size_bytes>;
+    using public_key_type = array_gost<key_size>;
 
-    private_key_type private_key;
+    private_key_type private_key_;
 
+    void private_key() {
+        auto c = parameters.curve();
+        while (1) {
+            get_random_secure_bytes(private_key_);
+            auto m = bytes_to_bigint(private_key_);
+            if (m > 0 && m < c.order) {
+                break;
+            }
+        }
+    }
     auto public_key() {
         auto c = parameters.curve();
-        auto m = bytes_to_bigint(private_key);
+        auto m = bytes_to_bigint(private_key_);
         auto p = m * c.G;
-        return key_type{p.x, p.y};
+        return key_type{.x = p.x, .y = p.y};
     }
     auto public_key(auto &&out) {
         auto k = public_key();
         memcpy(out, (uint8_t *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
-        array<point_size_bytes> shared_secret;
+        array_gost<point_size_bytes> shared_secret;
         auto &k = *(key_type *)peer_public_key.data();
         auto c = parameters.curve();
         ec_field_point p{c.ec};
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
-        auto m = bytes_to_bigint(private_key);
+        auto m = bytes_to_bigint(private_key_);
         auto p2 = m * p;
-        key_type k2{p2.x, p2.y};
+        key_type k2{.x = p2.x, .y = p2.y};
         memcpy(shared_secret.data(), (uint8_t *)&k2.x, point_size_bytes);
         return shared_secret;
     }
 };
 
 // https://neuromancer.sk/std/gost
-using GC256A = gost<256,
+/*using GC256A = gost<256,
                        "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
                        "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd94"_s,
                        "0xa6"_s,
@@ -265,7 +280,7 @@ using GC256B = gost<256,
                        "0xa6"_s,
 
                        "0x01"_s,
-                       "0x8d91e471e0989cda27df505a453f2b7635294f2ddf23e3b122acc99c9e9f1e14"_s>;
+                       "0x8d91e471e0989cda27df505a453f2b7635294f2ddf23e3b122acc99c9e9f1e14"_s>;*/
 
 using gostr34102012_512a = gost<512,
                        "0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFDC7"_s,
@@ -273,15 +288,18 @@ using gostr34102012_512a = gost<512,
                        "0x00E8C2505DEDFC86DDC1BD0B2B6667F1DA34B82574761CB0E879BD081CFD0B6265EE3CB090F30D27614CB4574010DA90DD862EF9D4EBEE4761503190785A71C760"_s,
 
                        "0x03"_s,
-                       "0x7503CFE87A836AE3A61B8816E25450E6CE5E1C93ACF1ABC1778064FDCBEFA921DF1626BE4FD036E93D75E6A50E3A41E98028FE5FC235F5B889A589CB5215F2A4"_s>;
+                       "0x7503CFE87A836AE3A61B8816E25450E6CE5E1C93ACF1ABC1778064FDCBEFA921DF1626BE4FD036E93D75E6A50E3A41E98028FE5FC235F5B889A589CB5215F2A4"_s,
 
-using gostr34102012_512b = gost<512,
+                       "0x00FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF27E69532F48D89116FF22B8D4E0560609B4B38ABFAD2B85DCACDB1411F10B275"_s
+>;
+
+/*using gostr34102012_512b = gost<512,
                        "0x008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006F"_s,
                        "0x008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006C"_s,
                        "0x687D1B459DC841457E3E06CF6F5E2517B97C7D614AF138BCBF85DC806C4B289F3E965D2DB1416D217F8B276FAD1AB69C50F78BEE1FA3106EFB8CCBC7C5140116"_s,
 
                        "0x02"_s,
-                       "0x1A8F7EDA389B094C2C071E3647A8940F3C123B697578C213BE6DD9E6C8EC7335DCB228FD1EDF4A39152CBCAAF8C0398828041055F94CEEEC7E21340780FE41BD"_s>;
+                       "0x1A8F7EDA389B094C2C071E3647A8940F3C123B697578C213BE6DD9E6C8EC7335DCB228FD1EDF4A39152CBCAAF8C0398828041055F94CEEEC7E21340780FE41BD"_s>;*/
 
 // ShangMi (SM) Cipher Suites for TLS 1.3
 // https://www.rfc-editor.org/rfc/rfc8998.html

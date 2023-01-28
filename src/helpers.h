@@ -39,6 +39,9 @@ using namespace std::literals;
 
 template <auto N>
 using array = std::array<uint8_t, N>;
+template <auto N>
+struct array_gost : array<N> {
+};
 
 template <typename T>
 concept bytes_concept1 = requires (T t) {
