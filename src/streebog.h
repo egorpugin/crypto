@@ -1,8 +1,13 @@
-#include <iostream>
-#include <array>
+#pragma once
+
+#include "helpers.h"
+
+namespace crypto {
 
 struct streebog_data {
-    static constexpr auto block_size = 64;
+    static inline constexpr auto state_size = 512 / 8;
+    static inline constexpr auto block_size = state_size;
+    using internal_data = array<state_size>;
 
     static constexpr unsigned char Pi[256]{
         252, 238, 221, 17,  207, 110, 49,  22,  251, 196, 250, 218, 35,  197, 4,   77,  233, 119, 240, 219, 147, 46,
@@ -18,11 +23,11 @@ struct streebog_data {
         202, 216, 133, 97,  32,  113, 103, 164, 45,  43,  9,   91,  203, 155, 37,  208, 190, 229, 108, 82,  89,  166,
         116, 210, 230, 244, 180, 192, 209, 102, 175, 194, 57,  75,  99,  182};
 
-    static constexpr unsigned char Tau[64]{0, 8,  16, 24, 32, 40, 48, 56, 1, 9,  17, 25, 33, 41, 49, 57,
+    static constexpr internal_data Tau{0, 8,  16, 24, 32, 40, 48, 56, 1, 9,  17, 25, 33, 41, 49, 57,
                                            2, 10, 18, 26, 34, 42, 50, 58, 3, 11, 19, 27, 35, 43, 51, 59,
                                            4, 12, 20, 28, 36, 44, 52, 60, 5, 13, 21, 29, 37, 45, 53, 61,
                                            6, 14, 22, 30, 38, 46, 54, 62, 7, 15, 23, 31, 39, 47, 55, 63};
-    static constexpr unsigned long long A[64]{
+    static constexpr unsigned long long A[block_size]{
         0x8e20faa72ba0b470, 0x47107ddd9b505a38, 0xad08b0e0c3282d1c, 0xd8045870ef14980e, 0x6c022c38f90a4c07,
         0x3601161cf205268d, 0x1b8e0b0e798c13c8, 0x83478b07b2468764, 0xa011d380818e8f40, 0x5086e740ce47c920,
         0x2843fd2067adea10, 0x14aff010bdd87508, 0x0ad97808d06cb404, 0x05e23c0468365a02, 0x8c711e02341b2d01,
@@ -37,7 +42,7 @@ struct streebog_data {
         0xa48b474f9ef5dc18, 0x70a6a56e2440598e, 0x3853dc371220a247, 0x1ca76e95091051ad, 0x0edd37c48a08a6d8,
         0x07e095624504536c, 0x8d70c431ac02a736, 0xc83862965601dd1b, 0x641c314b2b8ee083};
 
-    static constexpr unsigned char C[12][64]{
+    static constexpr internal_data C[12]{
         {0x07, 0x45, 0xa6, 0xf2, 0x59, 0x65, 0x80, 0xdd, 0x23, 0x4d, 0x74, 0xcc, 0x36, 0x74, 0x76, 0x05,
          0x15, 0xd3, 0x60, 0xa4, 0x08, 0x2a, 0x42, 0xa2, 0x01, 0x69, 0x67, 0x92, 0x91, 0xe0, 0x7c, 0x4b,
          0xfc, 0xc4, 0x85, 0x75, 0x8d, 0xb8, 0x4e, 0x71, 0x16, 0xd0, 0x45, 0x2e, 0x43, 0x76, 0x6a, 0x2f,
@@ -88,194 +93,152 @@ struct streebog_data {
          0x7a, 0xb1, 0x49, 0x04, 0xb0, 0x80, 0x13, 0xd2, 0xba, 0x31, 0x16, 0xf1, 0x67, 0xe7, 0x8e, 0x37}};
 };
 
-struct streebog : streebog_data {
+template <auto Bits>
+struct streebog_base : streebog_data {
+    static inline constexpr auto digest_size_bytes = Bits / 8;
 
-    //using vect = uint8_t[block_size];
-    /*template <size_t S>
-    using vect = std::array<uint8_t, size_t>;
-    vect<block_size> buffer;*/
+    using vect = internal_data;
 
-    using vect = std::array<uint8_t, block_size>;
-    vect buffer{0x00};
-    vect hash{0x00};
-    vect h{0x00};
-    vect N{0x00};
-    vect Sigma{0x00};
-    vect v_0{0x00};
-    vect v_512{0x00};
-    size_t buf_size = 0;
-    int hash_size = 0;
+    internal_data data{};
+    internal_data h{};
+    internal_data N{}, Sigma{};
+    size_t blockpos{};
+    size_t bitlen{};
 
-
-    void init(uint16_t size) {
-        if (hash_size == 256)
-            h = {0x01};
-            //memset(ctx.h, 0x01, block_size);
-        else
-            h = {0x00};
-            //memset(ctx.h, 0x00, block_size);
-        hash_size = size;
-        v_512[1] = 0x02;
-    }
-    void update(const uint8_t *data, size_t len) {
-        size_t chk_size;
-
-        while ((len > 63) && (buf_size) == 0) {
-            vect t;
-            for (auto i = 0; i < block_size; ++i) {
-                t[i] = data[i];
-            }
-            stage2(t);
-            data += 64;
-            len -= 64;
+    constexpr streebog_base() {
+        if constexpr (Bits == 256) {
+            h.fill(1);
         }
-        while (len) {
-            chk_size = 64 - buf_size;
-            if (chk_size > len)
-                chk_size = len;
-            //memcpy(&ctx.buffer[ctx.buf_size], data, chk_size);
-            //vect t;
-            for (auto i = buf_size; i < buf_size + chk_size; ++i) {
-                buffer[i] = data[i - buf_size];
-                //t[i] = data[i];
-            }
-            buf_size += chk_size;
-            len -= chk_size;
-            data += chk_size;
-            if (buf_size == 64) {
-                stage2(buffer);
-                buf_size = 0;
+    }
+    void update(bytes_concept b) noexcept {
+        update(b.data(), b.size());
+    }
+    void update(const uint8_t *data, size_t len) noexcept {
+        return update_slow(data, len);
+    }
+    void update_slow(const uint8_t *data, size_t length) noexcept {
+        bitlen += length * 8;
+        for (size_t i = 0; i < length; ++i) {
+            this->data[blockpos++] = data[i];
+            if (blockpos == state_size) {
+                stage2();
+                blockpos = 0;
             }
         }
     }
-    void stage2(const vect &data) {
-        hash_g(h, N, data);
-        hash_512(N, v_512, N);
-        hash_512(Sigma, data, Sigma);
+    void stage2() noexcept {
+        constexpr auto v512 = []() {
+            internal_data v{};
+            v[1] = 2;
+            return v;
+        }();
+
+        g(h, N, data);
+        add512(N, v512);
+        add512(Sigma, data);
     }
-    static void hash_g(vect h, vect N, const vect &m) {
-        vect K, internal;
-        hash_x(N, h, K);
+    static void g(vect &h, const vect &N, const vect &data) noexcept {
+        vect K;
 
-        hash_s(K);
-        hash_p(K);
-        hash_l(K);
+        x(N, h, K);
+        s(K);
+        p(K);
+        l(K);
 
-        hash_e(K, m, internal);
+        vect internal;
+        e(K, data, internal);
 
-        hash_x(internal, h, internal);
-        hash_x(internal, m, h);
+        x(internal, h, internal);
+        x(internal, data, h);
     }
-    static void hash_x(const vect &a, const vect &b, vect &c) {
-        for (int i = 0; i < 64; i++)
+    static void x(const vect &a, const vect &b, vect &c) noexcept {
+        for (int i = 0; i < state_size; ++i)
             c[i] = a[i] ^ b[i];
     }
-    static void hash_s(vect &state) {
+    static void s(vect &state) noexcept {
         vect internal;
-        for (int i = 63; i >= 0; i--)
+        for (int i = 0; i < state_size; ++i)
             internal[i] = Pi[state[i]];
         state = internal;
     }
-    static void hash_p(vect &state) {
+    static void p(vect &state) noexcept{
         vect internal;
-        for (int i = 63; i >= 0; i--)
+        for (int i = 0; i < state_size; ++i)
             internal[i] = state[Tau[i]];
         state = internal;
     }
-    static void hash_l(vect &state) {
-        vect internal_in = state;
-        uint64_t internal_out[8];
-        memset(internal_out, 0x00, block_size);
-        for (int i = 7; i >= 0; i--) {
-            for (int j = 63; j >= 0; j--)
+    static void l(vect &state) noexcept {
+        uint64_t *internal_in = (uint64_t *)state.data();
+        uint64_t internal_out[8]{};
+        int i, j;
+        for (i = 7; i >= 0; i--) {
+            for (j = 63; j >= 0; j--)
                 if ((internal_in[i] >> j) & 1)
                     internal_out[i] ^= A[63 - j];
         }
-        uint8_t internal_out_t[64];
-        memcpy(internal_out_t, internal_out, 64);
-        for (auto i = 0; i < block_size; ++i) {
-            state[i] = internal_out_t[i];
-        }
-        //memcpy(state, internal_out_t, 64);
-        //state = internal_out;
+        memcpy(state.data(), internal_out, 64);
     }
-    static void hash_e(vect &K, const vect &m, vect &state) {
-
-        //?????memcpy(K, K, block_size);
-        hash_x(m, K, state);
+    static void e(vect &K, const vect &m, vect &state) noexcept {
+        x(m, K, state);
         for (int i = 0; i < 12; i++) {
-            hash_s(state);
-            hash_p(state);
-            hash_l(state);
+            s(state);
+            p(state);
+            l(state);
             hash_get_key(K, i);
-            hash_x(state, K, state);
+            x(state, K, state);
         }
     }
-    static void hash_get_key(vect &K, int i) {
-        //vect q = C[i];
-        vect t;
-        for (auto j = 0; j < block_size;  ++j) {
-            t[j] = C[i][j];
-        }
-        hash_x(K, t, K);
-        hash_s(K);
-        hash_p(K);
-        hash_l(K);
+    static void hash_get_key(vect &K, int i) noexcept {
+        auto t = C[i];
+        x(K, t, K);
+        s(K);
+        p(K);
+        l(K);
     }
-
-    static void hash_512(const vect &a, const vect &b, vect &c) {
+    static void add512(vect &a, const vect &b) noexcept {
         int internal = 0;
         for (int i = 0; i < 64; i++) {
             internal = a[i] + b[i] + (internal >> 8);
-            c[i] = internal & 0xff;
+            a[i] = internal & 0xff;
         }
     }
-    void completion() {
+
+    auto digest() noexcept {
         stage3();
-        //???buf_size = 0;
+        array<digest_size_bytes> r;
+        memcpy(r.data(), h.data() + (digest_size_bytes != state_size ? digest_size_bytes : 0), digest_size_bytes);
+        return r;
     }
-    void stage3() {
-        vect internal{0x00};
-        //memset(internal, 0x00, block_size);
-        internal[1] = ((buf_size * 8) >> 8) & 0xff;
-        internal[0] = (buf_size * 8) & 0xff;
+    void stage3() noexcept {
+        vect vlen{};
+        memcpy(vlen.data(), &bitlen, sizeof(bitlen));
 
-        hash_padding();
+        pad();
 
-        hash_g(h, N, buffer);
+        g(h, N, data);
 
-        hash_512(N, internal, N);
-        hash_512(Sigma, buffer, Sigma);
+        add512(N, vlen);
+        add512(Sigma, data);
 
-        //hash_g(h, v_0, (const uint8_t *)&(N));
-        //hash_g(h, v_0, (const uint8_t *)&(Sigma));
-        hash_g(h, v_0, N);
-        hash_g(h, v_0, Sigma);
-
-        hash = h;
+        constexpr internal_data v_0{};
+        g(h, v_0, N);
+        g(h, v_0, Sigma);
     }
-    void hash_padding() {
-        vect internal;
-
-        if (buf_size < block_size) {
-            internal = {0x00};
-            //memset(internal, 0x00, block_size);
-            internal = buffer;
-            //memcpy(internal, buffer, buf_size);
-            internal[buf_size] = 0x01;
-            buffer = internal;
-            //memcpy(buffer, internal, block_size);
+    void pad() noexcept {
+        if (blockpos < state_size) {
+            data[blockpos++] = 1;
+            while (blockpos != state_size) {
+                data[blockpos++] = 0;
+            }
+            blockpos = 0;
         }
-    }
-
-    void HashPrint() {
-        printf("%d bit hash sum: \n", hash_size);
-        if (hash_size == 256)
-            for (int i = 32; i < 64; i++)
-                printf("%02x", hash[i]);
-        else
-            for (int i = 0; i < 64; i++)
-                printf("%02x", hash[i]);
-        printf("\n");
     }
 };
+
+template <auto N>
+struct streebog;
+
+template <> struct streebog<256> : streebog_base<256>{};
+template <> struct streebog<512> : streebog_base<512>{};
+
+} // namespace crypto
