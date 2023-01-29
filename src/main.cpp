@@ -65,6 +65,33 @@ auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
     to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
 
+auto str2bytes = [](auto &&in) {
+    std::string s;
+    bool first = true;
+    for (auto &&c : in) {
+        if (c == ' ') {
+            continue;
+        }
+        auto d = c - (isdigit(c) ? '0' : ('A' - 10));
+        if (first) {
+            s.push_back(d << 4);
+        } else {
+            s.back() |= d;
+        }
+        first = !first;
+    }
+    return s;
+};
+
+std::string operator "" _sb(const char *in, size_t len) {
+    std::string s{in,in+len};
+    return str2bytes(s);
+}
+std::string operator"" _sw(const char *in, size_t len) {
+    std::string s{in, in + len};
+    return crypto::byteswap(str2bytes(s));
+}
+
 void test_aes() {
     using namespace crypto;
 
@@ -516,22 +543,59 @@ void test_streebog() {
     }
 }
 
+#include "gost_3412_2015_calc.h"
+
 void test_grasshopper() {
     using namespace crypto;
 
-    grasshopper::key_type key1{0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0x00, 0xff, 0xee, 0xdd,
-                             0xcc, 0xbb, 0xaa, 0x99, 0x88, 0xef, 0xcd, 0xab, 0x89, 0x67, 0x45,
-                             0x23, 0x01, 0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe};
+    {
+        grasshopper::key_type key1{0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01, 0x10, 0x32, 0x54,
+                                   0x76, 0x98, 0xba, 0xdc, 0xfe, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22,
+                                   0x11, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88};
 
-    grasshopper::vect encrypt_test_string{0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
-                                        0x00, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11};
-    grasshopper::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
-                                        0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
+        grasshopper::vect encrypt_test_string{0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+                                              0x00, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11};
+        grasshopper::vect decrypt_test_string{0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
+                                              0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
 
-    grasshopper k;
-    k.expand_key(key1);
-    cmp_base(decrypt_test_string, k.encrypt(encrypt_test_string));
-    cmp_base(encrypt_test_string, k.decrypt(decrypt_test_string));
+        grasshopper k;
+        k.expand_key(key1);
+        cmp_base(decrypt_test_string, k.encrypt(encrypt_test_string));
+        cmp_base(encrypt_test_string, k.decrypt(decrypt_test_string));
+    }
+
+    {
+        auto key = "0000000000000000000000000000000000000000000000000000000000000000"_sb;
+        auto enc = "00000000000000000000000000000000"_sb;
+        auto dec = "98CC6B54DBCF7BD2F0800C1FAB0677EF"_sb;
+
+        GOST_Kuz_Expand_Key((uint8_t *)key.data());
+        vect gipher_blk;
+        GOST_Kuz_Encrypt((uint8_t *)enc.data(), gipher_blk);
+
+        grasshopper k;
+        k.expand_key(bytes_concept{key});
+        auto vvvv = k.encrypt(bytes_concept{enc});
+        cmp_base(bytes_concept{dec}, k.encrypt(bytes_concept{enc}));
+        cmp_base(bytes_concept{enc}, k.decrypt(bytes_concept{dec}));
+        cmp_base(bytes_concept{enc}, k.decrypt(k.encrypt(bytes_concept{enc})));
+    }
+}
+
+void test_mgm() {
+    using namespace crypto;
+
+    auto K = "88 99AABB CC DD EE FF 00 11 22 33 44 55 66 77 FE DC BA 98 76 54 32 10 01 23 45 67 89 AB CD EF "_sb;
+    auto nonce = "11 22 33 44 55 66 77 00 FF EE DD CC BB AA 99 88"_sb;
+    auto A = "02 02 02 02 02 02 02 02 01 01 01 01 01 01 01 01         04 04 04 04 04 04 04 04 03 03 03 03 03 03 03 03 EA 05 05 05 05 05 05 05 05 "_sb;
+    auto P = "11 22 33 44 55 66 77 00 FF EE DD CC BBAA99 88        00 11 22 33 44 55 66 77 88 99AABB CC EE FF 0A 11 22 33 44 55 66 77 88 99AABB CC EE            FF0A00 22 33 44 55 66 77 88 99 AA BB CC EE FF 0A 00 11 AA BB CC "_sb;
+
+    GOST_Kuz_Expand_Key((uint8_t *)K.data());
+    vect gipher_blk;
+    GOST_Kuz_Encrypt((uint8_t *)nonce.data(), gipher_blk);
+
+    mgm<grasshopper> m{K};
+    m.set_iv(nonce);
 }
 
 void test_tls() {
@@ -551,9 +615,11 @@ void test_tls() {
         }
     };
 
+    run("pugin.goststand.ru:3443");
+    //
     run("91.244.183.22"); // https://infotecs.ru/stand_tls/
-    //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
-    //run("gost.cryptopro.ru");
+    run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
+    run("gost.cryptopro.ru");
 
     //run("infotecs.ru");
     //run("software-network.org");
@@ -572,17 +638,44 @@ void test_tls() {
     //run("localhost");
 }
 
+
+
+vect iter_C[32]; // итерационные константы C
+
+vect iter_key[10]; // итерационные ключи шифрования
+
+static const unsigned char test_key[32] = {0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01, 0x10, 0x32, 0x54,
+                                           0x76, 0x98, 0xba, 0xdc, 0xfe, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22,
+                                           0x11, 0x00, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88};
+
+static const unsigned char encrypt_test_string[16] = {0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00,
+                                                      0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11
+
+};
+
+static const unsigned char decrypt_test_string[16] = {0xcd, 0xed, 0xd4, 0xb9, 0x42, 0x8d, 0x46, 0x5a,
+                                                      0x30, 0x24, 0xbc, 0xbe, 0x90, 0x9d, 0x67, 0x7f};
+
 int main() {
+        vect gipher_blk;
+        GOST_Kuz_Expand_Key(test_key);
+
+        GOST_Kuz_Encrypt(encrypt_test_string, gipher_blk);
+
+        GOST_Kuz_Decrypt(decrypt_test_string, gipher_blk);
+
+
     //test_aes();
     //test_sha2();
     //test_sha3();
     //test_sm4();
-    test_ec();
+    //test_ec();
     //test_hmac();
     //test_chacha20();
     //test_asn1();
-    test_streebog();
+    //test_streebog();
     test_grasshopper();
+    test_mgm();
     //
-    //test_tls();
+    test_tls();
 }

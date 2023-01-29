@@ -2,12 +2,17 @@
 
 #include "helpers.h"
 #include "sha2.h"
+#include "streebog.h"
 
 namespace crypto {
 
 template <auto ... Settings>
 constexpr auto hmac_b(sha2_base<Settings...>) {
     return sha2_base<Settings...>::small_sha ? 64 : 128;
+}
+template <auto... Settings>
+constexpr auto hmac_b(streebog_base<Settings...>) {
+    return streebog_base<Settings...>::digest_size_bytes;
 }
 
 // https://en.wikipedia.org/wiki/HMAC

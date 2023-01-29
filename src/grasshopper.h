@@ -50,8 +50,8 @@ struct grasshopper : grasshopper_data {
     vect round_keys[10];
 
     void expand_key(const key_type &key) noexcept {
-        vect C[32];
-        for (int i = 0; i < 32; ++i) {
+        vect C[key_size_bytes];
+        for (int i = 0; i < key_size_bytes; ++i) {
             vect iter_num{};
             iter_num[0] = i + 1;
             C[i] = l(iter_num, r);
@@ -59,6 +59,8 @@ struct grasshopper : grasshopper_data {
         vect iter[4];
         memcpy(iter[0].data(), key.data(), key.size());
         memcpy(round_keys[0].data(), key.data(), key.size());
+        //std::swap(iter[0], iter[1]);
+        //std::swap(round_keys[0], round_keys[1]);
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 f(iter[0], iter[1], iter[2], iter[3], C[j * 2 + 0 + 8 * i]);
@@ -144,7 +146,7 @@ struct grasshopper : grasshopper_data {
     }
     static auto l(const vect &in_data, auto &&f) noexcept {
         auto internal = in_data;
-        for (int i = 0; i < 16; ++i) {
+        for (int i = 0; i < block_size_bytes; ++i) {
             f(internal);
         }
         return internal;

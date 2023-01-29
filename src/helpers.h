@@ -109,6 +109,16 @@ struct bytes_concept {
     bool contains(uint8_t c) const {
         return memchr(data(), c, sz);
     }
+
+    template <auto N>
+    operator array<N>() const {
+        if (N != sz) {
+            throw std::runtime_error{"bad array conversion"};
+        }
+        array<N> a;
+        memcpy(a.data(), p, sz);
+        return a;
+    }
 };
 
 template <typename... Ts>
@@ -288,5 +298,23 @@ struct be_stream {
     //operator uint16_t() { return read(); }
     //operator auto() { return read(); }
 };
+
+template <auto N>
+auto byteswap(const array<N> &in) {
+    array<N> out;
+    for (int i = 0; i < N; ++i) {
+        out[i] = in[N - i - 1];
+    }
+    return out;
+}
+
+auto byteswap(const std::string &in) {
+    auto sz = in.size();
+    std::string out(sz, 0);
+    for (int i = 0; i < sz; ++i) {
+        out[i] = in[sz - i - 1];
+    }
+    return out;
+}
 
 } // namespace crypto
