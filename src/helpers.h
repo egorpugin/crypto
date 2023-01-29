@@ -139,43 +139,43 @@ decltype(auto) visit_any(auto &&var, auto &&...f) {
 inline void print_buffer(bytes_concept buffer) {
     int i, buflen = (int)buffer.size(), bufidx;
     constexpr int LINE_LEN = 16;
-    char line[(LINE_LEN * 4) + 3]; /* \t00..0F | chars...chars\0 */
+    constexpr int SPACE_LEN = 3; // addr | ':' | space
+    int ADDR_LEN = std::max<int>(5, buffer.size() / LINE_LEN);
+    /* addr:   00..0F | chars...chars\0 */
 
     auto print = [](auto &&s) {
         std::cout << s << "\n";
     };
 
+    string space(SPACE_LEN, ' ');
     if (!buffer.data()) {
-        print("\tNULL");
+        print(format("{:0{}d}:{}NULL", 0, ADDR_LEN, space));
         return;
     }
 
+    size_t addr = 0;
     while (buflen > 0) {
-        bufidx = 0;
-        snprintf(&line[bufidx], sizeof(line) - bufidx, "\t");
-        bufidx++;
+        std::string line;
+        line += format("{:0{}x}:{}", addr, ADDR_LEN, space);
 
         for (i = 0; i < LINE_LEN; i++) {
             if (i < buflen) {
-                snprintf(&line[bufidx], sizeof(line) - bufidx, "%02x ", buffer[i]);
+                line += format("{:02x} ", buffer[i]);
             } else {
-                snprintf(&line[bufidx], sizeof(line) - bufidx, "   ");
+                line += format("   ", buffer[i]);
             }
-            bufidx += 3;
         }
-        snprintf(&line[bufidx], sizeof(line) - bufidx, "| ");
-        bufidx++;
+        line += "|  ";
 
         for (i = 0; i < LINE_LEN; i++) {
             if (i < buflen) {
-                snprintf(&line[bufidx], sizeof(line) - bufidx, "%c",
-                          31 < buffer[i] && buffer[i] < 127 ? buffer[i] : '.');
-                bufidx++;
+                line += format("{:c}", 31 < buffer[i] && buffer[i] < 127 ? buffer[i] : '.');
             }
         }
         print(line);
         buffer += LINE_LEN;
         buflen -= LINE_LEN;
+        addr += 0x10;
     }
 }
 inline void print_buffer(auto &&name, auto &&buffer) {

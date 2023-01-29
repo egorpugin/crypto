@@ -8,8 +8,6 @@
 #include <span>
 #include <stdexcept>
 
-// no need to implement ccm
-
 namespace crypto {
 
 // see
@@ -47,7 +45,7 @@ struct mgm {
         for (int i = 0; i < h; ++i) {
             auto H = c.encrypt(Z);
             inc_counter(Z, block_size_bytes / 2);
-            gmult(H, (uint8_t *)(auth.data() + i * block_size_bytes));
+            gf128(H, (uint8_t *)(auth.data() + i * block_size_bytes));
             for (int j = 0; j < block_size_bytes; ++j) {
                 T[j] ^= H[j];
             }
@@ -65,10 +63,15 @@ struct mgm {
             for (int j = 0; j < block_size_bytes; ++j) {
                 out[j + i * block_size_bytes] ^= Ek[j];
             }
-
+        }
+        out.resize(data.size());
+        // ciphered text must be nulled up to q * block_size_bytes
+        // so we calculate T in separate loop
+        out.resize(q * block_size_bytes, 0);
+        for (int i = 0; i < q; ++i) {
             auto H = c.encrypt(Z);
             inc_counter(Z, block_size_bytes / 2);
-            gmult(H, (uint8_t *)(out.data() + i * block_size_bytes));
+            gf128(H, (uint8_t *)(out.data() + i * block_size_bytes));
             for (int j = 0; j < block_size_bytes; ++j) {
                 T[j] ^= H[j];
             }
@@ -76,19 +79,15 @@ struct mgm {
         out.resize(data.size());
 
         auto H = c.encrypt(Z);
-        print_buffer("H", H);
-
         *(uint64_t*)L.data() = std::byteswap(auth.size() * 8);
         *(((uint64_t *)L.data()) + 1) = std::byteswap(out.size() * 8);
-        //L = c.encrypt(L);
-        gmult(H, (uint8_t *)L.data());
+        gf128(H, (uint8_t *)L.data());
         for (int j = 0; j < block_size_bytes; ++j) {
             T[j] ^= H[j];
         }
 
         T = c.encrypt(T);
-        print_buffer("T", T);
-        return out;
+        return std::tuple{out,T};
     }
 
 
@@ -107,42 +106,38 @@ struct mgm {
         return out;
     }
 
-    void gmult(auto &&buf, uint8_t *buf2) {
-        // for now
-        *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
-        *(uint64_t *)(buf2 + 0) = std::byteswap(*(uint64_t *)(buf2 + 0));
-        *(uint64_t *)(buf2 + 8) = std::byteswap(*(uint64_t *)(buf2 + 8));
+    void gf128(array<block_size_bytes> &buf, uint8_t *buf2) {
+        auto x0 = std::byteswap(*(uint64_t *)(buf.data() + 8));
+        auto x1 = std::byteswap(*(uint64_t *)(buf.data() + 0));
+        auto y0 = std::byteswap(*(uint64_t *)(buf2 + 8));
+        auto y1 = std::byteswap(*(uint64_t *)(buf2 + 0));
 
-        gmult2((uint64_t *)buf.data(), (uint64_t *)buf2);
+        uint64_t t,z0{},z1{};
+        std::tie(t,x0,x1,z0,z1) = gf128half(64,y0,x0,x1,0,0);
+        std::tie(t,x0,x1,z0,z1) = gf128half(63,y1,x0,x1,z0,z1);
+        if (t & 1) {
+            z0 ^= x0;
+            z1 ^= x1;
+        }
 
-        *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
-        *(uint64_t *)(buf2 + 0) = std::byteswap(*(uint64_t *)(buf2 + 0));
-        *(uint64_t *)(buf2 + 8) = std::byteswap(*(uint64_t *)(buf2 + 8));
+        *(uint64_t *)(buf.data() + 8) = std::byteswap(z0);
+        *(uint64_t *)(buf.data() + 0) = std::byteswap(z1);
     }
-    void gmult2(uint64_t *X, uint64_t *Y) {
-        uint64_t Z[2] = {0, 0};
-        uint64_t V[2];
-        int i, j;
-        V[0] = X[0];
-        V[1] = X[1];
-        for (i = 0; i < 2; i++) {
-            auto y = Y[i];
-            for (j = 0; j < 64; j++) {
-                uint64_t mask = 0 - (y >> 63);
-                Z[0] ^= V[0] & mask;
-                Z[1] ^= V[1] & mask;
-                auto v1 = (0 - (V[1] & 1)) & 0xE100000000000000ULL;
-                V[1] >>= 1;
-                V[1] |= V[0] << 63;
-                V[0] >>= 1;
-                V[0] ^= v1;
-                y <<= 1;
+    auto gf128half(int n, auto t, uint64_t x0, uint64_t x1, uint64_t z0, uint64_t z1) {
+        for (int i = 0; i < n; ++i) {
+            if (t & 1) {
+                z0 ^= x0;
+                z1 ^= x1;
+            }
+            t >>= 1;
+            auto sign = x1 >> 63;
+            x1 = (x1 << 1) ^ (x0 >> 63);
+            x0 <<= 1;
+            if (sign) {
+                x0 ^= 0x87;
             }
         }
-        X[0] = Z[0];
-        X[1] = Z[1];
+        return std::tuple{t, x0, x1, z0, z1};
     }
 };
 
