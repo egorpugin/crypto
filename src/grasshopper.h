@@ -334,8 +334,6 @@ struct grasshopper : grasshopper_data {
         vect iter[4];
         memcpy(iter[0].data(), key.data(), key.size());
         memcpy(round_keys[0].data(), key.data(), key.size());
-        //std::swap(iter[0], iter[1]);
-        //std::swap(round_keys[0], round_keys[1]);
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < 4; ++j) {
                 f(iter[0], iter[1], iter[2], iter[3], C[j * 2 + 0 + 8 * i]);
@@ -377,23 +375,6 @@ struct grasshopper : grasshopper_data {
         for (int i = 0; i < block_size_bytes; ++i) {
             c[i] = a[i] ^ b[i];
         }
-    }
-    // make table in constexpr?
-    static uint8_t gf_mul(uint8_t a, uint8_t b) noexcept {
-        uint8_t c = 0;
-        uint8_t hi_bit;
-        for (int i = 0; i < 8; ++i) {
-            if (b & 1) {
-                c ^= a;
-            }
-            hi_bit = a & 0x80;
-            a <<= 1;
-            if (hi_bit) {
-                a ^= 0xc3; // polynom x^8+x^7+x^6+x+1
-            }
-            b >>= 1;
-        }
-        return c;
     }
     static void r(vect &state) noexcept {
         uint8_t a_0 = 0;
