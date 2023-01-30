@@ -23,19 +23,22 @@ struct curve25519 {
     using private_key_type = array<key_size>;
     using public_key_type = private_key_type;
 
-    private_key_type private_key;
+    private_key_type private_key_;
 
+    void private_key() {
+        get_random_secure_bytes(private_key_);
+    }
     auto public_key() {
         public_key_type public_key;
-        curve25519_f(private_key.data(), public_key.data());
+        curve25519_f(private_key_.data(), public_key.data());
         return public_key;
     }
     auto public_key(auto &&out) {
-        curve25519_f(private_key.data(), out);
+        curve25519_f(private_key_.data(), out);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         public_key_type shared_secret;
-        curve25519_f(private_key.data(), peer_public_key.data(), shared_secret.data());
+        curve25519_f(private_key_.data(), peer_public_key.data(), shared_secret.data());
         return shared_secret;
     }
 };
