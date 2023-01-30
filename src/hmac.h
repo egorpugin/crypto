@@ -12,7 +12,7 @@ constexpr auto hmac_b(sha2_base<Settings...>) {
 }
 template <auto... Settings>
 constexpr auto hmac_b(streebog_base<Settings...>) {
-    return streebog_base<Settings...>::digest_size_bytes;
+    return streebog_base<Settings...>::block_size;
 }
 
 // https://en.wikipedia.org/wiki/HMAC
