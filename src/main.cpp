@@ -77,34 +77,6 @@ auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
     to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
 
-auto str2bytes = [](auto &&in) {
-    std::string s;
-    bool first = true;
-    for (auto &&c : in) {
-        if (c == ' ') {
-            continue;
-        }
-        c = toupper(c);
-        auto d = c - (isdigit(c) ? '0' : ('A' - 10));
-        if (first) {
-            s.push_back(d << 4);
-        } else {
-            s.back() |= d;
-        }
-        first = !first;
-    }
-    return s;
-};
-
-std::string operator "" _sb(const char *in, size_t len) {
-    std::string s{in,in+len};
-    return str2bytes(s);
-}
-std::string operator"" _sw(const char *in, size_t len) {
-    std::string s{in, in + len};
-    return crypto::byteswap(str2bytes(s));
-}
-
 void test_aes() {
     using namespace crypto;
 
@@ -624,6 +596,13 @@ void test_gost() {
             "00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f"_sb,
             "01 26 bd b8 78 00 af 21 43 41 45 65 63 78 01 00"_sb),
         "a5 9b ab 22 ec ae 19 c6 5f bd e6 e5 f4 e9 f5 d8 54 9d 31 f0 37 f9 df 9b 90 55 00 e1 71 92 3a 77 3d 5f 15 30 f2 ed 7e 96 4c b2 ee dc 29 e9 ad 2f 3a fe 93 b2 81 4f 79 f5 00 0f fc 03 66 c2 51 e6"_sb);
+
+    cmp_bytes(gost::kdf<streebog<256>>(
+        "00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f"_sb,
+        "26 bd b8 78"_sb,
+        "af 21 43 41 45 65 63 78"_sb
+        ),
+              "a1 aa 5f 7d e4 02 d7 b3 d3 23 f2 99 1c 8d 45 34 01 31 37 01 0a 83 75 4f d0 af 6d 7c d4 92 2e d9"_sb);
 }
 
 void test_tls() {
@@ -680,5 +659,5 @@ int main() {
     //test_mgm();
     test_gost();
     //
-    //test_tls();
+    test_tls();
 }

@@ -16,7 +16,7 @@ namespace crypto {
 template <typename Cipher>
 struct mgm {
     static inline constexpr auto block_size_bytes = Cipher::block_size_bytes;
-    static inline constexpr auto iv_size_bytes = 12; // 8 + 4
+    static inline constexpr auto iv_size_bytes = block_size_bytes;
     static inline constexpr auto tag_size_bytes = block_size_bytes;
     static inline constexpr auto key_size_bytes = Cipher::key_size_bytes;
 

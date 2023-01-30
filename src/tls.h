@@ -42,6 +42,15 @@ struct tls13_ {
             return SuiteId;
         }
     };
+    template <typename Cipher, typename Hash, auto SuiteId>
+    struct gost_suite : suite_<Cipher,Hash,SuiteId> {
+    };
+    struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
+        : gost_suite<mgm<grasshopper>, streebog<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S>{
+        static inline constexpr auto C_1 = 0xffffffffe0000000ULL;
+        static inline constexpr auto C_2 = 0xffffffffffff0000ULL;
+        static inline constexpr auto C_3 = 0xfffffffffffffff8ULL;
+    };
 
     template <typename T, auto Value>
     struct pair {
@@ -76,7 +85,7 @@ struct tls13_ {
 
     using all_suites = suites<
         //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L>
-        suite_<mgm<grasshopper>, streebog<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S>
+        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
         //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L>,
         //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S>,
         //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC>,
@@ -217,9 +226,14 @@ struct tls13_ {
             s += Type;
             s += " ";
             s += "traffic";
-            secret = derive_secret<hash>(input_secret, s, h);
+            //secret = derive_secret<hash>(input_secret, s, h);
+            secret = hkdf_expand_label<hash>(input_secret, s, R"(
+99 3B A7 22 12 4A F3 CB FD 47 71 E7 FA E3 2A C1
+D0 E9 27 8C F7 84 3F CB C6 20 E1 A0 08 5A 87 A1
+)"_sb);
             key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
             iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
+            auto key2 = gost::tlstree<hash, suite_type>(key, 0);
             c = cipher{key};
         }
         void update_keys() {
@@ -257,7 +271,13 @@ struct tls13_ {
             std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
             auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
             auto derived1 = derive_secret<hash>(early_secret, "derived"s);
-            auto handshake_secret = hkdf_extract<hash>(derived1, shared);
+            //auto handshake_secret = hkdf_extract<hash>(derived1, shared);
+            auto handshake_secret = hkdf_extract<hash>(derived1, R"(
+4D E6 0D 21 EA 8F B9 22 0D 14 64 23 B4 90 DA 40
+CC EB C4 3B C5 89 DB 79 B8 31 A4 7D 6B 06 30 07
+DD 03 40 5A 1B 79 76 B6 23 DC AA 69 B0 11 AE 10
+6E 7E 41 74 38 5F 86 26 E1 21 B5 99 43 63 C9 9F
+)"_sb);
             make_keys(handshake_secret, h);
         }
         auto make_master_keys(auto &&h) {
