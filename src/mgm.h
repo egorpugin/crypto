@@ -121,7 +121,7 @@ struct mgm {
         }
         enc.sz -= tag_size_bytes;
         bytes_concept tag{data};
-        tag.subspan(enc.size());
+        tag = tag.subspan(enc.size());
         auto out = decrypt(nonce, enc, auth_data, tag);
         return out;
     }

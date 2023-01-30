@@ -111,15 +111,18 @@ auto kdf(auto &&key, auto &&label, auto &&seed) {
     return hmac<Hash>(key, message);
 }
 template <typename Hash, typename Suite>
-auto tlstree(auto &&key, uint64_t i) {
-    auto d = i;
-    d = i & Suite::C_1;
-    auto k1 = kdf<Hash>(key, "level1"sv, bytes_concept{(uint8_t*)&d, sizeof(d)});
-    d = i & Suite::C_2;
-    auto k2 = kdf<Hash>(k1, "level2"sv, bytes_concept{(uint8_t*)&d, sizeof(d)});
-    d = i & Suite::C_3;
-    auto k3 = kdf<Hash>(k2, "level3"sv, bytes_concept{(uint8_t*)&d, sizeof(d)});
-    return k3;
+auto tlstree(auto &&key, uint64_t seqnum) {
+    auto label = "level0"s;
+    auto k = key;
+    for (int l = 1; auto &&C : Suite::C) {
+        label[5] = l++ + '0';
+        /*if (seqnum > 0 && (seqnum & C) == ((seqnum - 1) & C)) {
+            continue;
+        }*/
+        auto d = seqnum & C;
+        k = kdf<Hash>(k, label, bytes_concept{(uint8_t *)&d, sizeof(d)});
+    }
+    return k;
 }
 
 } // namespace gost

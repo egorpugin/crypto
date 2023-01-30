@@ -625,8 +625,8 @@ void test_tls() {
     run("pugin.goststand.ru:3443");
     //
     run("91.244.183.22"); // https://infotecs.ru/stand_tls/
-    run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
-    run("gost.cryptopro.ru");
+    //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
+    //run("gost.cryptopro.ru");
 
     //run("infotecs.ru");
     //run("software-network.org");
@@ -657,7 +657,7 @@ int main() {
     //test_streebog();
     //test_grasshopper();
     //test_mgm();
-    test_gost();
+    //test_gost();
     //
     test_tls();
 }

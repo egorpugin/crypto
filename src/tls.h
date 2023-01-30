@@ -43,13 +43,23 @@ struct tls13_ {
         }
     };
     template <typename Cipher, typename Hash, auto SuiteId>
-    struct gost_suite : suite_<Cipher,Hash,SuiteId> {
+    struct gost_suite : suite_<Cipher, Hash, SuiteId> {
+        static void init_keys(auto &&obj) {
+            obj.base_key = obj.key;
+        }
+        static void make_keys(auto &&obj) {
+            obj.key = gost::tlstree<hash, suite_type>(obj.base_key, obj.record_id);
+        }
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
-        : gost_suite<mgm<grasshopper>, streebog<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S>{
-        static inline constexpr auto C_1 = 0xffffffffe0000000ULL;
-        static inline constexpr auto C_2 = 0xffffffffffff0000ULL;
-        static inline constexpr auto C_3 = 0xfffffffffffffff8ULL;
+        : gost_suite<mgm<grasshopper>, streebog<256>,
+                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
+        static inline constexpr uint64_t C[] = {0xffffffffe0000000ULL,0xffffffffffff0000ULL,0xfffffffffffffff8ULL};
+    };
+    struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
+        : gost_suite<mgm<grasshopper>, streebog<256>,
+                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
+        static inline constexpr uint64_t C[] = {0xf800000000000000ULL,0xfffffff000000000ULL,0xffffffffffffe000ULL};
     };
 
     template <typename T, auto Value>
@@ -84,13 +94,10 @@ struct tls13_ {
     };
 
     using all_suites = suites<
-        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L>
+        //TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
         //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L>,
         //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S>,
-        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC>,
-        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC>,
-        //suite_<gcm<aes_ecb<128>>, sha2<256>, parameters::cipher_suites::TLS_GOSTR341112_256_WITH_28147_CNT_IMIT>
 
         //suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256> // ok
                               // suite_<gcm<aes_ecb<128>,sha2<384>,tls13::CipherSuite::TLS_AES_256_GCM_SHA384> // ok
@@ -144,6 +151,7 @@ struct tls13_ {
             if (header().size() > 40'000) {
                 throw std::runtime_error{"too big tls packet"};
             }
+            std::cerr << "packet size = " << header().size() << "\n";
             data.resize(sizeof(header_type) + header().size());
             auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), header().size()),
                                          use_awaitable);
@@ -202,15 +210,16 @@ struct tls13_ {
     //
     template <auto Peer, auto Type>
     struct peer_data {
+        // FIXME: gost uses 128 bits sequence number
         using sequence_number = uint64_t;
         array<hash::digest_size_bytes> secret;
-        sequence_number record_id{-1ULL};
-        array<cipher::key_size_bytes> key;
+        sequence_number record_id{};
+        array<cipher::key_size_bytes> base_key,key;
         array<cipher::iv_size_bytes> iv;
         cipher c;
 
         auto bump_nonce() {
-            auto v = ++record_id;
+            auto v = record_id++;
             v = std::byteswap(v);
             auto iv = this->iv;
             (*(uint64_t *)&iv[cipher::iv_size_bytes - sizeof(sequence_number)]) ^= v;
@@ -226,33 +235,44 @@ struct tls13_ {
             s += Type;
             s += " ";
             s += "traffic";
-            //secret = derive_secret<hash>(input_secret, s, h);
-            secret = hkdf_expand_label<hash>(input_secret, s, R"(
-99 3B A7 22 12 4A F3 CB FD 47 71 E7 FA E3 2A C1
-D0 E9 27 8C F7 84 3F CB C6 20 E1 A0 08 5A 87 A1
-)"_sb);
+            secret = derive_secret<hash>(input_secret, s, h);
             key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            if constexpr (requires { suite_type::init_keys(*this); }) {
+                suite_type::init_keys(*this);
+            } else {
+                c = cipher{key};
+            }
             iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
-            auto key2 = gost::tlstree<hash, suite_type>(key, 0);
-            c = cipher{key};
         }
         void update_keys() {
-            record_id = -1ULL;
+            record_id = 0;
             secret = hkdf_expand_label<hash, hash::digest_size_bytes>(secret, "traffic upd");
             key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            if constexpr (requires { suite_type::init_keys(*this); }) {
+                suite_type::init_keys(*this);
+            } else {
+                c = cipher{key};
+            }
             iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
-            c = cipher{key};
         }
     };
     template <auto Type>
     struct server_peer_data : peer_data<"s"_s, Type> {
         auto decrypt(auto &&ciphered_text, auto &&auth_data) {
+            if constexpr (requires { suite_type::make_keys(*this); }) {
+                suite_type::make_keys(*this);
+                this->c = cipher{this->key};
+            }
             return this->c.decrypt_with_tag(this->next_nonce(), ciphered_text, auth_data);
         }
     };
     template <auto Type>
     struct client_peer_data : peer_data<"c"_s, Type> {
         auto encrypt(auto &&plain_text, auto &&auth_data) {
+            if constexpr (requires { suite_type::make_keys(*this); }) {
+                suite_type::make_keys(*this);
+                this->c = cipher{this->key};
+            }
             return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
         }
     };
@@ -271,13 +291,7 @@ D0 E9 27 8C F7 84 3F CB C6 20 E1 A0 08 5A 87 A1
             std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
             auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
             auto derived1 = derive_secret<hash>(early_secret, "derived"s);
-            //auto handshake_secret = hkdf_extract<hash>(derived1, shared);
-            auto handshake_secret = hkdf_extract<hash>(derived1, R"(
-4D E6 0D 21 EA 8F B9 22 0D 14 64 23 B4 90 DA 40
-CC EB C4 3B C5 89 DB 79 B8 31 A4 7D 6B 06 30 07
-DD 03 40 5A 1B 79 76 B6 23 DC AA 69 B0 11 AE 10
-6E 7E 41 74 38 5F 86 26 E1 21 B5 99 43 63 C9 9F
-)"_sb);
+            auto handshake_secret = hkdf_extract<hash>(derived1, shared);
             make_keys(handshake_secret, h);
         }
         auto make_master_keys(auto &&h) {
@@ -584,7 +598,7 @@ DD 03 40 5A 1B 79 76 B6 23 DC AA 69 B0 11 AE 10
             }
             default:
                 s.step(len2);
-                std::cout << "unhandled ext: " << (string)NAMEOF_ENUM(type) << "\n";
+                std::cout << "unhandled ext: " << (uint16_t)type << "\n";
             }
         }
     }
@@ -635,6 +649,8 @@ DD 03 40 5A 1B 79 76 B6 23 DC AA 69 B0 11 AE 10
                         // rsaEncryption (PKCS #1)
                         constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
                         constexpr auto ecPublicKey = make_oid<1,2,840,10045,2,1>();
+                        constexpr auto GOST_R3410_12_256 = make_oid<1,2,643,7,1,1,1,1>();
+                        constexpr auto GOST_R3410_12_512 = make_oid<1,2,643,7,1,1,1,2>();
 
                         auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
                                                     x509::public_key_algorithm, 0);
@@ -642,9 +658,9 @@ DD 03 40 5A 1B 79 76 B6 23 DC AA 69 B0 11 AE 10
                         int i = 0;
                         path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, i++);
                         auto write_cert = [&]() {
-                            //fs::create_directories(fn.parent_path());
-                            //std::ofstream of{fn, std::ios::binary};
-                            //of.write((const char *)data.data(), data.size());
+                            fs::create_directories(fn.parent_path());
+                            std::ofstream of{fn, std::ios::binary};
+                            of.write((const char *)data.data(), data.size());
                         };
 
                         if (pka == ecPublicKey) {
@@ -661,8 +677,9 @@ DD 03 40 5A 1B 79 76 B6 23 DC AA 69 B0 11 AE 10
                                 write_cert();
                                 throw std::runtime_error{"unknown x509::public_key_algorithm::curve"};
                             }
-                        }
-                        else if (pka == rsaEncryption) {
+                        } else if (pka == rsaEncryption) {
+                        } else if (pka == GOST_R3410_12_256) {
+                        } else if (pka == GOST_R3410_12_512) {
                         } else {
                             string s = pka;
                             std::cerr << "unknown x509::public_key_algorithm: " << s << "\n";
@@ -1004,13 +1021,13 @@ struct http_client {
         std::string ss = remote_ad.to_string();
         // std::cout << ss << "\n";
 
-        /*if (host == "91.244.183.22") {
-            host = "infotecs.ru";
-        }*/
+        if (host == "91.244.183.22") {
+            host = "test-gost.infotecs.ru";
+        }
         tls_layer = decltype(tls_layer){&s,host};
 
         // http layer
-        string req = "GET / HTTP/1.1\r\n";
+        string req = "GET /image.jpg HTTP/1.1\r\n";
         req += "Host: "s + url + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
         req += "\r\n";
