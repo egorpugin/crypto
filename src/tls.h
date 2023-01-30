@@ -46,9 +46,13 @@ struct tls13_ {
     struct gost_suite : suite_<Cipher, Hash, SuiteId> {
         static void init_keys(auto &&obj) {
             obj.base_key = obj.key;
+            obj.iv[0] &= 0x7f;
         }
         static void make_keys(auto &&obj) {
-            obj.key = gost::tlstree<hash, suite_type>(obj.base_key, obj.record_id);
+            if (gost::tlstree_needs_new_key<suite_type>(obj.record_id)) {
+                obj.key = gost::tlstree<hash, suite_type>(obj.base_key, obj.record_id);
+                obj.c = cipher{obj.key};
+            }
         }
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
@@ -151,7 +155,6 @@ struct tls13_ {
             if (header().size() > 40'000) {
                 throw std::runtime_error{"too big tls packet"};
             }
-            std::cerr << "packet size = " << header().size() << "\n";
             data.resize(sizeof(header_type) + header().size());
             auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), header().size()),
                                          use_awaitable);
@@ -237,23 +240,23 @@ struct tls13_ {
             s += "traffic";
             secret = derive_secret<hash>(input_secret, s, h);
             key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
             if constexpr (requires { suite_type::init_keys(*this); }) {
                 suite_type::init_keys(*this);
             } else {
                 c = cipher{key};
             }
-            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
         }
         void update_keys() {
             record_id = 0;
             secret = hkdf_expand_label<hash, hash::digest_size_bytes>(secret, "traffic upd");
             key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
             if constexpr (requires { suite_type::init_keys(*this); }) {
                 suite_type::init_keys(*this);
             } else {
                 c = cipher{key};
             }
-            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
         }
     };
     template <auto Type>
@@ -261,7 +264,6 @@ struct tls13_ {
         auto decrypt(auto &&ciphered_text, auto &&auth_data) {
             if constexpr (requires { suite_type::make_keys(*this); }) {
                 suite_type::make_keys(*this);
-                this->c = cipher{this->key};
             }
             return this->c.decrypt_with_tag(this->next_nonce(), ciphered_text, auth_data);
         }
@@ -271,7 +273,6 @@ struct tls13_ {
         auto encrypt(auto &&plain_text, auto &&auth_data) {
             if constexpr (requires { suite_type::make_keys(*this); }) {
                 suite_type::make_keys(*this);
-                this->c = cipher{this->key};
             }
             return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
         }
@@ -959,13 +960,18 @@ struct http_client {
         ctx.run();
     }
     awaitable<void> run1() {
+        auto make_fn_url = [](auto &&u) {
+            return u.substr(0, u.find(':'));
+        };
+
         auto m = co_await open_url(url_internal);
-        std::ofstream{"d:/dev/crypto/.sw/" + url_internal + ".txt"} << m.response;
+        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt"} << m.response;
+        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg"} << m.body;
         int i = 0;
         while (!m.headers["Location"].empty()) {
-            string url{m.headers["Location"].begin(),m.headers["Location"].end()};
+            string url{m.headers["Location"].begin(), m.headers["Location"].end()};
             m = co_await open_url(url);
-            std::ofstream{"d:/dev/crypto/.sw/" + url_internal + "." + std::to_string(++i) + ".txt"} << m.response;
+            std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt"} << m.response;
         }
     }
     awaitable<http_message> open_url(auto &&url) {
@@ -1031,7 +1037,8 @@ struct http_client {
         req += "Host: "s + url + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
         req += "\r\n";
-        co_return co_await http_query(req);
+        auto resp = co_await http_query(req);
+        co_return resp;
     }
     // http layer
     awaitable<http_message> http_query(auto &&q) {
