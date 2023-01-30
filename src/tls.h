@@ -233,15 +233,13 @@ struct tls13_ {
     template <auto Type>
     struct server_peer_data : peer_data<"s"_s, Type> {
         auto decrypt(auto &&ciphered_text, auto &&auth_data) {
-            this->c.set_iv(this->next_nonce());
-            return this->c.decrypt(ciphered_text, auth_data);
+            return this->c.decrypt_with_tag(this->next_nonce(), ciphered_text, auth_data);
         }
     };
     template <auto Type>
     struct client_peer_data : peer_data<"c"_s, Type> {
         auto encrypt(auto &&plain_text, auto &&auth_data) {
-            this->c.set_iv(this->next_nonce());
-            return this->c.encrypt(plain_text, auth_data);
+            return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
         }
     };
     template <auto Type>

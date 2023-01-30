@@ -119,6 +119,10 @@ struct bytes_concept {
         memcpy(a.data(), p, sz);
         return a;
     }
+    operator std::string() const {
+        std::string a{p,p+sz};
+        return a;
+    }
 };
 
 template <typename... Ts>
@@ -136,21 +140,22 @@ decltype(auto) visit_any(auto &&var, auto &&...f) {
                                     }});
 }
 
-inline void print_buffer(bytes_concept buffer) {
+inline auto print_buffer(bytes_concept buffer) {
     int i, buflen = (int)buffer.size(), bufidx;
     constexpr int LINE_LEN = 16;
     constexpr int SPACE_LEN = 3; // addr | ':' | space
     int ADDR_LEN = std::max<int>(5, buffer.size() / LINE_LEN);
     /* addr:   00..0F | chars...chars\0 */
 
-    auto print = [](auto &&s) {
-        std::cout << s << "\n";
+    std::string out;
+    auto print = [&](auto &&s) {
+        out += s + "\n";
     };
 
     string space(SPACE_LEN, ' ');
     if (!buffer.data()) {
         print(format("{:0{}d}:{}NULL", 0, ADDR_LEN, space));
-        return;
+        return out;
     }
 
     size_t addr = 0;
@@ -177,10 +182,15 @@ inline void print_buffer(bytes_concept buffer) {
         buflen -= LINE_LEN;
         addr += 0x10;
     }
+    return out;
 }
 inline void print_buffer(auto &&name, auto &&buffer) {
     std::cout << name << "\n";
-    print_buffer(buffer);
+    std::cout << print_buffer(buffer) << "\n";
+}
+
+std::ostream &operator<<(std::ostream &o, const bytes_concept &b) {
+    return o << print_buffer(b);
 }
 
 template<std::size_t N>

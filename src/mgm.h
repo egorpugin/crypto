@@ -17,7 +17,7 @@ template <typename Cipher>
 struct mgm {
     static inline constexpr auto block_size_bytes = Cipher::block_size_bytes;
     static inline constexpr auto iv_size_bytes = 12; // 8 + 4
-    static inline constexpr auto tag_size_bytes = 16;
+    static inline constexpr auto tag_size_bytes = block_size_bytes;
     static inline constexpr auto key_size_bytes = Cipher::key_size_bytes;
 
     Cipher c;
@@ -32,7 +32,7 @@ struct mgm {
                 break;
         }
     }
-    auto encrypt(auto &&nonce, auto &&data, auto &&auth_data) {
+    auto encrypt(auto &&nonce, auto &&data, bytes_concept auth_data, bool decode = false) {
         array<block_size_bytes> T{}, Z, Y, L;
         memcpy(Z.data(), nonce.data(), nonce.size());
         memcpy(Y.data(), nonce.data(), nonce.size());
@@ -56,6 +56,25 @@ struct mgm {
         Y = c.encrypt(Y);
         auto q = (data.size() + block_size_bytes - 1) / block_size_bytes;
         std::string out = data;
+
+        auto calc_auth = [&]() {
+            // ciphered text must be nulled up to q * block_size_bytes
+            // so we calculate T in separate loop
+            out.resize(q * block_size_bytes, 0);
+            for (int i = 0; i < q; ++i) {
+                auto H = c.encrypt(Z);
+                inc_counter(Z, block_size_bytes / 2);
+                gf128(H, (uint8_t *)(out.data() + i * block_size_bytes));
+                for (int j = 0; j < block_size_bytes; ++j) {
+                    T[j] ^= H[j];
+                }
+            }
+            out.resize(data.size());
+        };
+
+        if (decode) {
+            calc_auth();
+        }
         out.resize(q * block_size_bytes, 0);
         for (int i = 0; i < q; ++i) {
             auto Ek = c.encrypt(Y);
@@ -65,18 +84,9 @@ struct mgm {
             }
         }
         out.resize(data.size());
-        // ciphered text must be nulled up to q * block_size_bytes
-        // so we calculate T in separate loop
-        out.resize(q * block_size_bytes, 0);
-        for (int i = 0; i < q; ++i) {
-            auto H = c.encrypt(Z);
-            inc_counter(Z, block_size_bytes / 2);
-            gf128(H, (uint8_t *)(out.data() + i * block_size_bytes));
-            for (int j = 0; j < block_size_bytes; ++j) {
-                T[j] ^= H[j];
-            }
+        if (!decode) {
+            calc_auth();
         }
-        out.resize(data.size());
 
         auto H = c.encrypt(Z);
         *(uint64_t*)L.data() = std::byteswap(auth.size() * 8);
@@ -89,23 +99,34 @@ struct mgm {
         T = c.encrypt(T);
         return std::tuple{out,T};
     }
-
-
-    void set_iv(auto &&iv) {
+    auto decrypt(auto &&nonce, auto &&data, auto &&auth_data, auto &&auth_tag) {
+        auto [dec,tag] = encrypt(nonce,data,auth_data,true);
+        if (tag != auth_tag) {
+            throw std::runtime_error{"auth tag is incorrect"};
+        }
+        return dec;
     }
-    auto encrypt(auto &&data, auto &&auth_data) {
-        std::string out(data.size(), 0);
-        //encrypt1(std::span<uint8_t>((uint8_t*)data.data(), data.size()), std::span<uint8_t>((uint8_t*)out.data(), out.size()));
-        //auto auth_tag = make_tag(auth_data, out);
-        out.resize(out.size() + tag_size_bytes);
-        //memcpy(out.data() + data.size(), auth_tag.data(), tag_size_bytes);
+
+    auto encrypt_and_tag(auto &&nonce, auto &&data, bytes_concept auth_data) {
+        auto [out, tag] = encrypt(nonce, data, auth_data);
+        auto sz = out.size();
+        out.resize(out.size() + tag.size());
+        memcpy(out.data() + sz, tag.data(), tag.size());
         return out;
     }
-    auto decrypt(auto &&data, auto &&auth_data) {
-        std::string out(data.size() - tag_size_bytes, 0);
+    auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
+        bytes_concept enc{data};
+        if (enc.size() < tag_size_bytes) {
+            throw std::runtime_error{"data error"};
+        }
+        enc.sz -= tag_size_bytes;
+        bytes_concept tag{data};
+        tag.subspan(enc.size());
+        auto out = decrypt(nonce, enc, auth_data, tag);
         return out;
     }
 
+    // [gogost.git] / mgm / mul128.go
     void gf128(array<block_size_bytes> &buf, uint8_t *buf2) {
         auto x0 = std::byteswap(*(uint64_t *)(buf.data() + 8));
         auto x1 = std::byteswap(*(uint64_t *)(buf.data() + 0));
