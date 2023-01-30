@@ -611,6 +611,12 @@ struct tls13_ {
             switch (h.msg_type) {
             case parameters::handshake_type::server_hello: {
                 ServerHello &sh = s.read();
+                if ((uint16_t)sh.legacy_version != (uint16_t)tls_version::tls12) {
+                    throw std::runtime_error{"not a tls13"};
+                }
+                if ((uint16_t)sh.cipher_suite != (uint16_t)suite_type::suite()) {
+                    throw std::runtime_error{"suite mismatch, server does not want our suite"};
+                }
                 read_extensions(s);
                 break;
             }
@@ -666,7 +672,7 @@ struct tls13_ {
 
                         if (pka == ecPublicKey) {
                             auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
-                                                          x509::public_key_algorithm, 1);
+                                                            x509::public_key_algorithm, 1);
                             constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
                             constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
                             if (curve == prime256v1) {
@@ -702,7 +708,7 @@ struct tls13_ {
                                 for (int
                                     i = certname.size() - 1,
                                     j = servername.size() - 1; i >= 0 && j >= 0;
-                                     --i, --j) {
+                                        --i, --j) {
                                     if (certname[i] == '*' && npoints >= 2) {
                                         return true;
                                     }
@@ -900,7 +906,8 @@ struct http_client {
                     co_await app();
                 }
                 string_view sv{response.begin(), response.end()};
-                body = sv.substr(p + body_delim.size());
+                auto start = p + body_delim.size();
+                body = sv.substr(start, sz);
             } else if (auto it = headers.find("Transfer-Encoding"sv); it != headers.end()) {
                 if (it->second != "chunked"sv) {
                     throw std::logic_error{"not impl"};
@@ -965,13 +972,13 @@ struct http_client {
         };
 
         auto m = co_await open_url(url_internal);
-        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt"} << m.response;
-        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg"} << m.body;
+        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt", std::ios::binary} << m.response;
+        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg", std::ios::binary} << m.body;
         int i = 0;
         while (!m.headers["Location"].empty()) {
             string url{m.headers["Location"].begin(), m.headers["Location"].end()};
             m = co_await open_url(url);
-            std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt"} << m.response;
+            std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt", std::ios::binary} << m.response;
         }
     }
     awaitable<http_message> open_url(auto &&url) {
@@ -1033,7 +1040,8 @@ struct http_client {
         tls_layer = decltype(tls_layer){&s,host};
 
         // http layer
-        string req = "GET /image.jpg HTTP/1.1\r\n";
+        //string req = "GET /image.jpg HTTP/1.1\r\n";
+        string req = "GET / HTTP/1.1\r\n";
         req += "Host: "s + url + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
         req += "\r\n";

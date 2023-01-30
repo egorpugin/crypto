@@ -625,16 +625,14 @@ void test_tls() {
     run("pugin.goststand.ru:3443");
     //
     run("91.244.183.22"); // https://infotecs.ru/stand_tls/
-    //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
-    //run("gost.cryptopro.ru");
+    //
+    run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
 
     //run("infotecs.ru");
     //run("software-network.org");
     //run("letsencrypt.org");
     //run("example.com");
     //run("google.com");
-    //run("gosuslugi.ru"); // does not support tls13
-    //run("sberbank.ru"); // does not support tls13
     //run("nalog.gov.ru");
     //run("github.com");
     //run("gmail.com");
@@ -643,6 +641,11 @@ void test_tls() {
     //run("tls13.akamai.io");
     //run("tls13.1d.pw");
     //run("localhost");
+
+    // does not support tls13
+    //run("sberbank.ru");
+    //run("gosuslugi.ru");
+    //run("gost.cryptopro.ru");
 }
 
 int main() {

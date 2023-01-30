@@ -34,7 +34,7 @@ enum class CipherSuite : uint16_t {
     TLS_CHACHA20_POLY1305_SHA256 = 0x1303, // todo
 
     TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103, // todo
-    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105, // todo
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105,
 
     TLS_SM4_GCM_SM3 = 0x00C6, // todo
 };
@@ -119,7 +119,7 @@ struct ServerHello {
     Random random;
     uint8_t legacy_session_id_len{32};
     uint8_t legacy_session_id[32];
-    CipherSuite cipher_suite;
+    ube16 cipher_suite;
     uint8_t legacy_compression_method;
 };
 
