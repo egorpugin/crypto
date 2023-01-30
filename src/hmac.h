@@ -99,4 +99,29 @@ auto derive_secret(auto &&secret, auto &&label, Hash h = {}) {
     return hkdf_expand_label<Hash>(secret, label, h.digest());
 }
 
+namespace gost {
+
+template <typename Hash>
+auto kdf(auto &&key, auto &&label, auto &&seed) {
+    std::string message(1 + label.size() + 1 + seed.size() + 2, 0);
+    message[0] = 1;
+    memcpy(message.data() + 1, label.data(), label.size());
+    memcpy(message.data() + 1 + label.size() + 1, seed.data(), seed.size());
+    message[1 + label.size() + 1 + seed.size()] = 1;
+    return hmac<Hash>(key, message);
+}
+template <typename Hash, typename Suite>
+auto tlstree(auto &&key, uint64_t i) {
+    auto d = i;
+    d = i & Suite::C_1;
+    auto k1 = kdf<Hash>(key, "level1"sv, bytes_concept{(uint8_t*)&d, sizeof(d)});
+    d = i & Suite::C_2;
+    auto k2 = kdf<Hash>(k1, "level2"sv, bytes_concept{(uint8_t*)&d, sizeof(d)});
+    d = i & Suite::C_3;
+    auto k3 = kdf<Hash>(k2, "level3"sv, bytes_concept{(uint8_t*)&d, sizeof(d)});
+    return k3;
+}
+
+} // namespace gost
+
 } // namespace crypto

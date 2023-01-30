@@ -327,4 +327,31 @@ auto byteswap(const std::string &in) {
     return out;
 }
 
+auto str2bytes(auto &&in) {
+    std::string s;
+    bool first = true;
+    for (auto &&c : in) {
+        if (isspace(c)) {
+            continue;
+        }
+        c = toupper(c);
+        auto d = c - (isdigit(c) ? '0' : ('A' - 10));
+        if (first) {
+            s.push_back(d << 4);
+        } else {
+            s.back() |= d;
+        }
+        first = !first;
+    }
+    return s;
+}
+std::string operator"" _sb(const char *in, size_t len) {
+    std::string s{in, in + len};
+    return str2bytes(s);
+}
+std::string operator"" _sw(const char *in, size_t len) {
+    std::string s{in, in + len};
+    return crypto::byteswap(str2bytes(s));
+}
+
 } // namespace crypto
