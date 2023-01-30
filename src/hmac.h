@@ -110,16 +110,18 @@ auto kdf(auto &&key, auto &&label, auto &&seed) {
     message[1 + label.size() + 1 + seed.size()] = 1;
     return hmac<Hash>(key, message);
 }
+template <typename Suite>
+auto tlstree_needs_new_key(uint64_t seqnum) {
+    return !(seqnum > 0 && std::ranges::all_of(Suite::C, [&](auto C){return (seqnum & C) == ((seqnum - 1) & C);}));
+}
 template <typename Hash, typename Suite>
 auto tlstree(auto &&key, uint64_t seqnum) {
     auto label = "level0"s;
     auto k = key;
     for (int l = 1; auto &&C : Suite::C) {
         label[5] = l++ + '0';
-        /*if (seqnum > 0 && (seqnum & C) == ((seqnum - 1) & C)) {
-            continue;
-        }*/
         auto d = seqnum & C;
+        d = std::byteswap(d);
         k = kdf<Hash>(k, label, bytes_concept{(uint8_t *)&d, sizeof(d)});
     }
     return k;
