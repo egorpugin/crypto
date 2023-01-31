@@ -34,7 +34,7 @@ struct curve25519 {
         return public_key;
     }
     auto public_key(auto &&out) {
-        curve25519_f(private_key_.data(), out);
+        curve25519_f(private_key_.data(), out.data());
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         public_key_type shared_secret;

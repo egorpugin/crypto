@@ -61,7 +61,8 @@ struct gcm {
             output = output.subspan(sz);
         }
     }
-    auto encrypt(auto &&data, auto &&auth_data) {
+    auto encrypt_and_tag(auto &&nonce, auto &&data, auto &&auth_data) {
+        set_iv(nonce);
         std::string out(data.size(), 0);
         encrypt1(std::span<uint8_t>((uint8_t*)data.data(), data.size()), std::span<uint8_t>((uint8_t*)out.data(), out.size()));
         auto auth_tag = make_tag(auth_data, out);
@@ -69,7 +70,8 @@ struct gcm {
         memcpy(out.data() + data.size(), auth_tag.data(), tag_size_bytes);
         return out;
     }
-    auto decrypt(auto &&data, auto &&auth_data) {
+    auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
+        set_iv(nonce);
         auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
         std::string out(data.size() - tag_size_bytes, 0);
         encrypt1(ciphered_data, std::span<uint8_t>((uint8_t*)out.data(), out.size()));

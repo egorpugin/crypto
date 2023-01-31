@@ -163,14 +163,7 @@ struct secp {
     private_key_type private_key_;
 
     void private_key() {
-        auto c = parameters.curve();
-        while (1) {
-            get_random_secure_bytes(private_key_);
-            auto m = bytes_to_bigint(private_key_);
-            if (m > 0 && m < c.order) {
-                break;
-            }
-        }
+        get_random_secure_bytes(private_key_);
     }
     auto public_key() {
         auto c = parameters.curve();
@@ -180,7 +173,7 @@ struct secp {
     }
     auto public_key(auto &&out) {
         auto k = public_key();
-        memcpy(out, (uint8_t *)&k, key_size);
+        memcpy(out.data(), (uint8_t *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         array<point_size_bytes> shared_secret;
@@ -263,7 +256,7 @@ struct curve {
     }
     auto public_key(auto &&out) {
         auto k = public_key();
-        memcpy(out, (uint8_t *)&k, key_size);
+        memcpy(out.data(), (uint8_t *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         array_gost<point_size_bytes> shared_secret;
@@ -350,14 +343,13 @@ using ec512c = curve<
 
 // ShangMi (SM) Cipher Suites for TLS 1.3
 // https://www.rfc-editor.org/rfc/rfc8998.html
-/*
-using sm2 = ...<256,
-                       "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF"_s,
-                       "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC"_s,
-                       "0x28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93"_s,
 
-                       "0x32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7"_s,
-                       "0xBC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0"_s>;
-*/
+using sm2 = secp<256, "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF"_s,
+                 "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC"_s,
+                 "0x28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93"_s,
+
+                 "0x32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7"_s,
+                 "0xBC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0"_s,
+                 "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123"_s>;
 
 } // namespace crypto::ec

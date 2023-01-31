@@ -66,6 +66,8 @@ enum class ExtensionType : uint16_t {
     post_handshake_auth = 49,       /* RFC 8446 */
     signature_algorithms_cert = 50, /* RFC 8446 */
     key_share = 51,                 /* RFC 8446 */
+
+    message_hash = 254,
 };
 
 enum class tls_version : uint16_t {

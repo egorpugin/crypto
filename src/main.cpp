@@ -613,7 +613,8 @@ void test_tls() {
         try {
             http_client t{url};
             t.run();
-            //std::cout << "ok" << "\n\n";
+            std::cout << "connecting to " << url << "\n";
+            std::cout << "ok" << "\n\n";
             cmp_base(0, 0);
         } catch (std::exception &e) {
             std::cout << "connecting to " << url << "\n";
@@ -622,12 +623,20 @@ void test_tls() {
         }
     };
 
-    run("pugin.goststand.ru:3443");
     //
-    run("91.244.183.22"); // https://infotecs.ru/stand_tls/
+    //run("pugin.goststand.ru:3443");
+    run("pugin.goststand.ru:1443");
     //
-    run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
-
+    // https://infotecs.ru/stand_tls/
+    //run("91.244.183.22:15002");
+    //run("91.244.183.22:15012");
+    //run("91.244.183.22:15022");
+    //run("91.244.183.22:15032");
+    //run("91.244.183.22:15072");
+    //run("91.244.183.22:15082");
+    //run("91.244.183.22:15092");
+    ////
+    //
     //run("infotecs.ru");
     //run("software-network.org");
     //run("letsencrypt.org");
@@ -640,12 +649,14 @@ void test_tls() {
     //run("twitch.tv");
     //run("tls13.akamai.io");
     //run("tls13.1d.pw");
-    //run("localhost");
-
-    // does not support tls13
-    //run("sberbank.ru");
-    //run("gosuslugi.ru");
-    //run("gost.cryptopro.ru");
+    ////run("127.0.0.1:11111");
+    //
+    //// does not support tls13
+    // run("sberbank.ru");
+    // run("gosuslugi.ru");
+    // run("gost.cryptopro.ru");
+    //// requires RFC 5746(Renegotiation Indication)
+    // run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
 }
 
 int main() {
