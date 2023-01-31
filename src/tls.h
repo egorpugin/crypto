@@ -221,19 +221,19 @@ struct tls13_ {
         //suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
         >;
     using all_key_exchanges = key_exchanges<
-        // key_exchange<curve25519, parameters::supported_groups::x25519>,
-        // key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
-        // key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
+        key_exchange<curve25519, parameters::supported_groups::x25519>,
+        key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
+        key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
         //
-        //key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>
-        //key_exchange<ec::gost::r34102012::ec256b, parameters::supported_groups::GC256B>
-        //key_exchange<ec::gost::r34102012::ec256c, parameters::supported_groups::GC256C>
-        //key_exchange<ec::gost::r34102012::ec256d, parameters::supported_groups::GC256D>
-        //key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>
-        //key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>
-        key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>
+        key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,
+        key_exchange<ec::gost::r34102012::ec256b, parameters::supported_groups::GC256B>,
+        key_exchange<ec::gost::r34102012::ec256c, parameters::supported_groups::GC256C>,
+        key_exchange<ec::gost::r34102012::ec256d, parameters::supported_groups::GC256D>,
+        key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>,
+        key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>,
+        key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
         //
-        // key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
+        key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
     >;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory

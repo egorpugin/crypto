@@ -624,32 +624,34 @@ void test_tls() {
     };
 
     //
-    //run("pugin.goststand.ru:3443");
     run("pugin.goststand.ru:1443");
+    //run("pugin.goststand.ru:2443"); // magma
+    run("pugin.goststand.ru:3443");
+    //run("pugin.goststand.ru:4443"); // magma
     //
     // https://infotecs.ru/stand_tls/
-    //run("91.244.183.22:15002");
-    //run("91.244.183.22:15012");
-    //run("91.244.183.22:15022");
-    //run("91.244.183.22:15032");
-    //run("91.244.183.22:15072");
-    //run("91.244.183.22:15082");
-    //run("91.244.183.22:15092");
-    ////
+    run("91.244.183.22:15002");
+    run("91.244.183.22:15012");
+    run("91.244.183.22:15022");
+    run("91.244.183.22:15032");
+    run("91.244.183.22:15072");
+    run("91.244.183.22:15082");
+    run("91.244.183.22:15092");
     //
-    //run("infotecs.ru");
-    //run("software-network.org");
-    //run("letsencrypt.org");
-    //run("example.com");
-    //run("google.com");
-    //run("nalog.gov.ru");
-    //run("github.com");
-    //run("gmail.com");
-    //run("youtube.com");
-    //run("twitch.tv");
-    //run("tls13.akamai.io");
-    //run("tls13.1d.pw");
-    ////run("127.0.0.1:11111");
+
+    run("infotecs.ru");
+    run("software-network.org");
+    run("letsencrypt.org");
+    run("example.com");
+    run("google.com");
+    run("nalog.gov.ru");
+    run("github.com");
+    run("gmail.com");
+    run("youtube.com");
+    run("twitch.tv");
+    run("tls13.akamai.io");
+    run("tls13.1d.pw");
+    //run("127.0.0.1:11111");
     //
     //// does not support tls13
     // run("sberbank.ru");
