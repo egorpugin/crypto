@@ -13,15 +13,21 @@ struct point {
 
 // y^2 = x^3 + ax + b
 struct weierstrass {
-    bigint a,b,p;
+    bigint a, b, p;
 };
 
-struct ec_field_point : point<bigint> {
-    weierstrass &ec;
+// a * x^2 + y^2 = 1 + d * x^2 * y^2
+struct twisted_edwards {
+    bigint a, d, p;
+};
 
-    ec_field_point(weierstrass &ec) : ec{ec} {
+template <typename Curve>
+struct ec_field_point : point<bigint> {
+    Curve &ec;
+
+    ec_field_point(Curve &ec) : ec{ec} {
     }
-    ec_field_point(weierstrass &ec, auto &&x, auto &&y) : ec{ec} {
+    ec_field_point(Curve &ec, auto &&x, auto &&y) : ec{ec} {
         this->x = x;
         this->y = y;
     }
@@ -42,7 +48,9 @@ struct ec_field_point : point<bigint> {
         y %= b;
         return *this;
     }
-    ec_field_point double_() const {
+
+    //
+    ec_field_point double_() const requires std::same_as<Curve, weierstrass> {
         if (y == 0) {
             return ec_field_point{ec};
         }
@@ -57,7 +65,7 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
-    ec_field_point operator+(const ec_field_point &q) {
+    ec_field_point operator+(const ec_field_point &q) requires std::same_as<Curve, weierstrass> {
         if (*this == 0) {
             return q;
         }
@@ -87,15 +95,49 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
+
+    //
+    ec_field_point double_() const requires std::same_as<Curve, twisted_edwards> {
+        bigint temp;
+        ec_field_point r{ec};
+
+        temp = ec.a * x * x + y * y;
+        mpz_invert(temp, temp, ec.p);
+        r.x = "2"_bi * x * y * temp;
+
+        temp = "2"_bi - ec.a * x * x - y * y;
+        mpz_invert(temp, temp, ec.p);
+        r.y = (y * y - ec.a * x * x) * temp;
+
+        r %= ec.p;
+        return r;
+    }
+    ec_field_point operator+(const ec_field_point &q) requires std::same_as<Curve, twisted_edwards> {
+        bigint temp, mul = ec.d * x * q.x * y * q.y;
+        ec_field_point r{ec};
+
+        temp = "1"_bi + mul;
+        mpz_invert(temp, temp, ec.p);
+        r.x = (x * q.y + y * q.x) * temp;
+
+        temp = "1"_bi - mul;
+        mpz_invert(temp, temp, ec.p);
+        r.y = (y * q.y - ec.a * x * q.x) * temp;
+
+        r %= ec.p;
+        return r;
+    }
 };
 
-std::ostream &operator<<(std::ostream &o, const ec_field_point &v) {
+template <typename Curve>
+std::ostream &operator<<(std::ostream &o, const ec_field_point<Curve> &v) {
     o << "x = " << v.x << "\n";
     o << "y = " << v.y << "\n";
     return o;
 }
 
-ec_field_point operator*(const bigint &m, const ec_field_point &p) {
+template <typename Curve>
+ec_field_point<Curve> operator*(const bigint &m, const ec_field_point<Curve> &p) {
     if (m == 0) {
         return {p.ec};
     }
@@ -115,16 +157,21 @@ ec_field_point operator*(const bigint &m, const ec_field_point &p) {
     return r0;
 }
 
-template <typename T, typename CurveForm = weierstrass>
-struct parameters {
+template <typename T, typename CurveForm>
+struct parameters;
+
+template <typename T>
+struct parameters<T, weierstrass> {
+    using CurveForm = weierstrass;
+
     T p;
-    T a,b;
+    T a, b;
     point<T> G;
     T order;
 
     struct curve_type {
         CurveForm ec;
-        ec_field_point G{ec};
+        ec_field_point<CurveForm> G{ec};
         bigint order;
     };
 
@@ -140,9 +187,36 @@ struct parameters {
     }
 };
 
+template <typename T>
+struct parameters<T, twisted_edwards> {
+    using CurveForm = twisted_edwards;
+
+    T p;
+    T a, d;
+    point<T> G;
+    T order;
+
+    struct curve_type {
+        CurveForm ec;
+        ec_field_point<CurveForm> G{ec};
+        bigint order;
+    };
+
+    auto curve() const {
+        curve_type c;
+        c.ec.p = p;
+        c.ec.a = a;
+        c.ec.d = d;
+        c.G.x = G.x;
+        c.G.y = G.y;
+        c.order = order;
+        return c;
+    }
+};
+
 template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order>
 struct secp {
-    static inline const auto parameters = ec::parameters<string_view>{.p = P,
+    static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
                                                                       .a = A,
                                                                       .b = B,
                                                                       .G =
@@ -218,7 +292,7 @@ namespace gost::r34102012 {
 
 template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order>
 struct curve {
-    static inline const auto parameters = ec::parameters<string_view>{.p = P,
+    static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
                                                                       .a = A,
                                                                       .b = B,
                                                                       .G =
@@ -279,69 +353,75 @@ struct curve {
     }
 };
 
-template <auto Sz, auto A, auto D, auto ... Params>
-struct twisted_edwards : curve<Sz, Params...> {
-    using base = curve<Sz, Params...>;
+template <auto PointSizeBytes, auto P, auto A, auto D, auto Gx, auto Gy, auto Order>
+struct twisted_edwards {
+    static inline const auto parameters = ec::parameters<string_view, ec::twisted_edwards>{.p = P,
+                                                                                   .a = A,
+                                                                                   .d = D,
+                                                                                   .G =
+                                                                                       {
+                                                                                           Gx,
+                                                                                           Gy,
+                                                                                       },
+                                                                                   .order = Order};
 
-    auto to_weierstrass(bigint x, bigint y) {
-        auto c = base::parameters.curve();
-        bigint a = string_view{A};
-        bigint d = string_view{D};
+    static inline constexpr auto point_size_bytes =
+        ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
 
-        bigint p2 = "12"_bi - y * 12;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint x1 = (a * 5 + a * y - d * y * 5 - d) * p2;
+#pragma pack(push, 1)
+    struct key_type {
+        array_gost<point_size_bytes> x;
+        array_gost<point_size_bytes> y;
+    };
+#pragma pack(pop)
 
-        p2 = x * 4 - x * y * 4;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint y1 = (a + a * y - d * y - d) * p2;
+    static inline constexpr auto key_size = sizeof(key_type);
+    using private_key_type = array_gost<point_size_bytes>;
+    using public_key_type = array_gost<key_size>;
 
-        return std::tuple{x1 % c.ec.p, y1 % c.ec.p};
+    private_key_type private_key_;
+
+    void private_key() {
+        auto c = parameters.curve();
+        while (1) {
+            get_random_secure_bytes(private_key_);
+            auto m = bytes_to_bigint(private_key_);
+            if (m > 0 && m < c.order) {
+                break;
+            }
+        }
     }
-    auto to_twistededwards(bigint u, bigint v) {
-        auto c = base::parameters.curve();
-        bigint a = string_view{A};
-        bigint d = string_view{D};
-
-        bigint p2 = "-12"_bi * u - a + d * 5;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint y = (a * 5 - u * 12 - d) * p2;
-
-        p2 = v * 4 - v * y * 4;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint x = (a + a * y - d * y - d) * p2;
-
-        return std::tuple{x % c.ec.p, y % c.ec.p};
-    }
-
     auto public_key() {
-        auto c = base::parameters.curve();
+        auto c = parameters.curve();
         auto m = bytes_to_bigint(this->private_key_);
+        auto mul = [&](auto &&m) {
+            auto p = m * c.G;
+            std::cout << "m = " << m << "\n";
+            std::cout << p << "\n";
+        };
+        mul("1"_bi);
+        mul("2"_bi);
+
         auto p = m * c.G;
-        //std::tie(p.x, p.y) = to_twistededwards(p.x, p.y);
-        return typename base::key_type{.x = p.x, .y = p.y};
+        std::cout << c.G;
+        std::cout << m << "\n";
+        std::cout << p;
+        return key_type{.x = p.x, .y = p.y};
     }
     auto public_key(auto &&out) {
         auto k = public_key();
         memcpy(out.data(), (uint8_t *)&k, this->key_size);
     }
-    auto shared_secret(const typename base::public_key_type &peer_public_key) {
-        array_gost<base::point_size_bytes> shared_secret;
-        auto &k = *(typename base::key_type *)peer_public_key.data();
-        auto c = base::parameters.curve();
+    auto shared_secret(const public_key_type &peer_public_key) {
+        array_gost<point_size_bytes> shared_secret;
+        auto &k = *(key_type *)peer_public_key.data();
+        auto c = parameters.curve();
         ec_field_point p{c.ec};
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
-        std::cout << "received twisted:\n" << p << "\n";
-        std::tie(p.x, p.y) = to_weierstrass(p.x, p.y);
-        std::cout << "received weierstrass:\n" << p << "\n";
         auto m = bytes_to_bigint(this->private_key_);
         auto p2 = m * p;
-        std::cout << "m = " << m << "\n";
-        std::cout << "multiplied weierstrass:\n" << p2 << "\n";
-        std::tie(p2.x, p2.y) = to_twistededwards(p2.x, p2.y);
-        std::cout << "multiplied twisted:\n" << p2 << "\n";
-        typename base::key_type k2{.x = p2.x, .y = p2.y};
+        key_type k2{.x = p2.x, .y = p2.y};
         memcpy(shared_secret.data(), (uint8_t *)&k2.x, this->point_size_bytes);
         return shared_secret;
     }
@@ -351,16 +431,11 @@ struct twisted_edwards : curve<Sz, Params...> {
 // use SAGE to convert twisted edwards A,B,Gx,Gy to weierstrass form
 
 // id-tc26-gost-3410-2012-256-paramSetA
-// twisted twisted_edwards
-using ec256a = twisted_edwards<256, "0x01"_s, "0x605f6b7c183fa81578bc39cfad518132b9df62897009af7e522c32d6dc7bffb"_s,
+using ec256a = twisted_edwards<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s, "0x01"_s,
+                               "0x605f6b7c183fa81578bc39cfad518132b9df62897009af7e522c32d6dc7bffb"_s,
 
-                     "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
-                     "87789765485885808793369751294406841171614589925193456909855962166505018127157"_s,
-                     "18713751737015403763890503457318596560459867796169830279162511461744901002515"_s,
-
-                     "65987350182584560790308640619586834712105545126269759365406768962453298326056"_s,
-                     "22855189202984962870421402504110399293152235382908105741749987405721320435292"_s,
-                     "0x400000000000000000000000000000000fd8cddfc87b6635c115af556c360c67"_s>;
+                               "0x0d"_s, "0x60ca1e32aa475b348488c38fab07649ce7ef8dbe87f22e81f92b2592dba300e7"_s,
+                               "0x400000000000000000000000000000000fd8cddfc87b6635c115af556c360c67"_s>;
 
 using ec256b = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
                      "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd94"_s, "0xa6"_s,
@@ -404,14 +479,14 @@ using ec512b = curve<
     "0x00800000000000000000000000000000000000000000000000000000000000000149A1EC142565A545ACFDB77BD9D40CFA8B996712101BEA0EC6346C54374F25BD"_s>;
 
 // twisted edwards
-using ec512c = curve<
+using ec512c = twisted_edwards<
     512,
     "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdc7"_s,
-    "11552207741726624081384854431754270453419990958158536547453630472753284279856029013033421730195977772912484970560977054897563749457966985165428182284278739"_s,
-    "9467654314974239364849779893497935997616546680893642377235981868741051215651032446828994750528267630604306101610711521055955290148577159125187794668181473"_s,
+    "1"_s,
+    "0x9e4f5d8c017d8d9f13a5cf3cdf5bfe4dab402d54198e31ebde28a0621050439ca6b39e0a515c06b304e2ce43e79e369e91a0cfc2bc2a22b4ca302dbb33ee7550"_s,
 
-    "11883046340949417535959253611031637438486121989357748247963585015455167053565085942161130870937622596747831459979590245849590330315393322885186213222089032"_s,
-    "12873887912291418762163219174899249027788909354964279561044704584079894283286935688639587101137346765264237830933785897290140286858111689735138773336704015"_s,
+    "0x12"_s,
+    "0x469af79d1fb1f5e16b99592b77a01e2a0fdfb0d01794368d9a56117f7b38669522dd4b650cf789eebf068c5d139732f0905622c04b2baae7600303ee73001a3d"_s,
 
     "0x3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc98cdba46506ab004c33a9ff5147502cc8eda9e7a769a12694623cef47f023ed"_s>;
 

@@ -326,7 +326,7 @@ void test_ec() {
     // simple
     {
         {
-            ec::parameters<string_view> p{.p = "751"sv,
+            ec::parameters<string_view, ec::weierstrass> p{.p = "751"sv,
                                           .a = "-1"sv,
                                           .b = "188"sv,
                                           .G{
@@ -340,7 +340,7 @@ void test_ec() {
             cmp_base(r.y, "558"_bi);
         }
         {
-            ec::parameters<string_view> p{.p = "211"sv,
+            ec::parameters<string_view, ec::weierstrass> p{.p = "211"sv,
                                           .a = "0"sv,
                                           .b = "-4"sv,
                                           .G{
@@ -373,7 +373,7 @@ void test_ec() {
     {
         auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
         {
-            ec::parameters<string_view> p{
+            ec::parameters<string_view, ec::weierstrass> p{
                 .p = "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"sv,
                 .a = "0xc1c627e1638fdc8e24299bb041e4e23af4bb5424"sv,
                 .b = "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab"sv,
@@ -625,10 +625,10 @@ void test_tls() {
 
     //
     //run("pugin.goststand.ru:3443");
-    //run("pugin.goststand.ru:1443");
+    run("pugin.goststand.ru:1443");
     //
     // https://infotecs.ru/stand_tls/
-    run("91.244.183.22:15002");
+    //run("91.244.183.22:15002");
     //run("91.244.183.22:15012");
     //run("91.244.183.22:15022");
     //run("91.244.183.22:15032");
