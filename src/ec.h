@@ -95,38 +95,6 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
-
-    //
-    ec_field_point double_() const requires std::same_as<Curve, twisted_edwards> {
-        bigint temp;
-        ec_field_point r{ec};
-
-        temp = ec.a * x * x + y * y;
-        mpz_invert(temp, temp, ec.p);
-        r.x = "2"_bi * x * y * temp;
-
-        temp = "2"_bi - ec.a * x * x - y * y;
-        mpz_invert(temp, temp, ec.p);
-        r.y = (y * y - ec.a * x * x) * temp;
-
-        r %= ec.p;
-        return r;
-    }
-    ec_field_point operator+(const ec_field_point &q) requires std::same_as<Curve, twisted_edwards> {
-        bigint temp, mul = ec.d * x * q.x * y * q.y;
-        ec_field_point r{ec};
-
-        temp = "1"_bi + mul;
-        mpz_invert(temp, temp, ec.p);
-        r.x = (x * q.y + y * q.x) * temp;
-
-        temp = "1"_bi - mul;
-        mpz_invert(temp, temp, ec.p);
-        r.y = (y * q.y - ec.a * x * q.x) * temp;
-
-        r %= ec.p;
-        return r;
-    }
 };
 
 template <typename Curve>
@@ -220,7 +188,7 @@ struct parameters<T, twisted_edwards> {
     }
 };
 
-template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order>
+template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct secp {
     static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
                                                                       .a = A,
@@ -230,7 +198,9 @@ struct secp {
                                                                               Gx,
                                                                               Gy,
                                                                           },
-                                                                      .order = Order};
+                                                                      .order = Order,
+                                                                                   .cofactor = Cofactor
+    };
 
     static inline constexpr auto point_size_bytes = ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
 
@@ -269,7 +239,7 @@ struct secp {
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
         auto m = bytes_to_bigint(private_key_);
-        auto p2 = m * p;
+        auto p2 = m * p; // * cofactor? but it is always = 1 here?
         key_type k2{4,p2.x,p2.y};
         memcpy(shared_secret.data(), (uint8_t *)&k2.x, point_size_bytes);
         return shared_secret;
@@ -283,7 +253,7 @@ using secp256r1 = secp<256, "0xffffffff00000001000000000000000000000000fffffffff
 
                        "0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296"_s,
                        "0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5"_s,
-                       "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"_s>;
+                       "0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"_s, "1"_s>;
 
 using secp384r1 =
     secp<384, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffeffffffff0000000000000000ffffffff"_s,
@@ -292,7 +262,7 @@ using secp384r1 =
 
          "0xaa87ca22be8b05378eb1c71ef320ad746e1d3b628ba79b9859f741e082542a385502f25dbf55296c3a545e3872760ab7"_s,
          "0x3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f"_s,
-         "0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973"_s>;
+         "0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973"_s, "1"_s>;
 
 namespace gost::r34102012 {
 
@@ -433,6 +403,17 @@ struct twisted_edwards {
 
 // https://neuromancer.sk/std/gost
 // use SAGE to convert twisted edwards A,B,Gx,Gy to weierstrass form
+/*
+g = to_weierstrass(a, d, K(Gx), K(Gy))
+
+print(E)
+print("p =",hex())
+print("a =",hex())
+print("b =",hex( ))
+print("n =",hex(E.order()))
+print("Gx =",hex(g[0]))
+print("Gy =",hex(g[1]))
+*/
 
 // id-tc26-gost-3410-2012-256-paramSetA
 using ec256a_w = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
@@ -527,6 +508,6 @@ using sm2 = secp<256, "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFF
 
                  "0x32C4AE2C1F1981195F9904466A39C9948FE30BBFF2660BE1715A4589334C74C7"_s,
                  "0xBC3736A2F4F6779C59BDCEE36B692153D0A9877CC62A474002DF32E52139F0A0"_s,
-                 "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123"_s>;
+                 "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54123"_s, "1"_s>;
 
 } // namespace crypto::ec
