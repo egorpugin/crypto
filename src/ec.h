@@ -391,39 +391,6 @@ struct twisted_edwards {
 
     private_key_type private_key_;
 
-
-    auto to_weierstrass(bigint x, bigint y) {
-        auto c = parameters.curve();
-        bigint a = string_view{A};
-        bigint d = string_view{D};
-
-        bigint p2 = "12"_bi - y * 12;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint x1 = (a * 5 + a * y - d * y * 5 - d) * p2;
-
-        p2 = x * 4 - x * y * 4;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint y1 = (a + a * y - d * y - d) * p2;
-
-        return std::tuple{x1 % c.ec.p, y1 % c.ec.p};
-    }
-    auto to_twistededwards(bigint u, bigint v) {
-        auto c = parameters.curve();
-        bigint a = string_view{A};
-        bigint d = string_view{D};
-
-        bigint p2 = "-12"_bi * u - a + d * 5;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint y = (a * 5 - u * 12 - d) * p2;
-
-        p2 = v * 4 - v * y * 4;
-        mpz_invert(p2, p2, c.ec.p);
-        bigint x = (a + a * y - d * y - d) * p2;
-
-        return std::tuple{x % c.ec.p, y % c.ec.p};
-    }
-
-
     void private_key() {
         auto c = parameters.curve();
         while (1) {
@@ -435,78 +402,34 @@ struct twisted_edwards {
         }
     }
     auto public_key() {
-        auto print_point = [](auto &&name, auto &&p) {
-            std::cout << name << ":\n";
-            std::cout << p;
-            std::cout << "\n";
-        };
-
         auto c = parameters.curve();
         auto m = bytes_to_bigint(this->private_key_);
-        //std::cout << "m = " << m << "\n\n";
-        auto p = c.G;
-        //print_point("G", p);
-        std::tie(p.x, p.y) = to_weierstrass(p.x, p.y);
-        //print_point("G weierstrass", p);
-
-        auto w_params = Wcurve::parameters;
-        auto wc = w_params.curve();
-        ec_field_point<weierstrass> wp{wc.ec};
-        wp.x = p.x;
-        wp.y = p.y;
-
-        wp = m * wp;
-        //print_point("m * G weierstrass", wp);
-
-        p.x = wp.x;
-        p.y = wp.y;
-
-        //
-        auto p1 = p;
-        std::tie(p1.x, p1.y) = to_twistededwards(wp.x, wp.y);
-        //print_point("m * G twistededwards", p1);
-        //
-
-        return key_type{.x = p.x, .y = p.y};
+        auto wc = Wcurve::parameters.curve();
+        auto wp = m * wc.G;
+        return key_type{.x = wp.x, .y = wp.y};
     }
     auto public_key(auto &&out) {
         auto k = public_key();
         memcpy(out.data(), (uint8_t *)&k, this->key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
-        auto print_point = [](auto &&name, auto &&p) {
-            std::cout << name << ":\n";
-            std::cout << p;
-            std::cout << "\n";
-        };
-
         array_gost<point_size_bytes> shared_secret;
         auto &k = *(key_type *)peer_public_key.data();
         auto c = parameters.curve();
-        ec_field_point p{c.ec};
+        auto m = bytes_to_bigint(this->private_key_);
+
+        auto wc = Wcurve::parameters.curve();
+        ec_field_point<weierstrass> p{wc.ec};
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
-        //print_point("received point", p);
 
-        //std::tie(p.x, p.y) = to_weierstrass(p.x, p.y);
-        //print_point("received weierstrass point", p);
+        p = m * c.cofactor * p;
 
-        auto w_params = Wcurve::parameters;
-        auto wc = w_params.curve();
-        ec_field_point<weierstrass> wp{wc.ec};
-        wp.x = p.x;
-        wp.y = p.y;
-
-        auto m = bytes_to_bigint(this->private_key_);
-        auto p2 = m * c.cofactor * wp;
-        //print_point("result point", p);
-        //std::tie(p2.x, p2.y) = to_twistededwards(p2.x, p2.y);
-        key_type k2{.x = p2.x, .y = p2.y};
+        key_type k2{.x = p.x, .y = p.y};
         memcpy(shared_secret.data(), (uint8_t *)&k2.x, this->point_size_bytes);
         return shared_secret;
     }
 };
-
 
 // https://neuromancer.sk/std/gost
 // use SAGE to convert twisted edwards A,B,Gx,Gy to weierstrass form
