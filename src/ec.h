@@ -353,7 +353,7 @@ struct curve {
     }
 };
 
-template <auto PointSizeBytes, auto P, auto A, auto D, auto Gx, auto Gy, auto Order>
+template <auto PointSizeBytes, auto P, auto A, auto D, auto Gx, auto Gy, auto Order, typename Wcurve>
 struct twisted_edwards {
     static inline const auto parameters = ec::parameters<string_view, ec::twisted_edwards>{.p = P,
                                                                                    .a = A,
@@ -381,6 +381,39 @@ struct twisted_edwards {
 
     private_key_type private_key_;
 
+
+    auto to_weierstrass(bigint x, bigint y) {
+        auto c = parameters.curve();
+        bigint a = string_view{A};
+        bigint d = string_view{D};
+
+        bigint p2 = "12"_bi - y * 12;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint x1 = (a * 5 + a * y - d * y * 5 - d) * p2;
+
+        p2 = x * 4 - x * y * 4;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint y1 = (a + a * y - d * y - d) * p2;
+
+        return std::tuple{x1 % c.ec.p, y1 % c.ec.p};
+    }
+    auto to_twistededwards(bigint u, bigint v) {
+        auto c = parameters.curve();
+        bigint a = string_view{A};
+        bigint d = string_view{D};
+
+        bigint p2 = "-12"_bi * u - a + d * 5;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint y = (a * 5 - u * 12 - d) * p2;
+
+        p2 = v * 4 - v * y * 4;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint x = (a + a * y - d * y - d) * p2;
+
+        return std::tuple{x % c.ec.p, y % c.ec.p};
+    }
+
+
     void private_key() {
         auto c = parameters.curve();
         while (1) {
@@ -394,18 +427,35 @@ struct twisted_edwards {
     auto public_key() {
         auto c = parameters.curve();
         auto m = bytes_to_bigint(this->private_key_);
-        auto mul = [&](auto &&m) {
-            auto p = m * c.G;
-            std::cout << "m = " << m << "\n";
-            std::cout << p << "\n";
+        std::cout << "m = " << m << "\n\n";
+        auto p = c.G;
+        auto print_point = [](auto &&name, auto &&p) {
+            std::cout << name << ":\n";
+            std::cout << p;
+            std::cout << "\n";
         };
-        mul("1"_bi);
-        mul("2"_bi);
+        //print_point("G", p);
+        std::tie(p.x, p.y) = to_weierstrass(p.x, p.y);
+        //print_point("G weierstrass", p);
 
-        auto p = m * c.G;
-        std::cout << c.G;
-        std::cout << m << "\n";
-        std::cout << p;
+        auto w_params = Wcurve::parameters;
+        auto wc = w_params.curve();
+        ec_field_point<weierstrass> wp{wc.ec};
+        wp.x = p.x;
+        wp.y = p.y;
+
+        wp = m * wp;
+        print_point("m * G weierstrass", wp);
+
+        p.x = wp.x;
+        p.y = wp.y;
+
+        //
+        auto p1 = p;
+        std::tie(p1.x, p1.y) = to_twistededwards(wp.x, wp.y);
+        print_point("m * G twistededwards", p1);
+        //
+
         return key_type{.x = p.x, .y = p.y};
     }
     auto public_key(auto &&out) {
@@ -419,23 +469,57 @@ struct twisted_edwards {
         ec_field_point p{c.ec};
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
+
+        std::tie(p.x, p.y) = to_weierstrass(p.x, p.y);
+
+        auto w_params = Wcurve::parameters;
+        auto wc = w_params.curve();
+        ec_field_point<weierstrass> wp{wc.ec};
+        wp.x = p.x;
+        wp.y = p.y;
+
         auto m = bytes_to_bigint(this->private_key_);
         auto p2 = m * p;
+        std::tie(p2.x, p2.y) = to_twistededwards(p2.x, p2.y);
         key_type k2{.x = p2.x, .y = p2.y};
         memcpy(shared_secret.data(), (uint8_t *)&k2.x, this->point_size_bytes);
         return shared_secret;
     }
 };
 
+using ec512c_w = curve<
+    512,
+    "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdc7"_s,
+    "0xdc9203e514a721875485a529d2c722fb187bc8980eb866644de41c68e143064546e861c0e2c9edd92ade71f46fcf50ff2ad97f951fda9f2a2eb6546f39689bd3"_s,
+    "0xb4c4ee28cebc6c2c8ac12952cf37f16ac7efb6a9f69f4b57ffda2e4f0de5ade038cbc2fff719d2c18de0284b8bfef3b52b8cc7a5f5bf0a3c8d2319a5312557e1"_s,
+
+    "0xe2e31edfc23de7bdebe241ce593ef5de2295b7a9cbaef021d385f7074cea043aa27272a7ae602bf2a7b9033db9ed3610c6fb85487eae97aac5bc7928c1950148"_s,
+    "0xf5ce40d95b5eb899abbccff5911cb8577939804d6527378b8c108c3d2090ff9be18e2d33e3021ed2ef32d85822423b6304f726aa854bae07d0396e9a9addc40f"_s,
+
+    "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff26336e91941aac0130cea7fd451d40b323b6a79e9da6849a5188f3bd1fc08fb4"_s>;
+
+using ec512c = twisted_edwards<
+    512,
+    "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdc7"_s,
+    "1"_s,
+    "0x9e4f5d8c017d8d9f13a5cf3cdf5bfe4dab402d54198e31ebde28a0621050439ca6b39e0a515c06b304e2ce43e79e369e91a0cfc2bc2a22b4ca302dbb33ee7550"_s,
+
+    "0x12"_s,
+    "0x469af79d1fb1f5e16b99592b77a01e2a0fdfb0d01794368d9a56117f7b38669522dd4b650cf789eebf068c5d139732f0905622c04b2baae7600303ee73001a3d"_s,
+
+    "0x3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc98cdba46506ab004c33a9ff5147502cc8eda9e7a769a12694623cef47f023ed"_s
+, ec512c_w>;
+
+
 // https://neuromancer.sk/std/gost
 // use SAGE to convert twisted edwards A,B,Gx,Gy to weierstrass form
 
 // id-tc26-gost-3410-2012-256-paramSetA
-using ec256a = twisted_edwards<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s, "0x01"_s,
+/*using ec256a = twisted_edwards<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s, "0x01"_s,
                                "0x605f6b7c183fa81578bc39cfad518132b9df62897009af7e522c32d6dc7bffb"_s,
 
                                "0x0d"_s, "0x60ca1e32aa475b348488c38fab07649ce7ef8dbe87f22e81f92b2592dba300e7"_s,
-                               "0x400000000000000000000000000000000fd8cddfc87b6635c115af556c360c67"_s>;
+                               "0x400000000000000000000000000000000fd8cddfc87b6635c115af556c360c67"_s>;*/
 
 using ec256b = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
                      "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd94"_s, "0xa6"_s,
@@ -477,18 +561,6 @@ using ec512b = curve<
     "0x1A8F7EDA389B094C2C071E3647A8940F3C123B697578C213BE6DD9E6C8EC7335DCB228FD1EDF4A39152CBCAAF8C0398828041055F94CEEEC7E21340780FE41BD"_s,
 
     "0x00800000000000000000000000000000000000000000000000000000000000000149A1EC142565A545ACFDB77BD9D40CFA8B996712101BEA0EC6346C54374F25BD"_s>;
-
-// twisted edwards
-using ec512c = twisted_edwards<
-    512,
-    "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffdc7"_s,
-    "1"_s,
-    "0x9e4f5d8c017d8d9f13a5cf3cdf5bfe4dab402d54198e31ebde28a0621050439ca6b39e0a515c06b304e2ce43e79e369e91a0cfc2bc2a22b4ca302dbb33ee7550"_s,
-
-    "0x12"_s,
-    "0x469af79d1fb1f5e16b99592b77a01e2a0fdfb0d01794368d9a56117f7b38669522dd4b650cf789eebf068c5d139732f0905622c04b2baae7600303ee73001a3d"_s,
-
-    "0x3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc98cdba46506ab004c33a9ff5147502cc8eda9e7a769a12694623cef47f023ed"_s>;
 
 } // namespace r34102012
 
