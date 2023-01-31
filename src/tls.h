@@ -167,13 +167,17 @@ struct tls13_ {
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
         : gost_suite<mgm<grasshopper>, streebog<256>,
-                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S, TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
-        static inline constexpr uint64_t C[] = {0xffffffffe0000000ULL,0xffffffffffff0000ULL,0xfffffffffffffff8ULL};
+                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+                     TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
+        static inline constexpr uint64_t C[] = {0xffffffffe0000000ULL, 0xffffffffffff0000ULL, 0xfffffffffffffff8ULL};
+        //static inline constexpr uint64_t SNMAX = (1ULL << 42) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
         : gost_suite<mgm<grasshopper>, streebog<256>,
-                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L, TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
-        static inline constexpr uint64_t C[] = {0xf800000000000000ULL,0xfffffff000000000ULL,0xffffffffffffe000ULL};
+                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+                     TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
+        static inline constexpr uint64_t C[] = {0xf800000000000000ULL, 0xfffffff000000000ULL, 0xffffffffffffe000ULL};
+        //static inline constexpr uint64_t SNMAX = std::numeric_limits<unsigned long long>::max();
     };
 
     template <typename T, auto Value>
@@ -186,7 +190,6 @@ struct tls13_ {
     };
     template <typename KeyExchange, typename... KeyExchanges>
     struct key_exchanges : types<KeyExchange, KeyExchanges...> {
-        //using default_key_exchange = KeyExchange;
         static constexpr auto size() {
             return sizeof...(KeyExchange) + 1;
         }
@@ -199,7 +202,6 @@ struct tls13_ {
 
     template <typename DefaultSuite, typename... Suites>
     struct suites : types<DefaultSuite, Suites...> {
-        //using default_suite = DefaultSuite;
         static constexpr auto size() {
             return sizeof...(Suites) + 1;
         }
@@ -214,10 +216,10 @@ struct tls13_ {
         suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256>, // mandatory
         suite_<gcm<aes_ecb<256>>, sha2<384>, tls13::CipherSuite::TLS_AES_256_GCM_SHA384>, // nice to have
         // CipherSuite::TLS_CHACHA20_POLY1305_SHA256; // nice to have
-
+        //
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
-
+        //
         //suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
         >;
     using all_key_exchanges = key_exchanges<
@@ -239,21 +241,21 @@ struct tls13_ {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory
         parameters::signature_scheme::rsa_pkcs1_sha256,       // mandatory
         parameters::signature_scheme::rsa_pss_rsae_sha256,    // mandatory
-
+        //
         parameters::signature_scheme::ecdsa_secp384r1_sha384,
         parameters::signature_scheme::ed25519,
         parameters::signature_scheme::ecdsa_sha1, // remove? some sha1 certs may have long time period
         parameters::signature_scheme::rsa_pss_pss_sha256,
-
+        //
         parameters::signature_scheme::gostr34102012_256a,
         parameters::signature_scheme::gostr34102012_256b,
         parameters::signature_scheme::gostr34102012_256c,
         parameters::signature_scheme::gostr34102012_256d,
         parameters::signature_scheme::gostr34102012_512a,
         parameters::signature_scheme::gostr34102012_512b,
-        parameters::signature_scheme::gostr34102012_512c,
-
-        parameters::signature_scheme::sm2sig_sm3,
+        parameters::signature_scheme::gostr34102012_512c
+        //
+        //parameters::signature_scheme::sm2sig_sm3,
     };
 
     static inline constexpr auto max_tls_package = 40'000;
