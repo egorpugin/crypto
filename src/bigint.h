@@ -91,6 +91,11 @@ struct bigint {
         mpz_mul(b, b, p);
         return b;
     }
+    bigint operator/(const bigint &p) const {
+        auto b = *this;
+        mpz_fdiv_q(b, b, p);
+        return b;
+    }
     bigint operator*(uint64_t p) const {
         auto b = *this;
         mpz_mul_ui(b, b, p);

@@ -225,13 +225,13 @@ struct tls13_ {
         // key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
         // key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
         //
-        // key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,//
+        key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>
         //key_exchange<ec::gost::r34102012::ec256b, parameters::supported_groups::GC256B>
         //key_exchange<ec::gost::r34102012::ec256c, parameters::supported_groups::GC256C>
         //key_exchange<ec::gost::r34102012::ec256d, parameters::supported_groups::GC256D>
         // key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>,
         //key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>
-        key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>
+        //key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>
         //
         // key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
     >;

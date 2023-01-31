@@ -89,6 +89,12 @@ struct ec_field_point : point<bigint> {
     }
 };
 
+std::ostream &operator<<(std::ostream &o, const ec_field_point &v) {
+    o << "x = " << v.x << "\n";
+    o << "y = " << v.y << "\n";
+    return o;
+}
+
 ec_field_point operator*(const bigint &m, const ec_field_point &p) {
     if (m == 0) {
         return {p.ec};
@@ -273,12 +279,82 @@ struct curve {
     }
 };
 
+template <auto Sz, auto A, auto D, auto ... Params>
+struct twisted_edwards : curve<Sz, Params...> {
+    using base = curve<Sz, Params...>;
+
+    auto to_weierstrass(bigint x, bigint y) {
+        auto c = base::parameters.curve();
+        bigint a = string_view{A};
+        bigint d = string_view{D};
+
+        bigint p2 = "12"_bi - y * 12;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint x1 = (a * 5 + a * y - d * y * 5 - d) * p2;
+
+        p2 = x * 4 - x * y * 4;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint y1 = (a + a * y - d * y - d) * p2;
+
+        return std::tuple{x1 % c.ec.p, y1 % c.ec.p};
+    }
+    auto to_twistededwards(bigint u, bigint v) {
+        auto c = base::parameters.curve();
+        bigint a = string_view{A};
+        bigint d = string_view{D};
+
+        bigint p2 = "-12"_bi * u - a + d * 5;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint y = (a * 5 - u * 12 - d) * p2;
+
+        p2 = v * 4 - v * y * 4;
+        mpz_invert(p2, p2, c.ec.p);
+        bigint x = (a + a * y - d * y - d) * p2;
+
+        return std::tuple{x % c.ec.p, y % c.ec.p};
+    }
+
+    auto public_key() {
+        auto c = base::parameters.curve();
+        auto m = bytes_to_bigint(this->private_key_);
+        auto p = m * c.G;
+        //std::tie(p.x, p.y) = to_twistededwards(p.x, p.y);
+        return typename base::key_type{.x = p.x, .y = p.y};
+    }
+    auto public_key(auto &&out) {
+        auto k = public_key();
+        memcpy(out.data(), (uint8_t *)&k, this->key_size);
+    }
+    auto shared_secret(const typename base::public_key_type &peer_public_key) {
+        array_gost<base::point_size_bytes> shared_secret;
+        auto &k = *(typename base::key_type *)peer_public_key.data();
+        auto c = base::parameters.curve();
+        ec_field_point p{c.ec};
+        p.x = bytes_to_bigint(k.x);
+        p.y = bytes_to_bigint(k.y);
+        std::cout << "received twisted:\n" << p << "\n";
+        std::tie(p.x, p.y) = to_weierstrass(p.x, p.y);
+        std::cout << "received weierstrass:\n" << p << "\n";
+        auto m = bytes_to_bigint(this->private_key_);
+        auto p2 = m * p;
+        std::cout << "m = " << m << "\n";
+        std::cout << "multiplied weierstrass:\n" << p2 << "\n";
+        std::tie(p2.x, p2.y) = to_twistededwards(p2.x, p2.y);
+        std::cout << "multiplied twisted:\n" << p2 << "\n";
+        typename base::key_type k2{.x = p2.x, .y = p2.y};
+        memcpy(shared_secret.data(), (uint8_t *)&k2.x, this->point_size_bytes);
+        return shared_secret;
+    }
+};
+
 // https://neuromancer.sk/std/gost
 // use SAGE to convert twisted edwards A,B,Gx,Gy to weierstrass form
 
 // id-tc26-gost-3410-2012-256-paramSetA
-// twisted edwards
-using ec256a = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
+// twisted twisted_edwards
+using ec256a = twisted_edwards<256, "0x01"_s, "0x605f6b7c183fa81578bc39cfad518132b9df62897009af7e522c32d6dc7bffb"_s,
+
+                     "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
                      "87789765485885808793369751294406841171614589925193456909855962166505018127157"_s,
                      "18713751737015403763890503457318596560459867796169830279162511461744901002515"_s,
 

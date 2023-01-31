@@ -625,10 +625,10 @@ void test_tls() {
 
     //
     //run("pugin.goststand.ru:3443");
-    run("pugin.goststand.ru:1443");
+    //run("pugin.goststand.ru:1443");
     //
     // https://infotecs.ru/stand_tls/
-    //run("91.244.183.22:15002");
+    run("91.244.183.22:15002");
     //run("91.244.183.22:15012");
     //run("91.244.183.22:15022");
     //run("91.244.183.22:15032");
