@@ -69,6 +69,10 @@ auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right) {
     }
     return r;
 };
+auto cmp_hash_bytes = [](auto &&sha, std::string s, crypto::bytes_concept right) {
+    sha.update(s);
+    return cmp_bytes(sha.digest(), right);
+};
 auto cmp_l = [](auto &&left, auto &&right) {
     return cmp_base(memcmp(left, right, 16), 0);
 };
@@ -281,6 +285,21 @@ void test_sha3() {
                    "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
                    "8bcb6461eaaa339930d73868863c40861f18598560160ce1d69709a0");
     }
+}
+
+void test_sm3() {
+    using namespace crypto;
+
+    auto sm3t = [](auto &&l, auto &&r) {
+        sm3 sm;
+        cmp_hash_bytes(sm, l, r);
+    };
+
+    sm3t("", "1AB21D8355CFA17F8E61194831E81A8F22BEC8C728FEFB747ED035EB5082AA2B"_sb);
+    sm3t("abc", "66c7f0f4 62eeedd9 d1f2d46b dc10e4e2 4167c487 5cf2f7a2 297da02b 8f4ba8e0"_sb);
+    sm3t(R"(61626364 61626364 61626364 61626364 61626364 61626364 61626364 61626364
+            61626364 61626364 61626364 61626364 61626364 61626364 61626364 61626364)"_sb,
+            "debe9ff9 2275b8a1 38604889 c18e5a4d 6fdb70e5 387e5765 293dcba3 9c0c5732"_sb);
 }
 
 void test_sm4() {
@@ -677,7 +696,8 @@ void test_tls() {
 int main() {
     //test_aes();
     //test_sha2();
-    //test_sha3();
+    // test_sha3();
+    //test_sm3();
     //test_sm4();
     //test_ec();
     //test_hmac();

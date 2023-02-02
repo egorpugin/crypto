@@ -13,6 +13,8 @@
 #include "magma.h"
 #include "streebog.h"
 #include "mgm.h"
+#include "sm4.h"
+#include "sm3.h"
 
 #include <boost/asio.hpp>
 #include <nameof.hpp>
@@ -32,11 +34,6 @@
 // https://files.stroyinf.ru/Data2/1/4293727/4293727270.pdf
 
 namespace crypto {
-
-template <typename ... Types>
-struct types {
-    using variant_type = std::variant<Types...>;
-};
 
 template <typename RawSocket, template <typename> typename Awaitable> // tcp or udp
 struct tls13_ {
@@ -235,9 +232,9 @@ struct tls13_ {
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
-        TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
+        TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
         //
-        //suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
+        suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>
         >;
     using all_key_exchanges = key_exchanges<
         key_exchange<curve25519, parameters::supported_groups::x25519>,
@@ -250,9 +247,9 @@ struct tls13_ {
         key_exchange<ec::gost::r34102012::ec256d, parameters::supported_groups::GC256D>,
         key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>,
         key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>,
-        key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>
+        key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
         //
-        //key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
+        key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
     >;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory
@@ -270,9 +267,9 @@ struct tls13_ {
         parameters::signature_scheme::gostr34102012_256d,
         parameters::signature_scheme::gostr34102012_512a,
         parameters::signature_scheme::gostr34102012_512b,
-        parameters::signature_scheme::gostr34102012_512c
+        parameters::signature_scheme::gostr34102012_512c,
         //
-        //parameters::signature_scheme::sm2sig_sm3,
+        parameters::signature_scheme::sm2sig_sm3,
     };
 
     static inline constexpr auto max_tls_package = 40'000;

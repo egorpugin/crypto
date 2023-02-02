@@ -3,6 +3,7 @@
 #include "helpers.h"
 #include "sha2.h"
 #include "streebog.h"
+#include "sm3.h"
 
 namespace crypto {
 
@@ -13,6 +14,10 @@ constexpr auto hmac_b(sha2_base<Settings...>) {
 template <auto... Settings>
 constexpr auto hmac_b(streebog_base<Settings...>) {
     return streebog_base<Settings...>::block_size;
+}
+template <auto... Settings>
+constexpr auto hmac_b(sm3) {
+    return sm3::digest_size_bytes;
 }
 
 // https://en.wikipedia.org/wiki/HMAC

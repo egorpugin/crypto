@@ -43,6 +43,11 @@ template <auto N>
 struct array_gost : array<N> {
 };
 
+template <typename... Types>
+struct types {
+    using variant_type = std::variant<Types...>;
+};
+
 template <typename T>
 concept bytes_concept1 = requires (T t) {
     t.data();

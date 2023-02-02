@@ -146,19 +146,6 @@ struct sha2_base {
     void update(const uint8_t *data, size_t length) noexcept {
         bitlen += length * 8;
         return update_slow(data, length);
-        // BUG: this length is incorrect
-        auto pre_len = length % chunk_size_bytes;
-        update_slow(data, pre_len);
-        data += pre_len;
-        length -= pre_len;
-        if (length == 0) {
-            return;
-        }
-        auto n_chunks = length / chunk_size_bytes;
-        for (size_t i = 0; i < length; i += chunk_size_bytes) {
-            memcpy(m_data, data + i, chunk_size_bytes);
-            transform();
-        }
     }
     auto digest() noexcept {
         pad();
