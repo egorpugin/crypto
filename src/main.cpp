@@ -286,9 +286,8 @@ void test_sha3() {
 void test_sm4() {
     using namespace crypto;
 
-    uint8_t tv_plain[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef,
-                          0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
-    uint8_t tv_key[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10};
+    auto tv_key = "0123456789ABCDEFFEDCBA9876543210"_sb;
+    auto tv_plain = "0123456789abcdeffedcba9876543210"_sb;
 
     {
         sm4_encrypt enc{tv_key};
@@ -296,11 +295,11 @@ void test_sm4() {
 
         uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
                                0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
-        cmp_l(tv_cipher, tv_plain);
+        cmp_bytes(tv_cipher, tv_plain);
 
         sm4_decrypt dec{tv_key};
         dec.decrypt(tv_plain);
-        cmp_l(tv_key, tv_plain);
+        cmp_bytes(tv_key, tv_plain);
     }
     {
         sm4_encrypt enc{tv_key};
@@ -309,13 +308,26 @@ void test_sm4() {
         }
         uint8_t tv_cipher[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
                                0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
-        cmp_l(tv_cipher, tv_plain);
+        cmp_bytes(tv_cipher, tv_plain);
 
         sm4_decrypt dec{tv_key};
         for (int i = 0; i < 1000000; i++) {
             dec.decrypt(tv_plain);
         }
-        cmp_l(tv_key, tv_plain);
+        cmp_bytes(tv_key, tv_plain);
+    }
+    {
+        gcm<sm4_encrypt> g{"0123456789ABCDEFFEDCBA9876543210"_sb};
+        auto out = g.encrypt_and_tag(
+            "00001234567800000000ABCD"_sb,
+            "AAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDEEEEEEEEEEEEEEEEFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEAAAAAAAAAAAAAAAA"_sb,
+            "FEEDFACEDEADBEEFFEEDFACEDEADBEEFABADDAD2"_sb);
+        cmp_bytes(out,
+                  R"(17F399F08C67D5EE19D0DC9969C4BB7D
+                            5FD46FD3756489069157B282BB200735
+                            D82710CA5C22F0CCFA7CBF93D496AC15
+                            A56834CBCF98C397B4024A2691233B8D
+83DE3541E4C2B58177E065A9BF7B62EC)"_sb);
     }
 }
 

@@ -37,6 +37,8 @@ struct decrypt {};
 template <typename Mode>
 struct sm4 : sm4_data {
     static inline constexpr auto encryption = std::same_as<Mode,encrypt>;
+    static inline constexpr auto block_size_bytes = 16;
+    static inline constexpr auto key_size_bytes = 16;
 
     static void tau(uint8_t b[4]) noexcept {
         for (int i = 0; i < 4; ++i) {
@@ -54,6 +56,7 @@ struct sm4 : sm4_data {
 
     uint32_t rk[rounds];
 
+    sm4() = default;
     sm4(uint32_t key[4]) requires encryption {
         key_expansion(key);
     }
@@ -64,6 +67,7 @@ struct sm4 : sm4_data {
         }
     }
     sm4(const void *key) : sm4{(uint32_t *)key} {}
+    sm4(bytes_concept key) : sm4{(uint32_t *)key.data()} {}
 
     void key_expansion(uint32_t key[4]) {
         uint32_t rk[4];
@@ -82,7 +86,7 @@ struct sm4 : sm4_data {
         }
     }
 
-    void crypt(uint32_t data[4]) noexcept {
+    auto crypt(uint32_t data[4]) noexcept {
         uint32_t x[4];
         for (int i = 0; i < 4; ++i) {
             x[i] = std::byteswap(data[i]);
@@ -93,15 +97,17 @@ struct sm4 : sm4_data {
                 std::swap(x[i], x[i + 1]);
             }
         }
+        array<block_size_bytes> r;
         for (int i = 0; i < 4; ++i) {
-            data[i] = std::byteswap(x[4 - i - 1]);
+            *(uint32_t*)(r.data() + i * sizeof(uint32_t)) = std::byteswap(x[4 - i - 1]);
         }
+        return r;
     }
-    void encrypt(auto &&in) noexcept requires encryption {
-        crypt((uint32_t *)in);
+    auto encrypt(bytes_concept in) noexcept requires encryption {
+        return crypt((uint32_t *)in.data());
     }
-    void decrypt(auto &&in) noexcept requires !encryption {
-        crypt((uint32_t *)in);
+    auto decrypt(bytes_concept in) noexcept requires !encryption {
+        return crypt((uint32_t *)in.data());
     }
 };
 
