@@ -27,11 +27,8 @@
 * security notes
 * - we must check incoming keys for special values, etc.
 * - check that points lie on the curves
-* - timing attacks?
+* - timing attacks? use sleep for?
 */
-
-// gost mgm
-// https://files.stroyinf.ru/Data2/1/4293727/4293727270.pdf
 
 namespace crypto {
 

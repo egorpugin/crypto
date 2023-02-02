@@ -12,6 +12,7 @@
 #include "streebog.h"
 #include "grasshopper.h"
 #include "magma.h"
+#include "mmap.h"
 
 #include <array>
 #include <iostream>
@@ -696,7 +697,7 @@ void test_tls() {
 int main() {
     //test_aes();
     //test_sha2();
-    // test_sha3();
+    //test_sha3();
     //test_sm3();
     //test_sm4();
     //test_ec();

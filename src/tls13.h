@@ -33,10 +33,12 @@ enum class CipherSuite : uint16_t {
     TLS_AES_256_GCM_SHA384 = 0x1302,
     TLS_CHACHA20_POLY1305_SHA256 = 0x1303, // todo
 
-    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103, // todo
+    TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L = 0xC103,
+    TLS_GOSTR341112_256_WITH_MAGMA_MGM_L = 0xC104,
     TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S = 0xC105,
+    TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
 
-    TLS_SM4_GCM_SM3 = 0x00C6, // todo
+    TLS_SM4_GCM_SM3 = 0x00C6,
 };
 
 enum class ExtensionType : uint16_t {
@@ -146,7 +148,6 @@ struct Handshake {
     /*select (Handshake.msg_type) {
         case end_of_early_data:     EndOfEarlyData;
         case certificate_request:   CertificateRequest;
-        case certificate_verify:    CertificateVerify;
     };*/
 };
 
