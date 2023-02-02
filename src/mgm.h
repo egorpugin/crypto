@@ -45,7 +45,7 @@ struct mgm {
         for (int i = 0; i < h; ++i) {
             auto H = c.encrypt(Z);
             inc_counter(Z, block_size_bytes / 2);
-            gf128(H, (uint8_t *)(auth.data() + i * block_size_bytes));
+            mul(H, (uint8_t *)(auth.data() + i * block_size_bytes));
             for (int j = 0; j < block_size_bytes; ++j) {
                 T[j] ^= H[j];
             }
@@ -64,7 +64,7 @@ struct mgm {
             for (int i = 0; i < q; ++i) {
                 auto H = c.encrypt(Z);
                 inc_counter(Z, block_size_bytes / 2);
-                gf128(H, (uint8_t *)(out.data() + i * block_size_bytes));
+                mul(H, (uint8_t *)(out.data() + i * block_size_bytes));
                 for (int j = 0; j < block_size_bytes; ++j) {
                     T[j] ^= H[j];
                 }
@@ -89,9 +89,12 @@ struct mgm {
         }
 
         auto H = c.encrypt(Z);
-        *(uint64_t*)L.data() = std::byteswap(auth.size() * 8);
-        *(((uint64_t *)L.data()) + 1) = std::byteswap(out.size() * 8);
-        gf128(H, (uint8_t *)L.data());
+        using lentype = std::conditional_t<block_size_bytes == 8, uint32_t, uint64_t>;
+        lentype sz = auth.size() * 8;
+        *(lentype*)L.data() = std::byteswap(sz);
+        sz = out.size() * 8;
+        *(((lentype *)L.data()) + 1) = std::byteswap(sz);
+        mul(H, (uint8_t *)L.data());
         for (int j = 0; j < block_size_bytes; ++j) {
             T[j] ^= H[j];
         }
@@ -126,6 +129,43 @@ struct mgm {
         return out;
     }
 
+    void mul(array<block_size_bytes> &buf, uint8_t *buf2) {
+        if constexpr (block_size_bytes == 8) {
+            mul64(buf, buf2);
+        } else {
+            gf128(buf, buf2);
+        }
+    }
+    // [gogost.git] / mgm / mul64.go
+    void mul64(array<block_size_bytes> &buf, uint8_t *buf2) {
+        auto x = std::byteswap(*(uint64_t *)(buf.data() + 0));
+        auto y = std::byteswap(*(uint64_t *)(buf2 + 0));
+        uint64_t z = 0;
+        while (y) {
+            if (y & 1) {
+                z ^= x;
+            }
+            if (x >> 63) {
+                x <<= 1;
+                x ^= 0x1b;
+            } else {
+                x <<= 1;
+            }
+            y >>= 1;
+        }
+        auto len = [](uint8_t *buf) {
+            int xlen = 0;
+            int i = 0;
+            for (int i = 0; i < 8; ++i) {
+                if (buf[i++]) {
+                    break;
+                }
+                ++xlen;
+            }
+            return xlen;
+        };
+        *(uint64_t *)(buf.data() + 0) = std::byteswap(z);
+    }
     // [gogost.git] / mgm / mul128.go
     void gf128(array<block_size_bytes> &buf, uint8_t *buf2) {
         auto x0 = std::byteswap(*(uint64_t *)(buf.data() + 8));

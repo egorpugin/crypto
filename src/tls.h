@@ -10,6 +10,7 @@
 #include "gcm.h"
 #include "asn1.h"
 #include "grasshopper.h"
+#include "magma.h"
 #include "streebog.h"
 #include "mgm.h"
 
@@ -170,14 +171,28 @@ struct tls13_ {
                      parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
         static inline constexpr uint64_t C[] = {0xffffffffe0000000ULL, 0xffffffffffff0000ULL, 0xfffffffffffffff8ULL};
-        //static inline constexpr uint64_t SNMAX = (1ULL << 42) - 1;
+        // static inline constexpr uint64_t SNMAX = (1ULL << 42) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
         : gost_suite<mgm<grasshopper>, streebog<256>,
                      parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
         static inline constexpr uint64_t C[] = {0xf800000000000000ULL, 0xfffffff000000000ULL, 0xffffffffffffe000ULL};
-        //static inline constexpr uint64_t SNMAX = std::numeric_limits<unsigned long long>::max();
+        // static inline constexpr uint64_t SNMAX = std::numeric_limits<unsigned long long>::max();
+    };
+    struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_S
+        : gost_suite<mgm<magma>, streebog<256>,
+                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+                     TLS_GOSTR341112_256_WITH_MAGMA_MGM_S> {
+        static inline constexpr uint64_t C[] = {0xfffffffffc000000ULL, 0xffffffffffffe000ULL, 0xffffffffffffffffULL};
+        // static inline constexpr uint64_t SNMAX = (1ULL << 39) - 1;
+    };
+    struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
+        : gost_suite<mgm<magma>, streebog<256>,
+                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+                     TLS_GOSTR341112_256_WITH_MAGMA_MGM_L> {
+        static inline constexpr uint64_t C[] = {0xffe0000000000000ULL, 0xffffffffc0000000ULL, 0xffffffffffffff80ULL};
+        // static inline constexpr uint64_t SNMAX = std::numeric_limits<unsigned long long>::max();
     };
 
     template <typename T, auto Value>
@@ -218,7 +233,9 @@ struct tls13_ {
         // CipherSuite::TLS_CHACHA20_POLY1305_SHA256; // nice to have
         //
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
-        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
+        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+        TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+        TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
         //
         //suite_<gcm<sm4_encrypt>,sm3<256>,tls13::CipherSuite::TLS_SM4_GCM_SM3>
         >;
@@ -267,6 +284,8 @@ struct tls13_ {
     bool hello_retry_request{};
     bytes_concept client_hello1;
     bool ignore_server_certificate_check{};
+    uint8_t legacy_session_id[32];
+    tls13::Random random;
 
     all_suites::variant_type suite;
     all_key_exchanges::variant_type kex;
@@ -433,7 +452,6 @@ struct tls13_ {
         using boost::asio::use_awaitable;
 
         buf = buf_type{};
-        hello_retry_request = false;
 
         {
             packet_writer w;
@@ -444,8 +462,12 @@ struct tls13_ {
             client_hello.msg_type = parameters::handshake_type::client_hello;
 
             ClientHello &hello = w;
-            get_random_secure_bytes(hello.legacy_session_id);
-            get_random_secure_bytes(hello.random);
+            if (!hello_retry_request) {
+                get_random_secure_bytes(legacy_session_id);
+                get_random_secure_bytes(random);
+            }
+            memcpy(hello.legacy_session_id, legacy_session_id, 32);
+            hello.random = random;
 
             ube16 &ciphers_len = w;
             ciphers_len = sizeof(ube16) * all_suites::size();
@@ -528,6 +550,10 @@ struct tls13_ {
             visit(suite, [&](auto &&s){s.h.update((uint8_t *)&client_hello, msg.length);});
 
             co_await socket().async_send(boost::asio::buffer(w.buf, msg_size + sizeof(msg)), use_awaitable);
+
+            if (hello_retry_request) {
+                hello_retry_request = false;
+            }
 
             co_await buf.receive(socket());
             read_handshake(buf.content_raw());

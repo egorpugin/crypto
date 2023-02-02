@@ -11,6 +11,7 @@
 #include "asn1.h"
 #include "streebog.h"
 #include "grasshopper.h"
+#include "magma.h"
 
 #include <array>
 #include <iostream>
@@ -625,11 +626,11 @@ void test_tls() {
 
     //
     run("pugin.goststand.ru:1443");
-    //run("pugin.goststand.ru:2443"); // magma
+    run("pugin.goststand.ru:2443"); // magma
     run("pugin.goststand.ru:3443");
-    //run("pugin.goststand.ru:4443"); // magma
-    //
-    // https://infotecs.ru/stand_tls/
+    run("pugin.goststand.ru:4443"); // magma
+    ////
+    //// https://infotecs.ru/stand_tls/
     run("91.244.183.22:15002");
     run("91.244.183.22:15012");
     run("91.244.183.22:15022");
@@ -637,8 +638,8 @@ void test_tls() {
     run("91.244.183.22:15072");
     run("91.244.183.22:15082");
     run("91.244.183.22:15092");
+    ////
     //
-
     run("infotecs.ru");
     run("software-network.org");
     run("letsencrypt.org");
