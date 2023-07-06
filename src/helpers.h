@@ -124,6 +124,15 @@ struct bytes_concept {
         memcpy(a.data(), p, sz);
         return a;
     }
+    /*template <typename T, auto N>
+    operator T[N]() const {
+        if (N != sz) {
+            throw std::runtime_error{"bad array conversion"};
+        }
+        array<N> a;
+        memcpy(a.data(), p, sz);
+        return a;
+    }*/
     operator std::string() const {
         std::string a{p,p+sz};
         return a;

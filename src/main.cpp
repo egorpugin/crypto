@@ -512,7 +512,50 @@ void test_chacha20() {
 
     chacha20(key, counter, nonce, plaintext_1, out1, 127);
     chacha20(key, counter, nonce, out1, out2, 127);
-    cmp_l(plaintext_1,out2);
+    cmp_l(plaintext_1, out2);
+
+    auto K = "80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f"_sb;
+    auto nonce_one = "00 00 00 00 00 01 02 03 04 05 06 07"_sb;
+    auto onetimekey = poly1305_key_gen((uint8_t *)K.c_str(), (uint8_t *)nonce_one.c_str());
+    cmp_bytes(onetimekey,
+              "8a d5 a0 8b 90 5f 81 cc 81 50 40 27 4a b2 94 71 a8 33 b6 37 e3 fd 0d a5 08 db b8 e2 fd d1 a6 46"_sb);
+}
+
+void test_chacha20_aead() {
+    using namespace crypto;
+
+    uint8_t text[] = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, "
+                     "sunscreen would be it.";
+    auto aad = "50 51 52 53 c0 c1 c2 c3 c4 c5 c6 c7"_sb;
+    auto nonce = "07 00 00 00 40 41 42 43 44 45 46 47"_sb;
+    auto K = "80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f"_sb;
+
+    //auto onetimekey = poly1305_key_gen((uint8_t *)K.c_str(), (uint8_t *)nonce.c_str());
+
+    uint8_t out[sizeof(text) - 1];
+    auto onetimekey = poly1305_key_gen((uint8_t *)K.c_str(), (uint8_t *)nonce.c_str(), text, out, sizeof(text) - 1);
+    cmp_bytes(onetimekey,
+              R"(
+7b ac 2b 25 2d b4 47 af 09 b6 7a 55 a4 e9 55 84
+0a e1 d6 73 10 75 d9 eb 2a 93 75 78 3e d5 53 ff
+)"_sb);
+    cmp_bytes(out,
+              R"(
+d3 1a 8d 34 64 8e 60 db 7b 86 af bc 53 ef 7e c2
+a4 ad ed 51 29 6e 08 fe a9 e2 b5 a7 36 ee 62 d6
+3d be a4 5e 8c a9 67 12 82 fa fb 69 da 92 72 8b
+1a 71 de 0a 9e 06 0b 29 05 d6 a5 b6 7e cd 3b 36
+92 dd bd 7f 2d 77 8b 8c 98 03 ae e3 28 09 1b 58
+fa b3 24 e4 fa d6 75 94 55 85 80 8b 48 31 d7 bc
+3f f4 de f0 8e 4b 7a 9d e5 76 d2 65 86 ce c6 4b
+61 16
+)"_sb);
+
+    chacha20((uint8_t *)K.c_str(), 1, (uint8_t *)nonce.c_str(), text, out, sizeof(text));
+    chacha20(onetimekey.data(), 1, (uint8_t *)nonce.c_str(), text, out, sizeof(text));
+
+    //chacha20_poly1305_aead a{K};
+    //a.encrypt_and_tag(nonce, )
 }
 
 void test_asn1() {
@@ -656,34 +699,34 @@ void test_tls() {
         }
     };
 
-    ////
-    // run("pugin.goststand.ru:1443");
-    // run("pugin.goststand.ru:2443"); // magma
-    // run("pugin.goststand.ru:3443");
-    // run("pugin.goststand.ru:4443"); // magma
-    ////
-    //// https://infotecs.ru/stand_tls/
-    // run("91.244.183.22:15002");
-    // run("91.244.183.22:15012");
-    // run("91.244.183.22:15022");
-    // run("91.244.183.22:15032");
-    // run("91.244.183.22:15072");
-    // run("91.244.183.22:15082");
-    // run("91.244.183.22:15092");
-    //////
     //
-    // run("infotecs.ru");
-    // run("software-network.org");
-    // run("letsencrypt.org");
-    // run("example.com");
-    // run("google.com");
-    // run("nalog.gov.ru");
-    // run("github.com");
-    // run("gmail.com");
-    // run("youtube.com");
-    // run("twitch.tv");
-    //run("tls13.akamai.io");
-    //run("tls13.1d.pw");
+    run("pugin.goststand.ru:1443");
+    run("pugin.goststand.ru:2443"); // magma
+    run("pugin.goststand.ru:3443");
+    run("pugin.goststand.ru:4443"); // magma
+                                    //
+                                    // https://infotecs.ru/stand_tls/
+    run("91.244.183.22:15002");
+    run("91.244.183.22:15012");
+    run("91.244.183.22:15022");
+    run("91.244.183.22:15032");
+    run("91.244.183.22:15072");
+    run("91.244.183.22:15082");
+    run("91.244.183.22:15092");
+    ////
+
+    run("infotecs.ru");
+    run("software-network.org");
+    run("letsencrypt.org");
+    run("example.com");
+    run("google.com");
+    run("nalog.gov.ru");
+    run("github.com");
+    run("gmail.com");
+    run("youtube.com");
+    run("twitch.tv");
+    run("tls13.akamai.io");
+    run("tls13.1d.pw");
     //run("127.0.0.1:11111");
 
     // some other tests
@@ -710,7 +753,8 @@ int main() {
     //test_sm4();
     //test_ec();
     //test_hmac();
-    //test_chacha20();
+    test_chacha20();
+    test_chacha20_aead();
     //test_asn1();
     //test_streebog();
     //test_grasshopper();
