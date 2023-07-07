@@ -158,7 +158,7 @@ inline auto print_buffer(bytes_concept buffer) {
     int i, buflen = (int)buffer.size(), bufidx;
     constexpr int LINE_LEN = 16;
     constexpr int SPACE_LEN = 3; // addr | ':' | space
-    int ADDR_LEN = std::max<int>(5, buffer.size() / LINE_LEN);
+    int ADDR_LEN = std::max<int>(5, std::log2(buffer.size()) / 4);
     /* addr:   00..0F | chars...chars\0 */
 
     std::string out;

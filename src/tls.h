@@ -225,9 +225,9 @@ struct tls13_ {
     using all_suites = suites<
         //suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256>, // mandatory
         //suite_<gcm<aes_ecb<256>>, sha2<384>, tls13::CipherSuite::TLS_AES_256_GCM_SHA384>, // nice to have
-        suite_<chacha20_poly1305_aead, sha2<256>, tls13::CipherSuite::TLS_CHACHA20_POLY1305_SHA256>//, // nice to have
+        suite_<chacha20_poly1305_aead, sha2<256>, tls13::CipherSuite::TLS_CHACHA20_POLY1305_SHA256>/*, // nice to have
         //
-        /*TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,

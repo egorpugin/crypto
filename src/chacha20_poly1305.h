@@ -3,6 +3,7 @@
 #include "helpers.h"
 
 #include "chacha20.h"
+#include "poly1305.h"
 
 #include <algorithm>
 #include <array>
@@ -18,50 +19,87 @@ struct chacha20_poly1305_aead {
     static inline constexpr auto tag_size_bytes = 16;
     static inline constexpr auto key_size_bytes = 32;
 
-//#define CHACHA_KEYLEN 32 /* 2 x 256 bit keys */
-//#define CHACHA20_POLY1305_AEAD_KEY_LEN 32
-//#define CHACHA20_POLY1305_AEAD_AAD_LEN 3 /* 3 bytes length */
-//#define CHACHA20_ROUND_OUTPUT 64         /* 64 bytes per round */
-//#define AAD_PACKAGES_PER_ROUND 21        /* 64 / 3 round down*/
-
-    /*struct chacha_ctx {
-        uint32_t input[16];
-    };
-    struct chachapolyaead_ctx {
-        chacha_ctx main_ctx, header_ctx;
-        uint8_t aad_keystream_buffer[CHACHA20_ROUND_OUTPUT];
-        uint64_t cached_aad_seqnr;
-    };*/
-
     array<block_size_bytes> k;
 
     chacha20_poly1305_aead() = default;
     chacha20_poly1305_aead(auto &&k) : k{k} {
     }
-    void set_iv(auto &&iv) {
-        /*counter = array<block_size_bytes>{};
-        memcpy(counter.data(), iv.data(), iv.size());
-        inc_counter();
-        Ek0 = c.encrypt(counter);
-        h = h0;*/
-    }
-    void inc_counter() {
-        // BUG: overflow is possible!
-        /*for (int i = 16; i > 12; i--) {
-            if (++counter[i - 1] != 0)
-                break;
-        }*/
-    }
+    //void set_iv(auto &&iv) {
+    //}
+    //void inc_counter() {
+    //}
     auto encrypt_and_tag(auto &&nonce, auto &&data, auto &&auth_data) {
-        set_iv(nonce);
-        std::string out(data.size(), 0);
+        chacha20 c{(uint8_t*)k.data(), (uint8_t*)nonce.data()};
+        c.set_counter(1);
+
+        array<32> otk;
+        memcpy(otk.data(), c.block, 32);
+
+        auto aad_pad = pad(auth_data.size());
+        auto data_pad = pad(data.size());
+        std::string out2(auth_data.size() + aad_pad + data.size() + data_pad
+                                + 8 // ad len
+                                + 8 // cipher len
+                                + 16 // tag len
+                            ,
+                            0);
+        auto p = (uint8_t*)out2.data();
+        memcpy(p, auth_data.data(), auth_data.size());
+        p += auth_data.size();
+        p += aad_pad;
+        c.cipher((uint8_t*)data.data(), p, data.size());
+        p += data.size();
+        p += data_pad;
+        *(uint64_t *)p = auth_data.size();
+        p += 8;
+        *(uint64_t *)p = data.size();
+        p += 8;
+        poly1305_auth(p, (uint8_t *)out2.data(), out2.size() - 16, otk.data());
+
+        std::string out(data.size() + tag_size_bytes, 0);
+        memcpy(out.data(), out2.data() + auth_data.size() + aad_pad, data.size());
+        memcpy(out.data() + data.size(), out2.data() + out2.size() - 16, 16);
         return out;
     }
     auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
-        set_iv(nonce);
-        auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
+        chacha20 c{(uint8_t *)k.data(), (uint8_t *)nonce.data()};
+        c.set_counter(1);
+
+        array<32> otk;
+        memcpy(otk.data(), c.block, 32);
+
+        auto aad_pad = pad(auth_data.size());
+        auto data_size = data.size() - 16;
+        auto data_pad = pad(data_size);
+        std::string out2(auth_data.size() + aad_pad + data_size + data_pad + 8 // ad len
+                             + 8                                           // cipher len
+                         ,
+                         0);
+        auto p = (uint8_t *)out2.data();
+        memcpy(p, auth_data.data(), auth_data.size());
+        p += auth_data.size();
+        p += aad_pad;
+        memcpy(p, data.data(), data_size);
+        p += data_size;
+        p += data_pad;
+        *(uint64_t *)p = auth_data.size();
+        p += 8;
+        *(uint64_t *)p = data_size;
+        p += 8;
+
+        array<16> tag;
+        poly1305_auth((uint8_t *)tag.data(), (uint8_t *)out2.data(), out2.size(), otk.data());
+
+        if (memcmp(tag.data(), data.data() + data_size, 16) != 0) {
+            throw std::runtime_error{"auth tag is incorrect"};
+        }
+
         std::string out(data.size() - tag_size_bytes, 0);
+        c.cipher((uint8_t *)data.data(), (uint8_t *)out.data(), data_size);
         return out;
+    }
+    auto pad(auto sz) {
+        return 16 - (sz - sz / 16 * 16);
     }
 };
 
