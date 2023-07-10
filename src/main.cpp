@@ -753,8 +753,8 @@ void test_tls() {
     // run("pugin.goststand.ru:2443"); // magma
     // run("pugin.goststand.ru:3443");
     // run("pugin.goststand.ru:4443"); // magma
-    //
-    //// https://infotecs.ru/stand_tls/
+    ////
+    ////// https://infotecs.ru/stand_tls/
     // run("91.244.183.22:15002");
     // run("91.244.183.22:15012");
     // run("91.244.183.22:15022");
@@ -763,25 +763,25 @@ void test_tls() {
     // run("91.244.183.22:15082");
     // run("91.244.183.22:15092");
     ////
-
-    //run("infotecs.ru");
-    //run("software-network.org");
-    //run("letsencrypt.org");
+    //
+    run("infotecs.ru");
+    run("software-network.org");
+    run("letsencrypt.org");
     run("example.com");
-    //run("google.com");
-    //run("nalog.gov.ru");
-    //run("github.com");
-    //run("gmail.com");
-    //run("youtube.com");
-    //run("twitch.tv");
-    //run("tls13.akamai.io");
-    //run("tls13.1d.pw");
+    run("google.com");
+    run("nalog.gov.ru");
+    run("github.com");
+    run("gmail.com");
+    run("youtube.com");
+    run("twitch.tv");
+    run("tls13.akamai.io");
+    run("tls13.1d.pw");
     //run("127.0.0.1:11111");
 
     // some other tests
-    //run("https://www.reuters.com/");
-    //run("https://edition.cnn.com/");
-    //run("https://www.cloudflare.com/");
+    run("https://www.reuters.com/");
+    run("https://edition.cnn.com/");
+    run("https://www.cloudflare.com/");
     //
     //// does not support tls13
     // run("https://www.globaltimes.cn/");
@@ -802,8 +802,8 @@ int main() {
     //test_sm4();
     //test_ec();
     //test_hmac();
-    test_chacha20();
-    test_chacha20_aead();
+    //test_chacha20();
+    //test_chacha20_aead();
     //test_asn1();
     //test_streebog();
     //test_grasshopper();

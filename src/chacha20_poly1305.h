@@ -24,10 +24,6 @@ struct chacha20_poly1305_aead {
     chacha20_poly1305_aead() = default;
     chacha20_poly1305_aead(auto &&k) : k{k} {
     }
-    //void set_iv(auto &&iv) {
-    //}
-    //void inc_counter() {
-    //}
     auto encrypt_and_tag(auto &&nonce, auto &&data, auto &&auth_data) {
         chacha20 c{(uint8_t*)k.data(), (uint8_t*)nonce.data()};
         c.set_counter(1);
@@ -37,12 +33,7 @@ struct chacha20_poly1305_aead {
 
         auto aad_pad = pad(auth_data.size());
         auto data_pad = pad(data.size());
-        std::string out2(auth_data.size() + aad_pad + data.size() + data_pad
-                                + 8 // ad len
-                                + 8 // cipher len
-                                + 16 // tag len
-                            ,
-                            0);
+        std::string out2(auth_data.size() + aad_pad + data.size() + data_pad + 8 + 8 + tag_size_bytes, 0);
         auto p = (uint8_t*)out2.data();
         memcpy(p, auth_data.data(), auth_data.size());
         p += auth_data.size();
@@ -54,11 +45,11 @@ struct chacha20_poly1305_aead {
         p += 8;
         *(uint64_t *)p = data.size();
         p += 8;
-        poly1305_auth(p, (uint8_t *)out2.data(), out2.size() - 16, otk.data());
+        poly1305_auth(p, (uint8_t *)out2.data(), out2.size() - tag_size_bytes, otk.data());
 
         std::string out(data.size() + tag_size_bytes, 0);
         memcpy(out.data(), out2.data() + auth_data.size() + aad_pad, data.size());
-        memcpy(out.data() + data.size(), out2.data() + out2.size() - 16, 16);
+        memcpy(out.data() + data.size(), out2.data() + out2.size() - tag_size_bytes, tag_size_bytes);
         return out;
     }
     auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
@@ -69,12 +60,9 @@ struct chacha20_poly1305_aead {
         memcpy(otk.data(), c.block, 32);
 
         auto aad_pad = pad(auth_data.size());
-        auto data_size = data.size() - 16;
+        auto data_size = data.size() - tag_size_bytes;
         auto data_pad = pad(data_size);
-        std::string out2(auth_data.size() + aad_pad + data_size + data_pad + 8 // ad len
-                             + 8                                           // cipher len
-                         ,
-                         0);
+        std::string out2(auth_data.size() + aad_pad + data_size + data_pad + 8 + 8, 0);
         auto p = (uint8_t *)out2.data();
         memcpy(p, auth_data.data(), auth_data.size());
         p += auth_data.size();
@@ -87,10 +75,10 @@ struct chacha20_poly1305_aead {
         *(uint64_t *)p = data_size;
         p += 8;
 
-        array<16> tag;
+        array<tag_size_bytes> tag;
         poly1305_auth((uint8_t *)tag.data(), (uint8_t *)out2.data(), out2.size(), otk.data());
 
-        if (memcmp(tag.data(), data.data() + data_size, 16) != 0) {
+        if (memcmp(tag.data(), data.data() + data_size, tag_size_bytes) != 0) {
             throw std::runtime_error{"auth tag is incorrect"};
         }
 
@@ -99,7 +87,9 @@ struct chacha20_poly1305_aead {
         return out;
     }
     auto pad(auto sz) {
-        return 16 - (sz - sz / 16 * 16);
+        constexpr auto alignment = tag_size_bytes;
+        auto v = alignment - (sz - sz / alignment * alignment);
+        return v == alignment ? 0 : v;
     }
 };
 
