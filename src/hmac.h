@@ -46,6 +46,39 @@ auto hmac(bytes_concept key, bytes_concept message) {
     return outer.digest();
 }
 
+// https://datatracker.ietf.org/doc/html/rfc2898
+auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, uint32_t c, uint32_t i) {
+    uint32_t tail{i};
+    tail = std::byteswap(tail);
+    salt.resize(salt.size() + sizeof(tail));
+    memcpy(salt.data() + salt.size() - sizeof(tail), &tail, sizeof(tail));
+    auto u = prf(pass, salt);
+    auto r = u;
+    auto len = r.size();
+    while (--c) {
+        u = prf(pass, u);
+        for (int i = 0; i < len; ++i) {
+            r[i] ^= u[i];
+        }
+    }
+    return r;
+}
+template <typename Hash>
+auto pbkdf2(auto &&prf, auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes = Hash::digest_size_bytes) {
+    std::string res;
+    res.resize(derived_key_bytes);
+    auto iters = std::max(1u, (derived_key_bytes + Hash::digest_size_bytes - 1) / Hash::digest_size_bytes);
+    for (int i = 0; i < iters; ++i) {
+        auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
+        memcpy(res.data() + Hash::digest_size_bytes * i, r.data(), std::min<uint32_t>(derived_key_bytes - i * Hash::digest_size_bytes, Hash::digest_size_bytes));
+    }
+    return res;
+}
+template <typename Hash>
+auto pbkdf2(auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes = Hash::digest_size_bytes) {
+    return pbkdf2<Hash>([](auto &&pass, auto &&u) { return hmac<Hash>(pass, u); }, pass, salt, c, derived_key_bytes);
+}
+
 // https://www.rfc-editor.org/rfc/rfc5869
 template <typename Hash>
 auto hkdf_extract(bytes_concept salt, bytes_concept input_keying_material) {
