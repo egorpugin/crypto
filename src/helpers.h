@@ -1,21 +1,14 @@
 #pragma once
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #define WIN32_LEAN_AND_MEAN
+#undef small
 
 #include <filesystem>
-#if __has_include(<format>)
 #include <format>
 using std::format;
-#elif __has_include(<format.h>)
-#define FMT_HEADER_ONLY
-#include <format.h>
-using fmt::format;
-#else
-#define FMT_HEADER_ONLY
-#include <fmt/format.h>
-using fmt::format;
-#endif
 #include <iostream>
 #include <span>
 #include <string>
@@ -105,11 +98,17 @@ struct bytes_concept {
     auto &operator[](int i) { return data()[i]; }
     auto operator[](int i) const { return data()[i]; }
     void operator+=(int i) { p += i; }
-    bool operator==(const bytes_concept &rhs) const {
+    /*bool operator==(const bytes_concept &rhs) const {
         if (sz != rhs.sz) {
             return false;
         }
         return memcmp(data(), rhs.data(), sz) == 0;
+    }*/
+    bool operator==(const auto &rhs) const {
+        if (sz != rhs.size()) {
+            return false;
+        }
+        return memcmp(data(), rhs.data(), size()) == 0;
     }
     bool contains(uint8_t c) const {
         return memchr(data(), c, sz);
@@ -157,6 +156,7 @@ decltype(auto) visit_any(auto &&var, auto &&...f) {
 inline auto print_buffer(bytes_concept buffer) {
     int i, buflen = (int)buffer.size(), bufidx;
     constexpr int LINE_LEN = 16;
+    // maybe make this 2? but seems 3 is more readable
     constexpr int SPACE_LEN = 3; // addr | ':' | space
     int ADDR_LEN = std::max<int>(5, std::log2(buffer.size()) / 4);
     /* addr:   00..0F | chars...chars\0 */
@@ -252,7 +252,7 @@ struct bigendian_unsigned {
         *(internal_type *)data = std::byteswap(v);
     }
     operator auto() const requires (Bytes == 3) { return std::byteswap(*(uint32_t*)data) >> 8; }
-    operator auto() const requires !std::same_as<internal_type, bad_type> {
+    operator auto() const requires (!std::same_as<internal_type, bad_type>) {
         auto d = *(internal_type*)data;
         return std::byteswap(d);
     }
@@ -269,20 +269,22 @@ auto operator+(const bigendian_unsigned<Bytes> &l, auto &&v) {
 struct be_stream {
     struct reader {
         be_stream &s;
+
         template <typename E>
-        operator E() requires(std::is_enum_v<E>) {
+            requires std::is_enum_v<E>
+        operator E() {
             auto v = *(std::underlying_type_t<E> *)s.p;
             s.step(sizeof(v));
             v = std::byteswap(v);
             return (E)v;
         }
         template <typename T>
-        operator T&() {
+        operator T&() const {
             auto &v = *(T *)s.p;
             s.step(sizeof(T));
             return v;
         }
-        operator uint16_t() {
+        operator uint16_t() const {
             auto v = *(uint16_t *)s.p;
             s.step(sizeof(v));
             v = std::byteswap(v);
@@ -294,7 +296,7 @@ struct be_stream {
     size_t len;
 
     be_stream() = default;
-    be_stream(const uint8_t *p) : p{p} {}
+    //be_stream(const uint8_t *p) : p{p} {}
     be_stream(const uint8_t *p, auto len) : p{p},len{len} {}
     be_stream(auto &&v) : be_stream{(const uint8_t*)v.data(),v.size()} {}
 
