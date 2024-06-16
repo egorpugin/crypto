@@ -15,7 +15,7 @@ struct emitter {
             std::string n;
             std::string s;
             int bytes{1};
-            void add_line(auto &&t) {
+            void add_line(const std::string &t) {
                 s += t + "\n"s;
             }
             ~en() {

@@ -1,12 +1,23 @@
 void build(Solution &s) {
-    auto &t = s.addTarget<Executable>("mycrypto");
-    t += cpp23;
-    t += "src/.*"_rr;
+    auto &crypto = s.addTarget<Executable>("crypto");
+    {
+        auto &t = crypto;
+        t += cpp23;
+        t += "src/.*\\.h"_rr;
 
-    t += "org.sw.demo.boost.asio"_dep;
-    t += "org.sw.demo.neargye.nameof"_dep;
+        t += "org.sw.demo.boost.asio"_dep;
+        t += "org.sw.demo.neargye.nameof"_dep;
 
-    t += "bcrypt.lib"_slib;
+        t += "bcrypt.lib"_slib;
+    }
+
+    auto &test = s.addTarget<Executable>("test");
+    {
+        auto &t = test;
+        t += cpp23;
+        t += "src/main.cpp";
+        t += crypto;
+    }
 
     {
         auto &t = s.addTarget<Executable>("tlsparams");
