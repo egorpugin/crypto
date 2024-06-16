@@ -63,20 +63,24 @@ auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, uint32_t c, uint32_t 
     }
     return r;
 }
-template <typename Hash>
-auto pbkdf2(auto &&prf, auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes = Hash::digest_size_bytes) {
+auto pbkdf2(auto &&prf, auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes) {
     std::string res;
     res.resize(derived_key_bytes);
-    auto iters = std::max(1u, (derived_key_bytes + Hash::digest_size_bytes - 1) / Hash::digest_size_bytes);
-    for (int i = 0; i < iters; ++i) {
+    int i = 0;
+    auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
+    auto iter_size = r.size();
+    memcpy(res.data() + iter_size * i, r.data(), std::min<uint32_t>(derived_key_bytes - i * iter_size, iter_size));
+    ++i;
+    auto iters = std::max<uint32_t>(1, (derived_key_bytes + iter_size - 1) / iter_size);
+    for (; i < iters; ++i) {
         auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
-        memcpy(res.data() + Hash::digest_size_bytes * i, r.data(), std::min<uint32_t>(derived_key_bytes - i * Hash::digest_size_bytes, Hash::digest_size_bytes));
+        memcpy(res.data() + iter_size * i, r.data(), std::min<uint32_t>(derived_key_bytes - i * iter_size, iter_size));
     }
     return res;
 }
 template <typename Hash>
 auto pbkdf2(auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes = Hash::digest_size_bytes) {
-    return pbkdf2<Hash>([](auto &&pass, auto &&u) { return hmac<Hash>(pass, u); }, pass, salt, c, derived_key_bytes);
+    return pbkdf2([](auto &&pass, auto &&u) { return hmac<Hash>(pass, u); }, pass, salt, c, derived_key_bytes);
 }
 
 // https://www.rfc-editor.org/rfc/rfc5869
