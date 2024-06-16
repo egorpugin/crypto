@@ -165,6 +165,11 @@ struct sha2_base {
             return hash;
         }
     }
+    static auto digest(auto &&v) noexcept {
+        sha2_base h;
+        h.update(v);
+        return h.digest();
+    }
 
 private:
     uint8_t m_data[chunk_size_bytes];
@@ -255,5 +260,7 @@ template <> struct sha2<384> : sha2_base<512,384> {};
 template <> struct sha2<512> : sha2_base<512> {};
 template <> struct sha2<512,224> : sha2_base<512,224> {};
 template <> struct sha2<512,256> : sha2_base<512,256> {};
+
+using sha256 = sha2<256>;
 
 } // namespace crypto

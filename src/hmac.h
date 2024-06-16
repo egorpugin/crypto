@@ -26,17 +26,11 @@ auto hmac(bytes_concept key, bytes_concept message) {
     constexpr int b = hmac_b(Hash{});
     constexpr int hash_bytes = Hash::digest_size_bytes;
 
-    auto hash = [](auto &&i) {
-        Hash h;
-        h.update(i);
-        return h.digest();
-    };
-
     array<b> k0{};
     if (key.size() <= b) {
         memcpy(k0.data(), key.data(), key.size());
     } else {
-        memcpy(k0.data(), hash(key).data(), hash_bytes);
+        memcpy(k0.data(), Hash::digest(key).data(), hash_bytes);
     }
     auto So = k0, Si = k0;
     for (auto &&c : So) c ^= 0x5C;
