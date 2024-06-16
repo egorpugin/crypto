@@ -497,6 +497,55 @@ void test_hmac() {
     );
 }
 
+void test_pbkdf2() {
+    /*
+auto pass = "123"s;
+auto salt = "0"s;
+crypto::print_buffer("sha256", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000, 33));
+crypto::print_buffer("sha256", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000, 34));
+crypto::print_buffer("sha256", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000));
+crypto::print_buffer("sha256 64", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000, 64));
+crypto::print_buffer("sha512", crypto::pbkdf2<crypto::sha2<512>>(pass, salt, 1000));
+crypto::print_buffer("sha224", crypto::pbkdf2<crypto::sha2<224>>(pass, salt, 1000));
+crypto::print_buffer("sha384", crypto::pbkdf2<crypto::sha2<384>>(pass, salt, 1000));
+
+sha256
+00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
+00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
+00020:   08                                              |  .
+
+sha256
+00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
+00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
+00020:   08 82                                           |  ..
+
+sha256
+00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
+00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
+
+sha256 64
+00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
+00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
+00020:   08 82 b3 fc 2a 73 36 de 94 bc b4 73 ea 3d 3e 31 |  ....*s6....s.=>1
+00030:   55 b8 65 7b c5 12 f3 49 cb 61 41 c1 16 ed da 9d |  U.e{...I.aA.....
+
+sha512
+00000:   2e 18 d9 ea 31 a4 e2 c0 23 21 ea 3f 05 a1 43 f3 |  ....1...#!.?..C.
+00010:   b1 b9 95 2a 94 79 05 a7 39 3a 7b a3 7e 11 50 d0 |  ...*.y..9:{.~.P.
+00020:   1a 01 30 b2 75 4c c3 04 27 ad e1 4f cc f0 9b 43 |  ..0.uL..'..O...C
+00030:   b5 a8 42 f6 89 86 38 c5 58 e4 48 7c 84 c8 24 9a |  ..B...8.X.H|..$.
+
+sha224
+00000:   e4 e3 98 e3 02 2a a4 76 b0 4a ba fc 41 b1 72 5a |  .....*.v.J..A.rZ
+00010:   00 b4 fe c8 31 ac 46 02 26 9c 75 8e             |  ....1.F.&.u.
+
+sha384
+00000:   6b ec 9c bb 3d 01 f5 90 f3 21 83 5e 27 3a 2f 38 |  k...=....!.^':/8
+00010:   f2 77 86 76 a9 e2 b9 25 bb dc 31 83 13 2e ad aa |  .w.v...%..1.....
+00020:   d5 51 cb 9e 10 87 66 6c 2d 13 a1 59 6e e6 1f 61 |  .Q....fl-..Yn..a
+    */
+}
+
 void test_chacha20() {
     using namespace crypto;
 
@@ -802,6 +851,7 @@ int main() {
     //test_sm4();
     //test_ec();
     //test_hmac();
+    //test_pbkdf2();
     //test_chacha20();
     //test_chacha20_aead();
     //test_asn1();
