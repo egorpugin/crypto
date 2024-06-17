@@ -28,19 +28,22 @@ auto to_string_raw = [](auto &&d) {
         s << std::setw(2) << (unsigned int)v;
     }
     // printf("%s\n", s.str().c_str());
-    std::cerr << s.str() << "\n";
+    //std::cerr << s.str() << "\n";
     return s.str();
-};
-auto to_string = [](auto &&sha) {
-    auto digest = sha.digest();
-    std::span<uint8_t> d{(uint8_t *) digest.data(),
-                         digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
-    return to_string_raw(d);
 };
 auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
     sha.update(s);
-    auto r = to_string(sha) == s2;
+    auto digest = sha.digest();
+    std::span<uint8_t> d{(uint8_t *) digest.data(),
+                         digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
+    auto res = to_string_raw(d);
+    auto r = res == s2;
     printf("%s\n", r ? "ok" : "false");
+    if (!r) {
+        //printf("%s\n", s.c_str());
+        printf("%s\n", res.c_str());
+        crypto::print_buffer(s, digest);
+    }
 };
 auto cmp_base = [](auto &&left, auto &&right) {
     auto r = left == right;
@@ -314,6 +317,50 @@ void test_blake2() {
     {
         blake2b<512> sha;
         to_string2(sha, "abc", "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
+    }
+    {
+        blake2b<512> sha{"1"sv};
+        to_string2(sha, "abc", "8dcc70edeec8341bf056873cceea93b05a3f2e7b43aed334fa3de25be04780fcba0a642ef96576ca109a177c3cb51c5642299d26db1f64cc29f5377175a12db2");
+    }
+    {
+        blake2b<512> sha{"abc"sv};
+        to_string2(sha, "abc", "17de517e1278d00ac7a6bcf048881aa9a972e6b5cef843d3c61d3e252068a2f526c999f45cd96b172509d085b59170e388f845750c812781df582be3fc4a1972");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy dog", "a8add4bdddfd93e4877d2746e62817b116364a1fa7bc148d95090bc7333b3673f82401cf7aa2e4cb1ecd90296e3f14cb5413f8ed77be73045b13914cdcd6a918");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy dof", "ab6b007747d8068c02e25a6008db8a77c218d94f3b40d2291a7dc8a62090a744c082ea27af01521a102e42f480a31e9844053f456b4b41e8aa78bbe5c12957bb");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha,
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+            , "5ab06c925a13d6b9c991d4c2e5ee346bf1befb9b028be3ddf9b39d8fe0e92dc1f4fba7f78aa60a1f18d995e95bb5aabd6faca300e64cdce3352941872e96961f");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha,
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+            "."
+            , "00756c07368f4c98176ae5d6b96e321704b8be4b9a2aa298700d4b4e0c0ca6c344f848b389ef3dfdde460e50e85ab649b82f9902cf4453e6c54ea58857fe76d4");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha,
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+            , "dbf11e82f88c5886b76afeb072c0304d27207e5168512cf27628edbb638f272cf05c04d1d85ee4e99dcc7e1f3cb1bcb972d722dabcd6624d613dcba434dbafd0");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha,
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+            "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923"
+            "."
+            , "c93a777c384d3186824ad214090cecfed185f0f9a618d696c5fea2dc63096643f87eac776f4c95a2b456f21aa225a092c46807c91b8656a79941af7d4cd82668");
     }
 }
 
