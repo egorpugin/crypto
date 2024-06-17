@@ -118,24 +118,7 @@ struct sha2_base {
     static inline constexpr auto digest_size_bytes = DigestSizeBits / 8;
     using state_type = std::conditional_t<small_sha, uint32_t, uint64_t>;
     static inline constexpr auto state_size = 8;
-#ifdef _MSC_VER
-    struct uint128 {
-        uint64_t v[2]{};
-        void operator+=(auto in) {
-            v[1] += in;
-        }
-        uint8_t operator>>(int b) {
-            auto v0 = v[0];
-            v[0] >>= b;
-            v[1] >>= b;
-            v[1] |= (v0 >> (64 - b)) << (64 - b);
-            return v[1];
-        }
-    };
-    using message_length_type = std::conditional_t<small_sha, uint64_t, uint128>;
-#else
-    using message_length_type = std::conditional_t<small_sha, uint64_t, unsigned __int128>;
-#endif
+    using message_length_type = std::conditional_t<small_sha, uint64_t, uint128_t>;
     static inline constexpr auto K = sha2_data::K<small_sha>();
     static inline constexpr auto s = sha2_data::sigma<small_sha>();
     static inline constexpr auto S = sha2_data::sum<small_sha>();
@@ -234,7 +217,8 @@ private:
 
         // Append to the padding the total message's length in bits and transform.
         for (int i = 0; i < bigint_size; ++i) {
-            m_data[padding_size - i - 1] = bitlen >> (i * 8);
+            //                              vvvvvvv msvc
+            m_data[padding_size - i - 1] = (uint8_t)(bitlen >> (i * 8));
         }
         transform();
     }

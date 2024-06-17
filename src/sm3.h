@@ -39,6 +39,11 @@ struct sm3 {
         }
         return r;
     }
+    static auto digest(auto &&v) noexcept {
+        sm3 h;
+        h.update(v);
+        return h.digest();
+    }
 
 #define rol(x,y) std::rotl(x,y)
 /*
@@ -173,6 +178,7 @@ struct sm3 {
         this->h[6] ^= g;
         this->h[7] ^= h;
     }
+#undef rol
 #undef P0
 #undef P1
 #undef R

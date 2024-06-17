@@ -23,10 +23,10 @@ struct streebog_data {
         202, 216, 133, 97,  32,  113, 103, 164, 45,  43,  9,   91,  203, 155, 37,  208, 190, 229, 108, 82,  89,  166,
         116, 210, 230, 244, 180, 192, 209, 102, 175, 194, 57,  75,  99,  182};
 
-    static constexpr internal_data Tau{0, 8,  16, 24, 32, 40, 48, 56, 1, 9,  17, 25, 33, 41, 49, 57,
-                                           2, 10, 18, 26, 34, 42, 50, 58, 3, 11, 19, 27, 35, 43, 51, 59,
-                                           4, 12, 20, 28, 36, 44, 52, 60, 5, 13, 21, 29, 37, 45, 53, 61,
-                                           6, 14, 22, 30, 38, 46, 54, 62, 7, 15, 23, 31, 39, 47, 55, 63};
+    static constexpr internal_data Tau{ 0, 8,  16, 24, 32, 40, 48, 56, 1, 9,  17, 25, 33, 41, 49, 57,
+                                        2, 10, 18, 26, 34, 42, 50, 58, 3, 11, 19, 27, 35, 43, 51, 59,
+                                        4, 12, 20, 28, 36, 44, 52, 60, 5, 13, 21, 29, 37, 45, 53, 61,
+                                        6, 14, 22, 30, 38, 46, 54, 62, 7, 15, 23, 31, 39, 47, 55, 63};
     static constexpr unsigned long long A[block_size]{
         0x8e20faa72ba0b470, 0x47107ddd9b505a38, 0xad08b0e0c3282d1c, 0xd8045870ef14980e, 0x6c022c38f90a4c07,
         0x3601161cf205268d, 0x1b8e0b0e798c13c8, 0x83478b07b2468764, 0xa011d380818e8f40, 0x5086e740ce47c920,
@@ -206,6 +206,11 @@ struct streebog_base : streebog_data {
         array<digest_size_bytes> r;
         memcpy(r.data(), h.data() + (digest_size_bytes != state_size ? digest_size_bytes : 0), digest_size_bytes);
         return r;
+    }
+    static auto digest(auto &&v) noexcept {
+        streebog_base h;
+        h.update(v);
+        return h.digest();
     }
     void stage3() noexcept {
         uint64_t bitlen = blockpos * 8;

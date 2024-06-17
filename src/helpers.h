@@ -15,6 +15,9 @@ using std::format;
 #include <string_view>
 #include <variant>
 #include <vector>
+#ifdef _MSC_VER
+#include <__msvc_int128.hpp>
+#endif
 
 #ifndef FWD
 #define FWD(x) std::forward<decltype(x)>(x)
@@ -369,5 +372,24 @@ std::string operator"" _sw(const char *in, size_t len) {
     std::string s{in, in + len};
     return crypto::byteswap(str2bytes(s));
 }
+
+#ifdef _MSC_VER
+/*struct uint128 {
+    uint64_t v[2]{};
+    void operator+=(auto in) {
+        v[1] += in;
+    }
+    uint8_t operator>>(int b) {
+        auto v0 = v[0];
+        v[0] >>= b;
+        v[1] >>= b;
+        v[1] |= (v0 >> (64 - b)) << (64 - b);
+        return v[1];
+    }
+};*/
+using uint128_t = std::_Unsigned128;
+#else
+using uint128_t = unsigned __int128;
+#endif
 
 } // namespace crypto

@@ -5,8 +5,8 @@ void build(Solution &s) {
         t += cpp23;
         t += "src/.*\\.h"_rr;
 
-        t += "org.sw.demo.boost.asio"_dep;
-        t += "org.sw.demo.neargye.nameof"_dep;
+        t.Public += "org.sw.demo.boost.asio"_dep;
+        t.Public += "org.sw.demo.neargye.nameof"_dep;
 
         t += "bcrypt.lib"_slib;
     }
