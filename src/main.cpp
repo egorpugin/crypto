@@ -2,6 +2,7 @@
 #include "bigint.h"
 #include "sha2.h"
 #include "sha3.h"
+#include "blake2.h"
 #include "sm4.h"
 #include "tls.h"
 #include "random.h"
@@ -285,6 +286,34 @@ void test_sha3() {
         to_string2(sha,
                    "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
                    "8bcb6461eaaa339930d73868863c40861f18598560160ce1d69709a0");
+    }
+}
+
+void test_blake2() {
+    using namespace crypto;
+    {
+        blake2s<224> sha;
+        to_string2(sha, "", "1fa1291e65248b37b3433475b2a0dd63d54a11ecc4e3e034e7bc1ef4");
+    }
+    {
+        blake2s<256> b;
+        to_string2(b, "", "69217a3079908094e11121d042354a7c1f55b6482ca1a51e1b250dfd1ed0eef9");
+    }
+    {
+        blake2b<384> sha;
+        to_string2(sha, "", "b32811423377f52d7862286ee1a72ee540524380fda1724a6f25d7978c6fd3244a6caf0498812673c5e05ef583825100");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha, "", "786a02f742015903c6c6fd852552d272912f4740e15847618a86e217f71f5419d25e1031afee585313896444934eb04b903a685b1448b755d56f701afe9be2ce");
+    }
+    {
+        blake2s<256> sha;
+        to_string2(sha, "abc", "508c5e8c327c14e2e1a72ba34eeb452f37458b209ed63a294d999b4c86675982");
+    }
+    {
+        blake2b<512> sha;
+        to_string2(sha, "abc", "ba80a53f981c4d0d6a2797b69f12f6e94c212f14685ac4b74b12bb6fdbffa2d17d87c5392aab792dc252d5de4533cc9518d38aa8dbf1925ab92386edd4009923");
     }
 }
 
@@ -847,6 +876,7 @@ int main() {
     //test_aes();
     //test_sha2();
     //test_sha3();
+    test_blake2();
     //test_sm3();
     //test_sm4();
     //test_ec();
@@ -860,5 +890,5 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    test_tls();
+    //test_tls();
 }
