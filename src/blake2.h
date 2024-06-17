@@ -3,15 +3,13 @@
 #include "helpers.h"
 #include "sha2.h"
 
-#include <array>
-#include <bit>
-#include <cstdint>
-#include <cstring>
-
 namespace crypto {
 
 template <auto DigestSizeBits, auto Width>
 struct blake2_base {
+    static_assert(Width == 64 || Width == 32);
+    static_assert(DigestSizeBits / 8 >= 1 && DigestSizeBits / 8 <= Width);
+
     static inline constexpr auto rounds = Width == 64 ? 12 : 10;
     static inline constexpr auto bb = Width * 2;
     static inline constexpr int rot_constants32[] = {16,12,8,7};
@@ -21,7 +19,7 @@ struct blake2_base {
     static inline constexpr auto block_bytes = Width * 2;
     using message_length_type = std::conditional_t<Width == 64, uint128_t, uint64_t>;
     using state_type = std::conditional_t<Width == 64, uint64_t, uint32_t>;
-    static inline constexpr int sigma[][16] = {
+    static inline constexpr int sigma[12][16] = {
         {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, },
         { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3, },
         { 11,  8, 12,  0,  5,  2, 15, 13, 10, 14,  3,  6,  7,  1,  9,  4, },
@@ -38,19 +36,21 @@ struct blake2_base {
     };
 
     blake2_base(bytes_concept key = bytes_concept{}) {
+        if (key.size() > Width) {
+            throw std::runtime_error{"invalid key size"};
+        }
         h = iv;
         h[0] = h[0] ^ 0x01010000 ^ (key.size() << 8) ^ (DigestSizeBits / 8);
         if (key.size()) {
             memcpy(m, key.data(), key.size());
-            // todo
-            //bytelen += block_bytes;
+            bytelen += block_bytes;
+            F(false);
         }
     }
     void update(bytes_concept b) noexcept {
         update(b.data(), b.size());
     }
     void update(const uint8_t *data, size_t length) noexcept {
-        //bytelen += length;
         return update_slow(data, length);
     }
     auto digest() noexcept {
@@ -65,6 +65,29 @@ struct blake2_base {
         return h.digest();
     }
 
+private:
+    std::remove_const_t<decltype(iv)> h;
+    state_type m[16]{};
+    message_length_type bytelen{};
+    int blockpos{};
+
+    constexpr void pad() noexcept {
+        auto padding_size = block_bytes - blockpos;
+        memset(((uint8_t*)m) + blockpos, 0, padding_size);
+        bytelen += blockpos;
+        F(true);
+    }
+    void update_slow(const uint8_t *data, size_t length) noexcept {
+        for (size_t i = 0; i < length; ++i) {
+            if (blockpos && blockpos == block_bytes) {
+                bytelen += block_bytes;
+                F(false);
+                blockpos = 0;
+            }
+            ((uint8_t*)m)[blockpos++] = data[i];
+        }
+    }
+
     void G(auto &&v, int a, int b, int c, int d, state_type x, state_type y) {
         v[a] = v[a] + v[b] + x;
         v[d] = std::rotr(v[d] ^ v[a], R[0]);
@@ -74,31 +97,9 @@ struct blake2_base {
         v[d] = std::rotr(v[d] ^ v[a], R[2]);
         v[c] = v[c] + v[d];
         v[b] = std::rotr(v[b] ^ v[c], R[3]);
-
-        /*
-        auto op1 = [&](int _1, int _2) {
-            message_length_type x;
-            x = v[_1] + v[_2];
-            v[_1] = x;
-        };
-        auto op2 = [&](int _1, int _2, auto _3) {
-            message_length_type x;
-            x = v[_1] + v[_2] + _3;
-            v[_1] = x;
-        };
-        op2(a,b,x);
-        v[d] = std::rotr(v[d] ^ v[a], R[0]);
-        op1(c,d);
-        v[b] = std::rotr(v[b] ^ v[c], R[1]);
-        op2(a,b,y);
-        v[d] = std::rotr(v[d] ^ v[a], R[2]);
-        op1(c,d);
-        v[b] = std::rotr(v[b] ^ v[c], R[3]);
-        */
     }
     void F(bool final) {
         state_type v[16];
-        // todo
         memcpy(&v[0], h.data(), h.size() * sizeof(state_type));
         memcpy(&v[8], iv.data(), iv.size() * sizeof(state_type));
         v[12] ^= bytelen;
@@ -123,31 +124,6 @@ struct blake2_base {
             h[i] ^= v[i] ^ v[i+8];
         }
     }
-
-private:
-    std::remove_const_t<decltype(iv)> h;
-    state_type m[16]{};
-    message_length_type bytelen{};
-    //message_length_type compressed_bytes{};
-    int blockpos{};
-
-    constexpr void pad() noexcept {
-        auto padding_size = block_bytes - blockpos;
-        memset(((uint8_t*)m) + blockpos, 0, padding_size);
-        //compressed_bytes += block_bytes;
-        bytelen += blockpos;
-        F(true);
-    }
-    void update_slow(const uint8_t *data, size_t length) noexcept {
-        for (size_t i = 0; i < length; ++i) {
-            ((uint8_t*)m)[blockpos++] = data[i];
-            if (blockpos == block_bytes) {
-                bytelen += block_bytes;
-                F(false);
-                blockpos = 0;
-            }
-        }
-    }
 };
 
 template <auto Type>
@@ -155,9 +131,9 @@ struct blake2s;
 template <auto Type>
 struct blake2b;
 
-template <> struct blake2s<224> : blake2_base<224, 32> {};
-template <> struct blake2s<256> : blake2_base<256, 32> {};
-template <> struct blake2b<384> : blake2_base<384, 64> {};
-template <> struct blake2b<512> : blake2_base<512, 64> {};
+template <> struct blake2s<224> : blake2_base<224, 32> {using base = blake2_base<224, 32>; using base::base;};
+template <> struct blake2s<256> : blake2_base<256, 32> {using base = blake2_base<256, 32>; using base::base;};
+template <> struct blake2b<384> : blake2_base<384, 64> {using base = blake2_base<384, 64>; using base::base;};
+template <> struct blake2b<512> : blake2_base<512, 64> {using base = blake2_base<512, 64>; using base::base;};
 
 } // namespace crypto
