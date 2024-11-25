@@ -44,7 +44,7 @@ struct blake2_base {
         if (key.size()) {
             memcpy(m, key.data(), key.size());
             bytelen += block_bytes;
-            F(false);
+            transform(false);
         }
     }
     void update(bytes_concept b) noexcept {
@@ -75,20 +75,20 @@ private:
         auto padding_size = block_bytes - blockpos;
         memset(((uint8_t*)m) + blockpos, 0, padding_size);
         bytelen += blockpos;
-        F(true);
+        transform(true);
     }
     void update_slow(const uint8_t *data, size_t length) noexcept {
         for (size_t i = 0; i < length; ++i) {
-            if (blockpos && blockpos == block_bytes) {
+            if (blockpos == block_bytes) {
                 bytelen += block_bytes;
-                F(false);
+                transform(false);
                 blockpos = 0;
             }
             ((uint8_t*)m)[blockpos++] = data[i];
         }
     }
 
-    void G(auto &&v, int a, int b, int c, int d, state_type x, state_type y) {
+    void G(auto &&v, int a, int b, int c, int d, auto x, auto y) {
         v[a] = v[a] + v[b] + x;
         v[d] = std::rotr(v[d] ^ v[a], R[0]);
         v[c] = v[c] + v[d];
@@ -98,7 +98,8 @@ private:
         v[c] = v[c] + v[d];
         v[b] = std::rotr(v[b] ^ v[c], R[3]);
     }
-    void F(bool final) {
+    // F or Compress
+    void transform(bool final) {
         state_type v[16];
         memcpy(&v[0], h.data(), h.size() * sizeof(state_type));
         memcpy(&v[8], iv.data(), iv.size() * sizeof(state_type));
@@ -126,10 +127,8 @@ private:
     }
 };
 
-template <auto Type>
-struct blake2s;
-template <auto Type>
-struct blake2b;
+template <auto Bits> struct blake2s; // short
+template <auto Bits> struct blake2b; // big
 
 template <> struct blake2s<224> : blake2_base<224, 32> {using base = blake2_base<224, 32>; using base::base;};
 template <> struct blake2s<256> : blake2_base<256, 32> {using base = blake2_base<256, 32>; using base::base;};
