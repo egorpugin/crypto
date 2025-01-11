@@ -1114,7 +1114,7 @@ struct http_client {
         }
 
         boost::asio::ip::tcp::resolver r{ex};
-        auto result = co_await r.async_resolve({host, port}, use_awaitable);
+        auto result = co_await r.async_resolve(host, port, use_awaitable);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
