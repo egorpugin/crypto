@@ -25,19 +25,14 @@ template <typename Curve>
 struct ec_field_point : point<bigint> {
     Curve &ec;
 
-    ec_field_point(Curve &ec) : ec{ec} {
-    }
+    ec_field_point(Curve &ec) : ec{ec} {}
     ec_field_point(Curve &ec, auto &&x, auto &&y) : ec{ec} {
         this->x = x;
         this->y = y;
     }
 
-    bool operator==(const ec_field_point &rhs) const {
-        return x == rhs.x && y == rhs.y;
-    }
-    bool operator==(const bigint &b) const {
-        return x == b && y == b;
-    }
+    bool operator==(const ec_field_point &rhs) const { return x == rhs.x && y == rhs.y; }
+    bool operator==(const bigint &b) const { return x == b && y == b; }
     ec_field_point &operator=(const ec_field_point &rhs) {
         x = rhs.x;
         y = rhs.y;
@@ -50,7 +45,9 @@ struct ec_field_point : point<bigint> {
     }
 
     //
-    ec_field_point double_() const requires std::same_as<Curve, weierstrass> {
+    ec_field_point double_() const
+        requires std::same_as<Curve, weierstrass>
+    {
         if (y == 0) {
             return ec_field_point{ec};
         }
@@ -65,7 +62,9 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
-    ec_field_point operator+(const ec_field_point &q) requires std::same_as<Curve, weierstrass> {
+    ec_field_point operator+(const ec_field_point &q)
+        requires std::same_as<Curve, weierstrass>
+    {
         if (*this == 0) {
             return q;
         }
@@ -191,18 +190,18 @@ struct parameters<T, twisted_edwards> {
 template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct secp {
     static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
-                                                                      .a = A,
-                                                                      .b = B,
-                                                                      .G =
-                                                                          {
-                                                                              Gx,
-                                                                              Gy,
-                                                                          },
-                                                                      .order = Order,
-                                                                                   .cofactor = Cofactor
-    };
+                                                                                   .a = A,
+                                                                                   .b = B,
+                                                                                   .G =
+                                                                                       {
+                                                                                           Gx,
+                                                                                           Gy,
+                                                                                       },
+                                                                                   .order = Order,
+                                                                                   .cofactor = Cofactor};
 
-    static inline constexpr auto point_size_bytes = ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
+    static inline constexpr auto point_size_bytes =
+        ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
 
 #pragma pack(push, 1)
     struct key_type {
@@ -218,14 +217,12 @@ struct secp {
 
     private_key_type private_key_;
 
-    void private_key() {
-        get_random_secure_bytes(private_key_);
-    }
+    void private_key() { get_random_secure_bytes(private_key_); }
     auto public_key() {
         auto c = parameters.curve();
         auto m = bytes_to_bigint(private_key_);
         auto p = m * c.G;
-        return key_type{4,p.x,p.y};
+        return key_type{4, p.x, p.y};
     }
     auto public_key(auto &&out) {
         auto k = public_key();
@@ -240,7 +237,7 @@ struct secp {
         p.y = bytes_to_bigint(k.y);
         auto m = bytes_to_bigint(private_key_);
         auto p2 = m * p; // * cofactor? but it is always = 1 here?
-        key_type k2{4,p2.x,p2.y};
+        key_type k2{4, p2.x, p2.y};
         memcpy(shared_secret.data(), (uint8_t *)&k2.x, point_size_bytes);
         return shared_secret;
     }
@@ -269,16 +266,15 @@ namespace gost::r34102012 {
 template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct curve {
     static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
-                                                                      .a = A,
-                                                                      .b = B,
-                                                                      .G =
-                                                                          {
-                                                                              Gx,
-                                                                              Gy,
-                                                                          },
-                                                                      .order = Order,
-                                                                      .cofactor = Cofactor
-    };
+                                                                                   .a = A,
+                                                                                   .b = B,
+                                                                                   .G =
+                                                                                       {
+                                                                                           Gx,
+                                                                                           Gy,
+                                                                                       },
+                                                                                   .order = Order,
+                                                                                   .cofactor = Cofactor};
 
     static inline constexpr auto point_size_bytes =
         ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
@@ -334,16 +330,15 @@ struct curve {
 template <auto PointSizeBytes, auto P, auto A, auto D, auto Gx, auto Gy, auto Order, auto Cofactor, typename Wcurve>
 struct twisted_edwards {
     static inline const auto parameters = ec::parameters<string_view, ec::twisted_edwards>{.p = P,
-                                                                                   .a = A,
-                                                                                   .d = D,
-                                                                                   .G =
-                                                                                       {
-                                                                                           Gx,
-                                                                                           Gy,
-                                                                                       },
-        .order = Order,
-        .cofactor = Cofactor
-    };
+                                                                                           .a = A,
+                                                                                           .d = D,
+                                                                                           .G =
+                                                                                               {
+                                                                                                   Gx,
+                                                                                                   Gy,
+                                                                                               },
+                                                                                           .order = Order,
+                                                                                           .cofactor = Cofactor};
 
     static inline constexpr auto point_size_bytes =
         ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
@@ -497,7 +492,7 @@ using ec512c = twisted_edwards<
     "0x3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc98cdba46506ab004c33a9ff5147502cc8eda9e7a769a12694623cef47f023ed"_s,
     "4"_s, ec512c_w>;
 
-} // namespace r34102012
+} // namespace gost::r34102012
 
 // ShangMi (SM) Cipher Suites for TLS 1.3
 // https://www.rfc-editor.org/rfc/rfc8998.html
