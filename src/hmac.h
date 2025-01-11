@@ -31,7 +31,7 @@ constexpr auto hmac_bytes(sha1) {
 // Table 3: Input block sizes for HMAC
 template <auto... Settings>
 constexpr auto hmac_bytes(sha3<Settings...>) {
-    return (sha3<Settings...>::StateBits - sha3<Settings...>::digest_size_bytes * 8 * 2) / 8;
+    return sha3<Settings...>::r / 8;
 }
 
 // see table on wiki for more hmac byte sizes
