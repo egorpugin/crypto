@@ -1,29 +1,47 @@
 #pragma once
 
 #include "helpers.h"
+#include "sha1.h"
 #include "sha2.h"
+#include "sha3.h"
 #include "streebog.h"
 #include "sm3.h"
 
 namespace crypto {
 
+namespace detail {
+
 template <auto ... Settings>
-constexpr auto hmac_b(sha2_base<Settings...>) {
+constexpr auto hmac_bytes(sha2_base<Settings...>) {
     return sha2_base<Settings...>::small_sha ? 64 : 128;
 }
 template <auto... Settings>
-constexpr auto hmac_b(streebog_base<Settings...>) {
+constexpr auto hmac_bytes(streebog_base<Settings...>) {
     return streebog_base<Settings...>::block_size;
 }
 template <auto... Settings>
-constexpr auto hmac_b(sm3) {
+constexpr auto hmac_bytes(sm3) {
     return sm3::digest_size_bytes;
 }
+template <auto... Settings>
+constexpr auto hmac_bytes(sha1) {
+    return 64;
+}
+// https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
+// Table 3: Input block sizes for HMAC
+template <auto... Settings>
+constexpr auto hmac_bytes(sha3<Settings...>) {
+    return (sha3<Settings...>::StateBits - sha3<Settings...>::digest_size_bytes * 8 * 2) / 8;
+}
+
+// see table on wiki for more hmac byte sizes
+
+} // namespace detail
 
 // https://en.wikipedia.org/wiki/HMAC
 template <typename Hash>
 auto hmac(bytes_concept key, bytes_concept message) {
-    constexpr int b = hmac_b(Hash{});
+    constexpr int b = detail::hmac_bytes(Hash{});
     constexpr int hash_bytes = Hash::digest_size_bytes;
 
     array<b> k0{};
