@@ -43,8 +43,6 @@ struct tls13_ {
             return SuiteId;
         }
 
-        Hash h;
-
         using hash = hash_type;
         using cipher = cipher_type;
 
@@ -125,24 +123,25 @@ struct tls13_ {
                 server.make_keys(input_secret, h);
                 client.make_keys(input_secret, h);
             }
-            auto make_handshake_keys(auto &&shared, auto &&h) {
-                std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
-                auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
-                auto derived1 = derive_secret<hash>(early_secret, "derived"s);
-                auto handshake_secret = hkdf_extract<hash>(derived1, shared);
-                make_keys(handshake_secret, h);
-            }
-            auto make_master_keys(auto &&h) {
-                auto derived2 = derive_secret<hash>(secret, "derived"s);
-                std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
-                auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
-                peer_pair<"ap"_s> traffic;
-                traffic.make_keys(master_secret, h);
-                return traffic;
-            }
         };
+
+        Hash h;
         peer_pair<"hs"_s> handshake;
         peer_pair<"ap"_s> traffic;
+
+        auto make_handshake_keys(auto &&shared) {
+            std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
+            auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
+            auto derived1 = derive_secret<hash>(early_secret, "derived"s);
+            auto handshake_secret = hkdf_extract<hash>(derived1, shared);
+            handshake.make_keys(handshake_secret, h);
+        }
+        auto make_master_keys() {
+            auto derived2 = derive_secret<hash>(handshake.secret, "derived"s);
+            std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
+            auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
+            traffic.make_keys(master_secret, h);
+        }
     };
     template <typename Cipher, typename Hash, auto SuiteId, typename suite_type>
     struct gost_suite : suite_<Cipher, Hash, SuiteId, suite_type> {
@@ -197,6 +196,10 @@ struct tls13_ {
 
         type private_key;
         type::public_key_type peer_public_key;
+
+        auto shared_secret() {
+            return private_key.shared_secret(peer_public_key);
+        }
     };
     template <typename KeyExchange, typename... KeyExchanges>
     struct key_exchanges : types<KeyExchange, KeyExchanges...> {
@@ -226,19 +229,19 @@ struct tls13_ {
         suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256>, // mandatory
         suite_<gcm<aes_ecb<256>>, sha2<384>, tls13::CipherSuite::TLS_AES_256_GCM_SHA384>, // nice to have
         suite_<chacha20_poly1305_aead, sha2<256>, tls13::CipherSuite::TLS_CHACHA20_POLY1305_SHA256>, // nice to have
-        //
+        // ru
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
-        //
+        // cn
         suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>
         >;
     using all_key_exchanges = key_exchanges<
         key_exchange<curve25519, parameters::supported_groups::x25519>,
         key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
         key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
-        //
+        // ru
         key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,
         key_exchange<ec::gost::r34102012::ec256b, parameters::supported_groups::GC256B>,
         key_exchange<ec::gost::r34102012::ec256c, parameters::supported_groups::GC256C>,
@@ -246,7 +249,7 @@ struct tls13_ {
         key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>,
         key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>,
         key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
-        //
+        // cn
         key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
     >;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
@@ -258,7 +261,7 @@ struct tls13_ {
         parameters::signature_scheme::ed25519,
         parameters::signature_scheme::ecdsa_sha1, // remove? some sha1 certs may have long time period
         parameters::signature_scheme::rsa_pss_pss_sha256,
-        //
+        // ru
         parameters::signature_scheme::gostr34102012_256a,
         parameters::signature_scheme::gostr34102012_256b,
         parameters::signature_scheme::gostr34102012_256c,
@@ -266,7 +269,7 @@ struct tls13_ {
         parameters::signature_scheme::gostr34102012_512a,
         parameters::signature_scheme::gostr34102012_512b,
         parameters::signature_scheme::gostr34102012_512c,
-        //
+        // cn
         parameters::signature_scheme::sm2sig_sm3,
     };
 
@@ -558,12 +561,9 @@ struct tls13_ {
             }
 
             co_await buf.receive(socket());
-            std::visit([&](auto &&s, auto &&k) {
-                auto shared = k.private_key.shared_secret(k.peer_public_key);
-                s.handshake.make_handshake_keys(shared, s.h);
-            }, suite, kex);
+            std::visit([&](auto &&s, auto &&k) { s.make_handshake_keys(k.shared_secret()); }, suite, kex);
             co_await handle_handshake_application_data();
-            visit(suite, [&](auto &&s) { s.traffic = s.handshake.make_master_keys(s.h); });
+            visit(suite, [&](auto &&s) { s.make_master_keys(); });
         }
 
         // send client Finished
@@ -668,11 +668,9 @@ struct tls13_ {
                 if (sh.random == hello_retry_request_data) {
                     hello_retry_request = true;
                 }
-
                 if ((uint16_t)sh.legacy_version != (uint16_t)tls_version::tls12) {
                     throw std::runtime_error{"not a tls13"};
                 }
-
                 visit(suite, [&](auto &&s) {
                     if ((uint16_t)sh.cipher_suite != (uint16_t)s.suite()) {
                         bool changed_suite{};
@@ -970,14 +968,14 @@ struct http_client {
             response.reserve(1'000'000);
         }
         awaitable<void> receive(auto &&s, auto &&transport) {
-            auto app = [&]() -> awaitable<size_t> {
+            auto append = [&]() -> awaitable<size_t> {
                 auto dec = co_await transport.receive_some();
                 response.append((char *)dec.data(), dec.size());
                 co_return dec.size();
             };
 
             while (!response.contains(body_delim)) {
-                co_await app();
+                co_await append();
             }
 
             // read headers
@@ -1004,7 +1002,7 @@ struct http_client {
             if (auto it = headers.find("Content-Length"sv); it != headers.end()) {
                 auto sz = std::stoull(it->second.data());
                 while (response.size() != p + body_delim.size() + sz) {
-                    co_await app();
+                    co_await append();
                 }
                 string_view sv{response.begin(), response.end()};
                 auto start = p + body_delim.size();
@@ -1019,12 +1017,12 @@ struct http_client {
                     if (body.contains(line_delim)) {
                         break;
                     }
-                    co_await app();
+                    co_await append();
                 }
                 while (1) {
                     while (!body.contains(line_delim)) {
                         auto pos = body.data() - response.data();
-                        co_await app();
+                        co_await append();
                         string_view sv{response.begin(), response.end()};
                         body = sv.substr(pos);
                     }
@@ -1043,7 +1041,7 @@ struct http_client {
                     auto jump = end + line_delim.size();
                     needs_more -= body.size();
                     while (needs_more > 0) {
-                        needs_more -= co_await app();
+                        needs_more -= co_await append();
                     }
                     chunked_body.push_back(string_view{response.begin() + begin, response.begin() + end});
                     body = string_view{response.begin(), response.end()};
