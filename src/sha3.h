@@ -115,12 +115,12 @@ struct keccak : keccak_p<1600> {
         uint8_t q21 = Padding | (1 << (log2floor(Padding) + 1));
         uint8_t q22 = 0x80;
         if (q == 1) {
-            d[blockpos++] = q21 | q22;
+            d[blockpos++] ^= q21 | q22;
         } else {
-            d[blockpos++] = q21;
-            memset(d + blockpos, 0, q - 2);
+            d[blockpos++] ^= q21;
+            //memset(d + blockpos, 0, q - 2);
             blockpos += q - 2;
-            d[blockpos++] = q22;
+            d[blockpos++] ^= q22;
         }
         permute();
     }
