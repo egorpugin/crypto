@@ -22,6 +22,16 @@
 #include <span>
 #include <sstream>
 
+static int total, success;
+static struct stats {
+    ~stats() {
+        std::cerr << "\ntotal:  " << total << "\n"
+            << "passed: " << success << "\n"
+            << "failed: " << total - success << "\n"
+            ;
+    }
+} __;
+
 auto to_string_raw = [](auto &&d) {
     std::stringstream s;
     s << std::setfill('0') << std::hex;
@@ -35,28 +45,26 @@ auto to_string_raw = [](auto &&d) {
 auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
     sha.update(s);
     auto digest = sha.digest();
-    std::span<uint8_t> d{(uint8_t *) digest.data(),
-                         digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
-    auto res = to_string_raw(d);
+    //std::span<uint8_t> d{(uint8_t *) digest.data(),
+                         //digest.size() * sizeof(typename std::decay_t<decltype(digest)>::value_type)};
+    //auto res = to_string_raw(d);
+    auto res = to_string_raw(digest);
     auto r = res == s2;
+    ++total;
+    success += !!r;
     printf("%s\n", r ? "ok" : "false");
     if (!r) {
-        //printf("%s\n", s.c_str());
-        printf("%s\n", res.c_str());
-        crypto::print_buffer(s, digest);
+        printf("\n");
+        printf("input: %s\n", s.c_str());
+        printf("expected: %s\n", s2.c_str());
+        printf("result: %s\n", res.c_str());
+        printf("\n");
+        crypto::print_buffer("expected:", s2);
+        crypto::print_buffer("result:", res);
     }
 };
 auto cmp_base = [](auto &&left, auto &&right) {
     auto r = left == right;
-    static int total, success;
-    static struct stats {
-        ~stats() {
-            std::cerr << "\ntotal:  " << total << "\n"
-                << "passed: " << success << "\n"
-                << "failed: " << total - success << "\n"
-                ;
-        }
-    } __;
     ++total;
     success += !!r;
     if (!r) {
@@ -630,55 +638,48 @@ void test_hmac() {
         "b42af09057bac1e2d41708e48a902e09b5ff7f12ab428a4fe86653c73dd248fb82f948a549f7b791a5b41915ee4d1ec3935357e4e2317250d0372afa2ebeeb3a"s,
         "ed9bb695a3ccfe82fea7055e79fad7d225f5cc9c9b7b1808fc7121237a47903f59d8fad228c5710c487541db2bbecb09891b96b87c8718759ca4aa302cc72598"s
     );
+    f(sha3<256>{},
+        "8c6e0683409427f8931711b10ca92a506eb1fafa48fadd66d76126f47ac2c333"s,
+        "e2f178144221853d60f7e9ddaf13ea57c6bddd54d9bd18b175fc59278f491a63"s
+    );
 }
 
 void test_pbkdf2() {
-    /*
-auto pass = "123"s;
-auto salt = "0"s;
-crypto::print_buffer("sha256", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000, 33));
-crypto::print_buffer("sha256", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000, 34));
-crypto::print_buffer("sha256", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000));
-crypto::print_buffer("sha256 64", crypto::pbkdf2<crypto::sha256>(pass, salt, 1000, 64));
-crypto::print_buffer("sha512", crypto::pbkdf2<crypto::sha2<512>>(pass, salt, 1000));
-crypto::print_buffer("sha224", crypto::pbkdf2<crypto::sha2<224>>(pass, salt, 1000));
-crypto::print_buffer("sha384", crypto::pbkdf2<crypto::sha2<384>>(pass, salt, 1000));
+    using namespace crypto;
 
-sha256
-00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
-00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
-00020:   08                                              |  .
+    auto pass = "123"s;
+    auto salt = "0"s;
 
-sha256
-00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
-00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
-00020:   08 82                                           |  ..
+    auto cmp = [](auto &&x, auto &&y) {
+        return cmp_bytes(x, y);
+    };
 
-sha256
-00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
-00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
+    cmp(pbkdf2<sha256>(pass, salt, 1000, 33), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca4208"_sb);
+    cmp(pbkdf2<sha256>(pass, salt, 1000, 34), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca420882"_sb);
+    cmp(pbkdf2<sha256>(pass, salt, 1000), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca42"_sb);
+    cmp(pbkdf2<sha256>(pass, salt, 1000, 64), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca420882b3fc2a7336de94bcb473ea3d3e3155b8657bc512f349cb6141c116edda9d"_sb);
+    cmp(pbkdf2<sha2<512>>(pass, salt, 1000), "2e18d9ea31a4e2c02321ea3f05a143f3b1b9952a947905a7393a7ba37e1150d01a0130b2754cc30427ade14fccf09b43b5a842f6898638c558e4487c84c8249a"_sb);
+    cmp(pbkdf2<sha2<224>>(pass, salt, 1000), "e4e398e3022aa476b04abafc41b1725a00b4fec831ac4602269c758e"_sb);
+    cmp(pbkdf2<sha2<384>>(pass, salt, 1000), "6bec9cbb3d01f590f321835e273a2f38f2778676a9e2b925bbdc3183132eadaad551cb9e1087666c2d13a1596ee61f61"_sb);
 
-sha256 64
-00000:   4f f5 3b 20 56 02 ea 57 6b 8a 6b d6 9f b5 94 a0 |  O.; V..Wk.k.....
-00010:   a9 8a 91 29 9f 14 81 00 92 a2 3d 92 5d ec ca 42 |  ...)......=.]..B
-00020:   08 82 b3 fc 2a 73 36 de 94 bc b4 73 ea 3d 3e 31 |  ....*s6....s.=>1
-00030:   55 b8 65 7b c5 12 f3 49 cb 61 41 c1 16 ed da 9d |  U.e{...I.aA.....
+    cmp(pbkdf2<sha2<512>>(pass, salt, 999), "3b90da3da8c6180af0717d31f618e4572af386108afef6ec31c71be4298c38693153489141454ef0f2b4e794ee7b4ed2d9873bfbc3696e5f8acf384cfd0f7428"_sb);
+    cmp(pbkdf2<sha256>(pass, salt, 1), "7426ee6b7a29c894a4b6953c8ed5df1a73e809de6a3f1e22e3379f95dce75a33"_sb);
 
-sha512
-00000:   2e 18 d9 ea 31 a4 e2 c0 23 21 ea 3f 05 a1 43 f3 |  ....1...#!.?..C.
-00010:   b1 b9 95 2a 94 79 05 a7 39 3a 7b a3 7e 11 50 d0 |  ...*.y..9:{.~.P.
-00020:   1a 01 30 b2 75 4c c3 04 27 ad e1 4f cc f0 9b 43 |  ..0.uL..'..O...C
-00030:   b5 a8 42 f6 89 86 38 c5 58 e4 48 7c 84 c8 24 9a |  ..B...8.X.H|..$.
+    cmp(pbkdf2<sha1>(pass, salt, 1), "aea972ef0d1b000f8e379a2627d4e76ab3741c72"_sb);
+    cmp(pbkdf2<sha1>(pass, salt, 998), "3ffed4bae693ca5c3fbf8eddb6977a6013467168"_sb);
 
-sha224
-00000:   e4 e3 98 e3 02 2a a4 76 b0 4a ba fc 41 b1 72 5a |  .....*.v.J..A.rZ
-00010:   00 b4 fe c8 31 ac 46 02 26 9c 75 8e             |  ....1.F.&.u.
+    // collision, should be the same
+    cmp(
+        pbkdf2<sha1>("plnlrtfpijpuhqylxbgqiiyipieyxvfsavzgxbbcfusqkozwpngsyejqlmjsytrmd"s, "A009C1A485912C6AE630D3E744240B04"_sb, 1000, 16),
+        pbkdf2<sha1>("eBkXQTfuBqp'cTcar&g*"s, "A009C1A485912C6AE630D3E744240B04"_sb, 1000, 16)
+    );
 
-sha384
-00000:   6b ec 9c bb 3d 01 f5 90 f3 21 83 5e 27 3a 2f 38 |  k...=....!.^':/8
-00010:   f2 77 86 76 a9 e2 b9 25 bb dc 31 83 13 2e ad aa |  .w.v...%..1.....
-00020:   d5 51 cb 9e 10 87 66 6c 2d 13 a1 59 6e e6 1f 61 |  .Q....fl-..Yn..a
-    */
+    cmp(pbkdf2<sha3<256>>("password"s, "salt"s, 4096), "778b6e237a0f49621549ff70d218d2080756b9fb38d71b5d7ef447fa2254af61"_sb);
+
+    cmp(pbkdf2<sha3<256>>(pass, salt, 1), "c6c9bd558a9bc83a1d585e430194fcb6ae24a463082e7a61369e9213303fd450"_sb);
+    cmp(pbkdf2<sha3<512>>(pass, salt, 1000), "34cbcad0f754e6f95f1a11fa5bc24da5378a1dda9fd94961c7413644d22a8ab083837fe831c48128a89ac63840ca11967121a08a83d92f21ed1347615c68ce85"_sb);
+    cmp(pbkdf2<sha3<224>>(pass, salt, 1000), "596463961932a5247ade2d34673ca5d53f18664396ab7f9d827d86ca"_sb);
+    cmp(pbkdf2<sha3<384>>(pass, salt, 1000), "430c8d81549ec45a3497c6ee4585c58740a07accf291a72e30c2234c329accd0dcb572cc586eb2c30f0b74e8859018de"_sb);
 }
 
 void test_chacha20() {
