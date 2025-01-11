@@ -1,5 +1,6 @@
 #include "aes.h"
 #include "bigint.h"
+#include "sha1.h"
 #include "sha2.h"
 #include "sha3.h"
 #include "blake2.h"
@@ -131,6 +132,34 @@ void test_aes() {
             aes.decrypt(out, iv2, out2);
             cmp_l(plain, &out2);
         }
+    }
+}
+
+void test_sha1() {
+    using namespace crypto;
+    {
+        sha1 sha;
+        to_string2(sha, "", "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy dog", "2fd4e1c67a2d28fced849ee1bb76e7391b93eb12");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy dog.", "408d94384216f890ff7a0c3528e8bed1e0b01621");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, "The quick brown fox jumps over the lazy cog", "de9f2c7fd25e1b3afad3e85a0bd17d9b100db4b3");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, "123", "40bd001563085fc35165329ea1ff5c5ecbdbbeef");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, "plnlrtfpijpuhqylxbgqiiyipieyxvfsavzgxbbcfusqkozwpngsyejqlmjsytrmd", "65426b585154667542717027635463617226672a");
     }
 }
 
@@ -589,6 +618,10 @@ void test_hmac() {
         cmp_base(to_string_raw(hmac<decltype(h)>(fox, fox)), r2);
     };
 
+    f(sha1{},
+        "de7c9b85b8b78aa6bc8a7a36f70a90701c9db4d9"s,
+        "84997448f7991149b3e28fbe31314836e7cbb0cd"s
+    );
     f(sha2<256>{},
         "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"s,
         "05ef8d2632d4140db730878ffb03a0bd9b32de06fb74df0471bde777cba1eff7"s
@@ -950,6 +983,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     test_blake2();
+    test_sha1();
     //test_sm3();
     //test_sm4();
     //test_ec();
