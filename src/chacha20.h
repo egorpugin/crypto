@@ -72,60 +72,6 @@ void chacha_block(uint32_t *in, uint32_t *out, int num_rounds) {
     salsa_chacha_block<idx>(f, in, out, num_rounds);
 }
 
-void salsa_quarterround(uint32_t *x, int a, int b, int c, int d) {
-    x[b] ^= std::rotl(x[a] + x[d], 7);
-    x[c] ^= std::rotl(x[b] + x[a], 9);
-    x[d] ^= std::rotl(x[c] + x[b], 13);
-    x[a] ^= std::rotl(x[d] + x[c], 18);
-}
-void salsa_block1(uint32_t *in, uint32_t *out, int num_rounds = 20) {
-    uint32_t x[16];
-    memcpy(x, in, sizeof(uint32_t) * 16);
-	for (int i = 0; i < num_rounds; i += 2) {
-        salsa_quarterround(x,  0,  4,  8, 12);
-        salsa_quarterround(x,  5,  9, 13,  1);
-        salsa_quarterround(x, 10, 14,  2,  6);
-        salsa_quarterround(x, 15,  3,  7, 11);
-        //
-        salsa_quarterround(x,  0,  1,  2,  3);
-        salsa_quarterround(x,  5,  6,  7,  4);
-        salsa_quarterround(x, 10, 11,  8,  9);
-        salsa_quarterround(x, 15, 12, 13, 14);
-    }
-    for (int i = 0; i < 16; i++) {
-        out[i] = x[i] + in[i];
-    }
-}
-
-void chacha_quarterround(uint32_t *x, int a, int b, int c, int d) {
-    x[a] += x[b];
-    x[d] = std::rotl(x[d] ^ x[a], 16);
-    x[c] += x[d];
-    x[b] = std::rotl(x[b] ^ x[c], 12);
-    x[a] += x[b];
-    x[d] = std::rotl(x[d] ^ x[a], 8);
-    x[c] += x[d];
-    x[b] = std::rotl(x[b] ^ x[c], 7);
-}
-void chacha_block1(uint32_t *in, uint32_t *out, int num_rounds) {
-    uint32_t x[16];
-    memcpy(x, in, sizeof(uint32_t) * 16);
-	for (int i = 0; i < num_rounds; i += 2) {
-        chacha_quarterround(x, 0, 4, 8, 12);
-        chacha_quarterround(x, 1, 5, 9, 13);
-        chacha_quarterround(x, 2, 6, 10, 14);
-        chacha_quarterround(x, 3, 7, 11, 15);
-        //
-        chacha_quarterround(x, 0, 5, 10, 15);
-        chacha_quarterround(x, 1, 6, 11, 12);
-        chacha_quarterround(x, 2, 7, 8, 13);
-        chacha_quarterround(x, 3, 4, 9, 14);
-    }
-    for (int i = 0; i < 16; i++) {
-        out[i] = x[i] + in[i];
-    }
-}
-
 template <auto N>
 struct chacha {
     uint32_t s[16]{
