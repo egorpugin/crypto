@@ -27,8 +27,7 @@ template <auto... Settings>
 constexpr auto hmac_bytes(sha1) {
     return 64;
 }
-// https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.202.pdf
-// Table 3: Input block sizes for HMAC
+// but don't allow hmac for shake algos
 template <auto... Settings>
 constexpr auto hmac_bytes(sha3<Settings...>) {
     return sha3<Settings...>::r / 8;
@@ -81,8 +80,8 @@ auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, uint32_t c, uint32_t 
     }
     return r;
 }
-auto pbkdf2(auto &&prf, auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes) {
-    std::string res;
+auto pbkdf2(auto &&prf, auto &&pass, bytes_concept salt, auto &&c, uint32_t derived_key_bytes) {
+    std::vector<uint8_t> res;
     res.resize(derived_key_bytes);
     int i = 0;
     auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
