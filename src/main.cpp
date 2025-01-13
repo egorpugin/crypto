@@ -15,10 +15,13 @@
 #include "grasshopper.h"
 #include "magma.h"
 #include "mmap.h"
+#include "scrypt.h"
 
 #include <array>
+#include <chrono>
 #include <iostream>
 #include <iomanip>
+#include <print>
 #include <span>
 #include <sstream>
 
@@ -31,6 +34,23 @@ static struct stats {
             ;
     }
 } __;
+
+struct timer {
+    using clock = std::chrono::high_resolution_clock;
+
+    clock::time_point tp{clock::now()};
+
+    void end() {
+        auto diff = clock::now() - tp;
+        std::println("time of the last op: {}", std::chrono::duration_cast<std::chrono::duration<float>>(diff).count());
+    }
+};
+struct scoped_timer {
+    timer t;
+    ~scoped_timer() {
+        t.end();
+    }
+};
 
 auto to_string_raw = [](auto &&d) {
     std::stringstream s;
@@ -83,7 +103,7 @@ auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right) {
     }
     return r;
 };
-auto cmp_hash_bytes = [](auto &&sha, std::string s, crypto::bytes_concept right) {
+auto cmp_hash_bytes = [](auto &&sha, crypto::bytes_concept s, crypto::bytes_concept right) {
     sha.update(s);
     return cmp_bytes(sha.digest(), right);
 };
