@@ -690,8 +690,10 @@ void test_pbkdf2() {
 
     // collision, should be the same
     cmp(
-        pbkdf2<sha1>("plnlrtfpijpuhqylxbgqiiyipieyxvfsavzgxbbcfusqkozwpngsyejqlmjsytrmd"s, "A009C1A485912C6AE630D3E744240B04"_sb, 1000, 16),
-        pbkdf2<sha1>("eBkXQTfuBqp'cTcar&g*"s, "A009C1A485912C6AE630D3E744240B04"_sb, 1000, 16)
+        pbkdf2<sha1>("plnlrtfpijpuhqylxbgqiiyipieyxvfsavzgxbbcfusqkozwpngsyejqlmjsytrmd"s,
+            "A009C1A485912C6AE630D3E744240B04"_sb, 1000, 16),
+        pbkdf2<sha1>("eBkXQTfuBqp'cTcar&g*"s,
+            "A009C1A485912C6AE630D3E744240B04"_sb, 1000, 16)
     );
 
     cmp(pbkdf2<sha3<256>>("password"s, "salt"s, 4096), "778b6e237a0f49621549ff70d218d2080756b9fb38d71b5d7ef447fa2254af61"_sb);
@@ -700,30 +702,349 @@ void test_pbkdf2() {
     cmp(pbkdf2<sha3<512>>(pass, salt, 1000), "34cbcad0f754e6f95f1a11fa5bc24da5378a1dda9fd94961c7413644d22a8ab083837fe831c48128a89ac63840ca11967121a08a83d92f21ed1347615c68ce85"_sb);
     cmp(pbkdf2<sha3<224>>(pass, salt, 1000), "596463961932a5247ade2d34673ca5d53f18664396ab7f9d827d86ca"_sb);
     cmp(pbkdf2<sha3<384>>(pass, salt, 1000), "430c8d81549ec45a3497c6ee4585c58740a07accf291a72e30c2234c329accd0dcb572cc586eb2c30f0b74e8859018de"_sb);
+
+    cmp(pbkdf2<sha256>("passwd"s, "salt"s, 1, 64), R"(
+   55 ac 04 6e 56 e3 08 9f ec 16 91 c2 25 44 b6 05
+   f9 41 85 21 6d de 04 65 e6 8b 9d 57 c2 0d ac bc
+   49 ca 9c cc f1 79 b6 45 99 16 64 b3 9d 77 ef 31
+   7c 71 b8 45 b1 e3 0b d5 09 11 20 41 d3 a1 97 83
+)"_sb);
+    cmp(pbkdf2<sha256>("Password"s, "NaCl"s, 80000, 64), R"(
+   4d dc d8 f6 0b 98 be 21 83 0c ee 5e f2 27 01 f9
+   64 1a 44 18 d0 4c 04 14 ae ff 08 87 6b 34 ab 56
+   a1 d4 25 a1 22 58 33 54 9a db 84 1b 51 c9 b3 17
+   6a 27 2b de bb a1 d0 78 47 8f 62 b3 97 f3 3c 8d
+)"_sb);
+}
+
+void test_scrypt() {
+    using namespace crypto;
+
+    {
+        auto in = R"(
+           f7 ce 0b 65 3d 2d 72 a4 10 8c f5 ab e9 12 ff dd
+           77 76 16 db bb 27 a7 0e 82 04 f3 ae 2d 0f 6f ad
+           89 f6 8f 48 11 d1 e8 7b cc 3b d7 40 0a 9f fd 29
+           09 4f 01 84 63 95 74 f3 9a e5 a1 31 52 17 bc d7
+
+           89 49 91 44 72 13 bb 22 6c 25 b5 4d a8 63 70 fb
+           cd 98 43 80 37 46 66 bb 8f fc b5 bf 40 c2 54 b0
+           67 d2 7c 51 ce 4a d5 fe d8 29 c9 0b 50 5a 57 1b
+           7f 4d 1c ad 6a 52 3c da 77 0e 67 bc ea af 7e 89
+)"_sb;
+        uint64_t out[16];
+        scryptBlockMix(in.data(), (uint8_t*)out, 1);
+
+        cmp_bytes(out, R"(
+           a4 1f 85 9c 66 08 cc 99 3b 81 ca cb 02 0c ef 05
+           04 4b 21 81 a2 fd 33 7d fd 7b 1c 63 96 68 2f 29
+           b4 39 31 68 e3 c9 e6 bc fe 6b c5 b7 a0 6d 96 ba
+           e4 24 cc 10 2c 91 74 5c 24 ad 67 3d c7 61 8f 81
+
+           20 ed c9 75 32 38 81 a8 05 40 f6 4c 16 2d cd 3c
+           21 07 7c fe 5f 8d 5f e2 b1 a4 16 8f 95 36 78 b7
+           7d 3b 3d 80 3b 60 e4 ab 92 09 96 e5 9b 4d 53 b6
+           5d 2a 22 58 77 d5 ed f5 84 2c b9 f1 4e ef e4 25
+)"_sb);
+    }
+    {
+        auto in = R"(
+           f7 ce 0b 65 3d 2d 72 a4 10 8c f5 ab e9 12 ff dd
+           77 76 16 db bb 27 a7 0e 82 04 f3 ae 2d 0f 6f ad
+           89 f6 8f 48 11 d1 e8 7b cc 3b d7 40 0a 9f fd 29
+           09 4f 01 84 63 95 74 f3 9a e5 a1 31 52 17 bc d7
+           89 49 91 44 72 13 bb 22 6c 25 b5 4d a8 63 70 fb
+           cd 98 43 80 37 46 66 bb 8f fc b5 bf 40 c2 54 b0
+           67 d2 7c 51 ce 4a d5 fe d8 29 c9 0b 50 5a 57 1b
+           7f 4d 1c ad 6a 52 3c da 77 0e 67 bc ea af 7e 89
+)"_sb;
+        uint64_t out[16];
+        scryptROMix(in, out, 1, 16);
+
+        cmp_bytes(out, R"(
+            79 cc c1 93 62 9d eb ca 04 7f 0b 70 60 4b f6 b6
+            2c e3 dd 4a 96 26 e3 55 fa fc 61 98 e6 ea 2b 46
+            d5 84 13 67 3b 99 b0 29 d6 65 c3 57 60 1f b4 26
+            a0 b2 f4 bb a2 00 ee 9f 0a 43 d1 9b 57 1a 9c 71
+            ef 11 42 e6 5d 5a 26 6f dd ca 83 2c e5 9f aa 7c
+            ac 0b 9c f1 be 2b ff ca 30 0d 01 ee 38 76 19 c4
+            ae 12 fd 44 38 f2 03 a0 e4 e1 c4 7e c3 14 86 1f
+            4e 90 87 cb 33 39 6a 68 73 e8 f9 d2 53 9a 4b 8e
+)"_sb);
+    }
+    {
+        cmp_bytes(scrypt(""s, ""s, 16, 1, 1, 64), R"(
+       77 d6 57 62 38 65 7b 20 3b 19 ca 42 c1 8a 04 97
+       f1 6b 48 44 e3 07 4a e8 df df fa 3f ed e2 14 42
+       fc d0 06 9d ed 09 48 f8 32 6a 75 3a 0f c8 1f 17
+       e8 d3 e0 fb 2e 0d 36 28 cf 35 e2 0c 38 d1 89 06
+    )"_sb);
+        cmp_bytes(scrypt("password"s, "NaCl"s, 1024, 8, 16, 64), R"(
+       fd ba be 1c 9d 34 72 00 78 56 e7 19 0d 01 e9 fe
+       7c 6a d7 cb c8 23 78 30 e7 73 76 63 4b 37 31 62
+       2e af 30 d9 2e 22 a3 88 6f f1 09 27 9d 98 30 da
+       c7 27 af b9 4a 83 ee 6d 83 60 cb df a2 cc 06 40
+    )"_sb);
+        cmp_bytes(scrypt("pleaseletmein"s, "SodiumChloride"s, 16384, 8, 1, 64), R"(
+       70 23 bd cb 3a fd 73 48 46 1c 06 cd 81 fd 38 eb
+       fd a8 fb ba 90 4f 8e 3e a9 b5 43 f6 54 5d a1 f2
+       d5 43 29 55 61 3f 0f cf 62 d4 97 05 24 2a 9a f9
+       e6 1e 85 dc 0d 65 1e 40 df cf 01 7b 45 57 58 87
+    )"_sb);
+        // very long in debug mode, 1 GB of mem
+        /*{
+            scoped_timer t;
+            cmp_bytes(scrypt("pleaseletmein"s, "SodiumChloride"s, 1048576, 8, 1, 64), R"(
+           21 01 cb 9b 6a 51 1a ae ad db be 09 cf 70 f8 81
+           ec 56 8d 57 4a 2f fd 4d ab e5 ee 98 20 ad aa 47
+           8e 56 fd 8f 4b a5 d0 9f fa 1c 6d 92 7c 40 f4 c3
+           37 30 40 49 e8 a9 52 fb cb f4 5c 6f a7 7a 41 a4
+            )"_sb);
+        }
+        {
+            scoped_timer t;
+            cmp_bytes(scrypt("Rabbit"s, "Mouse"s, 1048576, 8, 1, 32), R"(
+                E277EA2CACB23EDAFC039D229B79DC13ECEDB601D99B182A9FEDBA1E2BFB4F58
+            )"_sb);
+        }*/
+
+        auto test = [](int N, int r, int p, auto &&res) {
+            cmp_bytes(scrypt("password"s, "ce3b79848f2a254df1d60e1a3146165a"_sb, N, r, p, 16), res);
+        };
+        test(8192, 5, 1, "a19e1c5ce6e0da022c64a7205da125dc"_sb);
+        test(8192, 6, 1, "c9060cb775114c0688df86e9990c62ab"_sb);
+        test(8192, 7, 1, "424e439dafcc0fc438469241e9d6bdf8"_sb);
+        test(8192, 8, 1, "18f3116479374acd05755a1bf43a3af2"_sb);
+        test(4096, 16, 1, "485d55c1267e1afa60349fe28c4aa2d9"_sb);
+        test(4096, 32, 1, "a43d75bb3b899852c8297fe2cd3b9681"_sb);
+        test(2, 64, 64, "a1c68ee1a41bc4e8dcfdc3fa93700426"_sb);
+        test(2, 64, 128, "b58b8ec24738af168b4e24de079102f1"_sb);
+        test(2, 63, 128, "61de26be0f6609462bf66d88dece2d3c"_sb);
+        test(4, 19, 17, "b21fc99ae1dd4067c2d2b906af62518e"_sb);
+    }
 }
 
 void test_chacha20() {
     using namespace crypto;
 
-    uint8_t key[32]{};
-    uint32_t counter{1};
-    uint8_t nonce[12]{};
+    {
+        auto in = R"(
+   7e 87 9a 21 4f 3e c9 86 7c a9 40 e6 41 71 8f 26
+   ba ee 55 5b 8c 61 c1 b5 0d f8 46 11 6d cd 3b 1d
+   ee 24 f3 19 df 9b 3d 85 14 12 1e 4b 5a c5 aa 32
+   76 02 1d 29 09 c7 48 29 ed eb c6 8d b8 b8 c2 5e
+)"_sb;
+        uint32_t out[16];
+        salsa_block((uint32_t*)in.data(), out, 8);
 
-    using byte = uint8_t;
+        cmp_bytes(out, R"(
+   a4 1f 85 9c 66 08 cc 99 3b 81 ca cb 02 0c ef 05
+   04 4b 21 81 a2 fd 33 7d fd 7b 1c 63 96 68 2f 29
+   b4 39 31 68 e3 c9 e6 bc fe 6b c5 b7 a0 6d 96 ba
+   e4 24 cc 10 2c 91 74 5c 24 ad 67 3d c7 61 8f 81
+)"_sb);
+    }
 
-    byte plaintext_1[127]{};
-    byte out1[127]{};
-    byte out2[127]{};
+    {
+        auto key = R"(
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+)"_sb;
+        auto nonce = R"(
+00 00 00 00 00 00 00 00 00 00 00 00
+)"_sb;
+        auto data = R"(
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+)"_sb;
+        {
+            chacha20 c(key.data(), nonce.data(), 0);
+            cmp_bytes(c.block, R"(
+76 b8 e0 ad a0 f1 3d 90 40 5d 6a e5 53 86 bd 28
+bd d2 19 b8 a0 8d ed 1a a8 36 ef cc 8b 77 0d c7
+da 41 59 7c 51 57 48 8d 77 24 e0 3f b8 d8 4a 37
+6a 43 b8 f4 15 18 a1 1c c3 87 b6 69 b2 ee 65 86
+)"_sb);
+        }
+        {
+            chacha20 c(key.data(), nonce.data(), 1);
+            cmp_bytes(c.block, R"(
+9f 07 e7 be 55 51 38 7a 98 ba 97 7c 73 2d 08 0d
+cb 0f 29 a0 48 e3 65 69 12 c6 53 3e 32 ee 7a ed
+29 b7 21 76 9c e6 4e 43 d5 71 33 b0 74 d8 39 d5
+31 ed 1f 28 51 0a fb 45 ac e1 0a 1f 4b 79 4d 6f
+)"_sb);
+        }
+        {
+        auto key = R"(
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+)"_sb;
+            chacha20 c(key.data(), nonce.data(), 1);
+            cmp_bytes(c.block, R"(
+3a eb 52 24 ec f8 49 92 9b 9d 82 8d b1 ce d4 dd
+83 20 25 e8 01 8b 81 60 b8 22 84 f3 c9 49 aa 5a
+8e ca 00 bb b4 a7 3b da d1 92 b5 c4 2f 73 f2 fd
+4e 27 36 44 c8 b3 61 25 a6 4a dd eb 00 6c 13 a0
+)"_sb);
+        }
+        {
+        auto key = R"(
+00 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+)"_sb;
+            chacha20 c(key.data(), nonce.data(), 2);
+            cmp_bytes(c.block, R"(
+72 d5 4d fb f1 2e c4 4b 36 26 92 df 94 13 7f 32
+8f ea 8d a7 39 90 26 5e c1 bb be a1 ae 9a f0 ca
+13 b2 5a a2 6c b4 a6 48 cb 9b 9d 1b e6 5b 2c 09
+24 a6 6c 54 d5 45 ec 1b 73 74 f4 87 2e 99 f0 96
+)"_sb);
+        }
+        {
+        auto nonce = R"(
+00 00 00 00 00 00 00 00 00 00 00 02
+)"_sb;
+            chacha20 c(key.data(), nonce.data(), 0);
+            cmp_bytes(c.block, R"(
+c2 c6 4d 37 8c d5 36 37 4a e2 04 b9 ef 93 3f cd
+1a 8b 22 88 b3 df a4 96 72 ab 76 5b 54 ee 27 c7
+8a 97 0e 0e 95 5c 14 f3 a8 8e 74 1b 97 c2 86 f7
+5f 8f c2 99 e8 14 83 62 fa 19 8a 39 53 1b ed 6d
+)"_sb);
+        }
+        {
+            chacha20 c(key.data(), nonce.data(), 0);
+            auto out = data;
+            c.cipher(data.data(), out.data(), data.size());
+            cmp_bytes(out, R"(
+76 b8 e0 ad a0 f1 3d 90 40 5d 6a e5 53 86 bd 28
+bd d2 19 b8 a0 8d ed 1a a8 36 ef cc 8b 77 0d c7
+da 41 59 7c 51 57 48 8d 77 24 e0 3f b8 d8 4a 37
+6a 43 b8 f4 15 18 a1 1c c3 87 b6 69 b2 ee 65 86
+)"_sb);
+        }
+        {
+        auto key = R"(
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+)"_sb;
+        auto nonce = R"(
+00 00 00 00 00 00 00 00 00 00 00 02
+)"_sb;
+        auto data = R"(
+41 6e 79 20 73 75 62 6d 69 73 73 69 6f 6e 20 74
+6f 20 74 68 65 20 49 45 54 46 20 69 6e 74 65 6e
+64 65 64 20 62 79 20 74 68 65 20 43 6f 6e 74 72
+69 62 75 74 6f 72 20 66 6f 72 20 70 75 62 6c 69
+63 61 74 69 6f 6e 20 61 73 20 61 6c 6c 20 6f 72
+20 70 61 72 74 20 6f 66 20 61 6e 20 49 45 54 46
+20 49 6e 74 65 72 6e 65 74 2d 44 72 61 66 74 20
+6f 72 20 52 46 43 20 61 6e 64 20 61 6e 79 20 73
+74 61 74 65 6d 65 6e 74 20 6d 61 64 65 20 77 69
+74 68 69 6e 20 74 68 65 20 63 6f 6e 74 65 78 74
+20 6f 66 20 61 6e 20 49 45 54 46 20 61 63 74 69
+76 69 74 79 20 69 73 20 63 6f 6e 73 69 64 65 72
+65 64 20 61 6e 20 22 49 45 54 46 20 43 6f 6e 74
+72 69 62 75 74 69 6f 6e 22 2e 20 53 75 63 68 20
+73 74 61 74 65 6d 65 6e 74 73 20 69 6e 63 6c 75
+64 65 20 6f 72 61 6c 20 73 74 61 74 65 6d 65 6e
+74 73 20 69 6e 20 49 45 54 46 20 73 65 73 73 69
+6f 6e 73 2c 20 61 73 20 77 65 6c 6c 20 61 73 20
+77 72 69 74 74 65 6e 20 61 6e 64 20 65 6c 65 63
+74 72 6f 6e 69 63 20 63 6f 6d 6d 75 6e 69 63 61
+74 69 6f 6e 73 20 6d 61 64 65 20 61 74 20 61 6e
+79 20 74 69 6d 65 20 6f 72 20 70 6c 61 63 65 2c
+20 77 68 69 63 68 20 61 72 65 20 61 64 64 72 65
+73 73 65 64 20 74 6f
+)"_sb;
+            chacha20 c(key.data(), nonce.data(), 1);
+            auto out = data;
+            c.cipher(data.data(), out.data(), data.size());
+            cmp_bytes(out, R"(
+a3 fb f0 7d f3 fa 2f de 4f 37 6c a2 3e 82 73 70
+41 60 5d 9f 4f 4f 57 bd 8c ff 2c 1d 4b 79 55 ec
+2a 97 94 8b d3 72 29 15 c8 f3 d3 37 f7 d3 70 05
+0e 9e 96 d6 47 b7 c3 9f 56 e0 31 ca 5e b6 25 0d
+40 42 e0 27 85 ec ec fa 4b 4b b5 e8 ea d0 44 0e
+20 b6 e8 db 09 d8 81 a7 c6 13 2f 42 0e 52 79 50
+42 bd fa 77 73 d8 a9 05 14 47 b3 29 1c e1 41 1c
+68 04 65 55 2a a6 c4 05 b7 76 4d 5e 87 be a8 5a
+d0 0f 84 49 ed 8f 72 d0 d6 62 ab 05 26 91 ca 66
+42 4b c8 6d 2d f8 0e a4 1f 43 ab f9 37 d3 25 9d
+c4 b2 d0 df b4 8a 6c 91 39 dd d7 f7 69 66 e9 28
+e6 35 55 3b a7 6c 5c 87 9d 7b 35 d4 9e b2 e6 2b
+08 71 cd ac 63 89 39 e2 5e 8a 1e 0e f9 d5 28 0f
+a8 ca 32 8b 35 1c 3c 76 59 89 cb cf 3d aa 8b 6c
+cc 3a af 9f 39 79 c9 2b 37 20 fc 88 dc 95 ed 84
+a1 be 05 9c 64 99 b9 fd a2 36 e7 e8 18 b0 4b 0b
+c3 9c 1e 87 6b 19 3b fe 55 69 75 3f 88 12 8c c0
+8a aa 9b 63 d1 a1 6f 80 ef 25 54 d7 18 9c 41 1f
+58 69 ca 52 c5 b8 3f a3 6f f2 16 b9 c1 d3 00 62
+be bc fd 2d c5 bc e0 91 19 34 fd a7 9a 86 f6 e6
+98 ce d7 59 c3 ff 9b 64 77 33 8f 3d a4 f9 cd 85
+14 ea 99 82 cc af b3 41 b2 38 4d d9 02 f3 d1 ab
+7a c6 1d d2 9c 6f 21 ba 5b 86 2f 37 30 e3 7c fd
+c4 fd 80 6c 22 f2 21
+)"_sb);
+        }
+        {
+        auto key = R"(
+1c 92 40 a5 eb 55 d3 8a f3 33 88 86 04 f6 b5 f0
+47 39 17 c1 40 2b 80 09 9d ca 5c bc 20 70 75 c0
+)"_sb;
+        auto nonce = R"(
+00 00 00 00 00 00 00 00 00 00 00 02
+)"_sb;
+        auto data = R"(
+27 54 77 61 73 20 62 72 69 6c 6c 69 67 2c 20 61
+6e 64 20 74 68 65 20 73 6c 69 74 68 79 20 74 6f
+76 65 73 0a 44 69 64 20 67 79 72 65 20 61 6e 64
+20 67 69 6d 62 6c 65 20 69 6e 20 74 68 65 20 77
+61 62 65 3a 0a 41 6c 6c 20 6d 69 6d 73 79 20 77
+65 72 65 20 74 68 65 20 62 6f 72 6f 67 6f 76 65
+73 2c 0a 41 6e 64 20 74 68 65 20 6d 6f 6d 65 20
+72 61 74 68 73 20 6f 75 74 67 72 61 62 65 2e
+)"_sb;
+            chacha20 c(key.data(), nonce.data(), 42);
+            auto out = data;
+            c.cipher(data.data(), out.data(), data.size());
+            cmp_bytes(out, R"(
+62 e6 34 7f 95 ed 87 a4 5f fa e7 42 6f 27 a1 df
+5f b6 91 10 04 4c 0d 73 11 8e ff a9 5b 01 e5 cf
+16 6d 3d f2 d7 21 ca f9 b2 1e 5f b1 4c 61 68 71
+fd 84 c5 4f 9d 65 b2 83 19 6c 7f e4 f6 05 53 eb
+f3 9c 64 02 c4 22 34 e3 2a 35 6b 3e 76 43 12 a6
+1a 55 32 05 57 16 ea d6 96 25 68 f8 7d 3f 3f 77
+04 c6 a8 d1 bc d1 bf 4d 50 d6 15 4b 6d a7 31 b1
+87 b5 8d fd 72 8a fa 36 75 7a 79 7a c1 88 d1
+)"_sb);
+        }
+    }
 
-    //chacha20(key, counter, nonce, plaintext_1, out1, 127);
-    //chacha20(key, counter, nonce, out1, out2, 127);
-    cmp_l(plaintext_1, out2);
+    {
+        uint8_t key[32]{};
+        uint32_t counter{1};
+        uint8_t nonce[12]{};
 
-    auto K = "80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f"_sb;
-    auto nonce_one = "00 00 00 00 00 01 02 03 04 05 06 07"_sb;
-    /*auto onetimekey = poly1305_key_gen((uint8_t *)K.c_str(), (uint8_t *)nonce_one.c_str());
-    cmp_bytes(onetimekey,
-              "8a d5 a0 8b 90 5f 81 cc 81 50 40 27 4a b2 94 71 a8 33 b6 37 e3 fd 0d a5 08 db b8 e2 fd d1 a6 46"_sb);*/
+        using byte = uint8_t;
+
+        byte plaintext_1[127]{};
+        byte out1[127]{};
+        byte out2[127]{};
+
+        //chacha20(key, counter, nonce, plaintext_1, out1, 127);
+        //chacha20(key, counter, nonce, out1, out2, 127);
+        cmp_l(plaintext_1, out2);
+
+        auto K = "80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f"_sb;
+        auto nonce_one = "00 00 00 00 00 01 02 03 04 05 06 07"_sb;
+        /*auto onetimekey = poly1305_key_gen((uint8_t *)K.c_str(), (uint8_t *)nonce_one.c_str());
+        cmp_bytes(onetimekey,
+                  "8a d5 a0 8b 90 5f 81 cc 81 50 40 27 4a b2 94 71 a8 33 b6 37 e3 fd 0d a5 08 db b8 e2 fd d1 a6 46"_sb);*/
+    }
 }
 
 void test_chacha20_aead() {
@@ -1001,17 +1322,18 @@ void test_tls() {
 
 int main() {
     //test_aes();
+    //test_sha1();
     //test_sha2();
     //test_sha3();
-    test_blake2();
-    test_sha1();
+    //test_blake2();
     //test_sm3();
     //test_sm4();
     //test_ec();
     //test_hmac();
     //test_pbkdf2();
-    //test_chacha20();
-    //test_chacha20_aead();
+    test_chacha20();
+    //test_scrypt();
+    test_chacha20_aead();
     //test_asn1();
     //test_streebog();
     //test_grasshopper();
