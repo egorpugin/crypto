@@ -56,6 +56,9 @@ struct bytes_concept {
     bytes_concept() = default;
     bytes_concept(uint8_t *p, size_t sz) : p{p}, sz{sz} {
     }
+    template <typename T, auto N>
+    bytes_concept(T (&d)[N]) : p{(uint8_t*)d}, sz{sizeof(T) * N} {
+    }
     bytes_concept(const std::string &s) {
         p = (uint8_t *)s.data();
         sz = s.size();
@@ -328,18 +331,10 @@ struct be_stream {
     //operator auto() { return read(); }
 };
 
-template <auto N>
-auto byteswap(const array<N> &in) {
-    array<N> out;
-    for (int i = 0; i < N; ++i) {
-        out[i] = in[N - i - 1];
-    }
-    return out;
-}
-
-auto byteswap(const std::string &in) {
+auto byteswap(auto &&in) {
     auto sz = in.size();
-    std::string out(sz, 0);
+    std::decay_t<decltype(in)> out;
+    out.resize(sz);
     for (int i = 0; i < sz; ++i) {
         out[i] = in[sz - i - 1];
     }
@@ -347,7 +342,7 @@ auto byteswap(const std::string &in) {
 }
 
 auto str2bytes(auto &&in) {
-    std::string s;
+    std::vector<uint8_t> s;
     bool first = true;
     for (auto &&c : in) {
         if (isspace(c)) {
@@ -364,11 +359,11 @@ auto str2bytes(auto &&in) {
     }
     return s;
 }
-std::string operator"" _sb(const char *in, size_t len) {
-    std::string s{in, in + len};
+auto operator"" _sb(const char *in, size_t len) {
+    std::vector<uint8_t> s{in, in + len};
     return str2bytes(s);
 }
-std::string operator"" _sw(const char *in, size_t len) {
+auto operator"" _sw(const char *in, size_t len) {
     std::string s{in, in + len};
     return crypto::byteswap(str2bytes(s));
 }
