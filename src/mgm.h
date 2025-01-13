@@ -55,7 +55,9 @@ struct mgm {
         Y[0] &= 0x7f;
         Y = c.encrypt(Y);
         auto q = (data.size() + block_size_bytes - 1) / block_size_bytes;
-        std::string out = data;
+        std::string out;
+        out.resize(data.size());
+        memcpy(out.data(), data.data(), data.size());
 
         auto calc_auth = [&]() {
             // ciphered text must be nulled up to q * block_size_bytes
