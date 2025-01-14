@@ -720,6 +720,8 @@ void test_pbkdf2() {
 void test_scrypt() {
     using namespace crypto;
 
+    //scoped_timer st;
+
     {
         auto in = R"(
            f7 ce 0b 65 3d 2d 72 a4 10 8c f5 ab e9 12 ff dd
@@ -772,29 +774,36 @@ void test_scrypt() {
             4e 90 87 cb 33 39 6a 68 73 e8 f9 d2 53 9a 4b 8e
 )"_sb);
     }
+
+    auto scr = [](auto &&...args) {
+        return scrypt(args...);
+        //return scrypt2()(args...);
+    };
+
     {
-        cmp_bytes(scrypt(""s, ""s, 16, 1, 1, 64), R"(
+        cmp_bytes(scr(""s, ""s, 16, 1, 1, 64), R"(
        77 d6 57 62 38 65 7b 20 3b 19 ca 42 c1 8a 04 97
        f1 6b 48 44 e3 07 4a e8 df df fa 3f ed e2 14 42
        fc d0 06 9d ed 09 48 f8 32 6a 75 3a 0f c8 1f 17
        e8 d3 e0 fb 2e 0d 36 28 cf 35 e2 0c 38 d1 89 06
     )"_sb);
-        cmp_bytes(scrypt("password"s, "NaCl"s, 1024, 8, 16, 64), R"(
+        cmp_bytes(scr("password"s, "NaCl"s, 1024, 8, 16, 64), R"(
        fd ba be 1c 9d 34 72 00 78 56 e7 19 0d 01 e9 fe
        7c 6a d7 cb c8 23 78 30 e7 73 76 63 4b 37 31 62
        2e af 30 d9 2e 22 a3 88 6f f1 09 27 9d 98 30 da
        c7 27 af b9 4a 83 ee 6d 83 60 cb df a2 cc 06 40
     )"_sb);
-        cmp_bytes(scrypt("pleaseletmein"s, "SodiumChloride"s, 16384, 8, 1, 64), R"(
+        cmp_bytes(scr("pleaseletmein"s, "SodiumChloride"s, 16384, 8, 1, 64), R"(
        70 23 bd cb 3a fd 73 48 46 1c 06 cd 81 fd 38 eb
        fd a8 fb ba 90 4f 8e 3e a9 b5 43 f6 54 5d a1 f2
        d5 43 29 55 61 3f 0f cf 62 d4 97 05 24 2a 9a f9
        e6 1e 85 dc 0d 65 1e 40 df cf 01 7b 45 57 58 87
     )"_sb);
         // very long in debug mode, 1 GB of mem
-        /*{
+#ifdef NDEBUG
+        {
             scoped_timer t;
-            cmp_bytes(scrypt("pleaseletmein"s, "SodiumChloride"s, 1048576, 8, 1, 64), R"(
+            cmp_bytes(scr("pleaseletmein"s, "SodiumChloride"s, 1048576, 8, 1, 64), R"(
            21 01 cb 9b 6a 51 1a ae ad db be 09 cf 70 f8 81
            ec 56 8d 57 4a 2f fd 4d ab e5 ee 98 20 ad aa 47
            8e 56 fd 8f 4b a5 d0 9f fa 1c 6d 92 7c 40 f4 c3
@@ -803,13 +812,14 @@ void test_scrypt() {
         }
         {
             scoped_timer t;
-            cmp_bytes(scrypt("Rabbit"s, "Mouse"s, 1048576, 8, 1, 32), R"(
+            cmp_bytes(scr("Rabbit"s, "Mouse"s, 1048576, 8, 1, 32), R"(
                 E277EA2CACB23EDAFC039D229B79DC13ECEDB601D99B182A9FEDBA1E2BFB4F58
             )"_sb);
-        }*/
+        }
+#endif
 
-        auto test = [](int N, int r, int p, auto &&res) {
-            cmp_bytes(scrypt("password"s, "ce3b79848f2a254df1d60e1a3146165a"_sb, N, r, p, 16), res);
+        auto test = [&](int N, int r, int p, auto &&res) {
+            cmp_bytes(scr("password"s, "ce3b79848f2a254df1d60e1a3146165a"_sb, N, r, p, 16), res);
         };
         test(8192, 5, 1, "a19e1c5ce6e0da022c64a7205da125dc"_sb);
         test(8192, 6, 1, "c9060cb775114c0688df86e9990c62ab"_sb);
@@ -1022,28 +1032,6 @@ f3 9c 64 02 c4 22 34 e3 2a 35 6b 3e 76 43 12 a6
 87 b5 8d fd 72 8a fa 36 75 7a 79 7a c1 88 d1
 )"_sb);
         }
-    }
-
-    {
-        uint8_t key[32]{};
-        uint32_t counter{1};
-        uint8_t nonce[12]{};
-
-        using byte = uint8_t;
-
-        byte plaintext_1[127]{};
-        byte out1[127]{};
-        byte out2[127]{};
-
-        //chacha20(key, counter, nonce, plaintext_1, out1, 127);
-        //chacha20(key, counter, nonce, out1, out2, 127);
-        cmp_l(plaintext_1, out2);
-
-        auto K = "80 81 82 83 84 85 86 87 88 89 8a 8b 8c 8d 8e 8f 90 91 92 93 94 95 96 97 98 99 9a 9b 9c 9d 9e 9f"_sb;
-        auto nonce_one = "00 00 00 00 00 01 02 03 04 05 06 07"_sb;
-        /*auto onetimekey = poly1305_key_gen((uint8_t *)K.c_str(), (uint8_t *)nonce_one.c_str());
-        cmp_bytes(onetimekey,
-                  "8a d5 a0 8b 90 5f 81 cc 81 50 40 27 4a b2 94 71 a8 33 b6 37 e3 fd 0d a5 08 db b8 e2 fd d1 a6 46"_sb);*/
     }
 }
 
@@ -1331,9 +1319,9 @@ int main() {
     //test_ec();
     //test_hmac();
     //test_pbkdf2();
-    test_chacha20();
-    //test_scrypt();
-    test_chacha20_aead();
+    //test_chacha20();
+    //test_chacha20_aead();
+    test_scrypt();
     //test_asn1();
     //test_streebog();
     //test_grasshopper();

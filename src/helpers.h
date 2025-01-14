@@ -359,11 +359,11 @@ auto str2bytes(auto &&in) {
     }
     return s;
 }
-auto operator"" _sb(const char *in, size_t len) {
+auto operator""_sb(const char *in, size_t len) {
     std::vector<uint8_t> s{in, in + len};
     return str2bytes(s);
 }
-auto operator"" _sw(const char *in, size_t len) {
+auto operator""_sw(const char *in, size_t len) {
     std::string s{in, in + len};
     return crypto::byteswap(str2bytes(s));
 }
