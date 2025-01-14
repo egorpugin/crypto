@@ -21,11 +21,8 @@ struct chacha20_poly1305_aead {
 
     array<block_size_bytes> k;
 
-    chacha20_poly1305_aead() = default;
-    chacha20_poly1305_aead(auto &&k) : k{k} {
-    }
     auto encrypt_and_tag(auto &&nonce, auto &&data, auto &&auth_data) {
-        chacha20 c{(uint8_t*)k.data(), (uint8_t*)nonce.data()};
+        chacha20 c{k.data(), nonce.data()};
         c.set_counter(1);
 
         array<32> otk;
@@ -53,7 +50,7 @@ struct chacha20_poly1305_aead {
         return out;
     }
     auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
-        chacha20 c{(uint8_t *)k.data(), (uint8_t *)nonce.data()};
+        chacha20 c{k.data(), nonce.data()};
         c.set_counter(1);
 
         array<32> otk;

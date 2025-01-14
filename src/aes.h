@@ -253,6 +253,7 @@ consteval auto aes_parameters(int keylen) {
         // default:
         // static_assert(keylen == 256);
     }
+    throw;
 }
 
 template <auto Parameters>

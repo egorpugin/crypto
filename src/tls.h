@@ -989,7 +989,7 @@ struct http_client {
                 std::string_view s{h.begin(), h.end()};
                 auto p = s.find(':');
                 if (p == -1) {
-                    throw std::runtime_error{format("bad header: {}"s, s)};
+                    throw std::runtime_error{format("bad header: {}", s)};
                 }
                 auto v = s.substr(p + 1);
                 if (v[0] == ' ') {

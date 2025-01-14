@@ -57,10 +57,10 @@ struct sm4 : sm4_data {
     uint32_t rk[rounds];
 
     sm4() = default;
-    sm4(uint32_t key[4]) requires encryption {
+    sm4(uint32_t key[4]) requires (encryption) {
         key_expansion(key);
     }
-    sm4(uint32_t key[4]) requires !encryption {
+    sm4(uint32_t key[4]) requires (!encryption) {
         key_expansion(key);
         for (int i = 0; i < 16; ++i) {
             std::swap(rk[i], rk[31 - i]);
@@ -103,10 +103,10 @@ struct sm4 : sm4_data {
         }
         return r;
     }
-    auto encrypt(bytes_concept in) noexcept requires encryption {
+    auto encrypt(bytes_concept in) noexcept requires (encryption) {
         return crypt((uint32_t *)in.data());
     }
-    auto decrypt(bytes_concept in) noexcept requires !encryption {
+    auto decrypt(bytes_concept in) noexcept requires (!encryption) {
         return crypt((uint32_t *)in.data());
     }
 };

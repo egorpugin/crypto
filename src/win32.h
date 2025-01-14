@@ -12,7 +12,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <windows.h>
+#include <Windows.h>
 
 #define WINAPI_CALL(x) if (!(x)) {throw ::win32::winapi_exception{#x};}
 

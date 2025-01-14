@@ -5,7 +5,7 @@
 
 namespace crypto {
 
-auto scryptBlockMix(uint8_t *B, uint8_t *out, int r) {
+void scryptBlockMix(uint8_t *B, uint8_t *out, int r) {
     constexpr auto block_size = 64;
 
     uint8_t X[block_size];
@@ -22,7 +22,7 @@ auto scryptBlockMix(uint8_t *B, uint8_t *out, int r) {
     memcpy(out, Y.data(), Y.size());
 }
 
-auto scryptROMix(bytes_concept B, bytes_concept out, int r, int N) {
+void scryptROMix(bytes_concept B, bytes_concept out, int r, int N) {
     auto sz = B.size();
     std::vector<uint8_t> X;
     X.resize(sz);
