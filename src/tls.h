@@ -204,7 +204,7 @@ struct tls13_ {
     template <typename KeyExchange, typename... KeyExchanges>
     struct key_exchanges : types<KeyExchange, KeyExchanges...> {
         static constexpr auto size() {
-            return sizeof...(KeyExchange) + 1;
+            return sizeof...(KeyExchanges) + 1;
         }
 
         static void for_each(auto &&f) {
