@@ -6,6 +6,7 @@
 #define WIN32_LEAN_AND_MEAN
 #undef small
 
+#include <array>
 #include <filesystem>
 #include <format>
 using std::format;

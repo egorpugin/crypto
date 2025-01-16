@@ -9,8 +9,7 @@ void scryptBlockMix(uint8_t *B, uint8_t *out, int r) {
     constexpr auto block_size = 64;
 
     uint8_t X[block_size];
-    std::vector<uint8_t> Y;
-    Y.resize(block_size * 2 * r);
+    std::vector<uint8_t> Y(block_size * 2 * r);
     memcpy(X, B + block_size * (2 * r - 1), block_size);
     for (int i = 0; i < 2 * r; ++i) {
         for (int j = 0; j < block_size; ++j) {
@@ -24,11 +23,9 @@ void scryptBlockMix(uint8_t *B, uint8_t *out, int r) {
 
 void scryptROMix(bytes_concept B, bytes_concept out, int r, int N) {
     auto sz = B.size();
-    std::vector<uint8_t> X;
-    X.resize(sz);
+    std::vector<uint8_t> X(sz);
     memcpy(X.data(), B.data(), sz);
-    std::vector<uint8_t> V;
-    V.resize(sz * N);
+    std::vector<uint8_t> V(sz * N);
     for (int i = 0; i < N; ++i) {
         memcpy(V.data() + sz * i, X.data(), sz);
         scryptBlockMix(X.data(), X.data(), r);
