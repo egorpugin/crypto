@@ -1,4 +1,5 @@
 #include "aes.h"
+#include "argon2.h"
 #include "bigint.h"
 #include "sha1.h"
 #include "sha2.h"
@@ -834,6 +835,83 @@ void test_scrypt() {
     }
 }
 
+void test_argon2() {
+    using namespace crypto;
+
+    auto pass = R"(
+        01 01 01 01 01 01 01 01
+        01 01 01 01 01 01 01 01
+        01 01 01 01 01 01 01 01
+        01 01 01 01 01 01 01 01
+)"_sb;
+    auto salt = R"(
+        02 02 02 02 02 02 02 02 02 02 02 02 02 02 02 02
+)"_sb;
+    auto key = R"(
+        03 03 03 03 03 03 03 03
+)"_sb;
+    auto associated_data = R"(
+        04 04 04 04 04 04 04 04 04 04 04 04
+)"_sb;
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 32,
+            .p = 4,
+            .m = 32,
+            .t = 3,
+            .y = argon2::argon2d
+        };
+        cmp_bytes(a(), R"(
+            51 2b 39 1b 6f 11 62 97
+            53 71 d3 09 19 73 42 94
+            f8 68 e3 be 39 84 f3 c1
+            a1 3a 4d b9 fa be 4a cb
+    )"_sb);
+    }
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 32,
+            .p = 4,
+            .m = 32,
+            .t = 3,
+            .y = argon2::argon2i
+        };
+        cmp_bytes(a(), R"(
+            c8 14 d9 d1 dc 7f 37 aa
+            13 f0 d7 7f 24 94 bd a1
+            c8 de 6b 01 6d d3 88 d2
+            99 52 a4 c4 67 2b 6c e8
+    )"_sb);
+    }
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 32,
+            .p = 4,
+            .m = 32,
+            .t = 3,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+            0d 64 0d f5 8d 78 76 6c
+            08 c0 37 a3 4a 8b 53 c9
+            d0 1e f0 45 2d 75 b6 5e
+            b5 25 20 e9 6b 01 e6 59
+    )"_sb);
+    }
+}
+
 void test_chacha20() {
     using namespace crypto;
 
@@ -1313,7 +1391,7 @@ int main() {
     //test_sha1();
     //test_sha2();
     //test_sha3();
-    //test_blake2();
+    test_blake2();
     //test_sm3();
     //test_sm4();
     //test_ec();
@@ -1321,7 +1399,8 @@ int main() {
     //test_pbkdf2();
     //test_chacha20();
     //test_chacha20_aead();
-    test_scrypt();
+    //test_scrypt();
+    test_argon2();
     //test_asn1();
     //test_streebog();
     //test_grasshopper();
