@@ -35,12 +35,15 @@ struct blake2_base {
         { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3, },
     };
 
-    blake2_base(bytes_concept key = bytes_concept{}) {
+    blake2_base(bytes_concept key = bytes_concept{}, uint8_t output_bytes = DigestSizeBits / 8) : output_bytes{output_bytes} {
+        if (output_bytes < 1 || output_bytes > Width) {
+            throw std::runtime_error{"invalid output_bytes size"};
+        }
         if (key.size() > Width) {
             throw std::runtime_error{"invalid key size"};
         }
         h = iv;
-        h[0] = h[0] ^ 0x01010000 ^ (key.size() << 8) ^ (DigestSizeBits / 8);
+        h[0] = h[0] ^ 0x01010000 ^ (key.size() << 8) ^ output_bytes;
         if (key.size()) {
             memcpy(m, key.data(), key.size());
             bytelen += block_bytes;
@@ -55,8 +58,8 @@ struct blake2_base {
     }
     auto digest() noexcept {
         pad();
-        std::array<uint8_t, DigestSizeBits / 8> hash;
-        memcpy(hash.data(), h.data(), DigestSizeBits / 8);
+        std::vector<uint8_t> hash(output_bytes);
+        memcpy(hash.data(), h.data(), output_bytes);
         return hash;
     }
     static auto digest(auto &&v) noexcept {
@@ -70,6 +73,8 @@ private:
     state_type m[16]{};
     message_length_type bytelen{};
     int blockpos{};
+    // parameters
+    uint8_t output_bytes;
 
     constexpr void pad() noexcept {
         auto padding_size = block_bytes - blockpos;
@@ -88,7 +93,7 @@ private:
         }
     }
 
-    void G(auto &&v, int a, int b, int c, int d, auto x, auto y) {
+    static void G(auto &&v, int a, int b, int c, int d, auto x, auto y) {
         v[a] = v[a] + v[b] + x;
         v[d] = std::rotr(v[d] ^ v[a], R[0]);
         v[c] = v[c] + v[d];
