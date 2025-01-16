@@ -6,12 +6,13 @@ namespace crypto {
 
 struct argon2 {
     enum type : uint32_t {
-        argon2d,
+        argon2d, // not recommended
         argon2i,
         argon2id,
     };
     using hash_type = blake2b<512>;
     static inline constexpr auto hash_size = 512 / 8;
+    static inline constexpr auto block_size = 1024; // memory unit
 
     bytes_concept password;
     bytes_concept salt;
@@ -21,10 +22,10 @@ struct argon2 {
     uint32_t p; // parallelism
     uint32_t m; // memsize KB
     uint32_t t; // iters
-    type y{argon2d};
+    type y{argon2id};
 
     auto operator()() {
-        const uint32_t v{0x13}; // current version v1.3
+        constexpr uint32_t v{0x13}; // current version v1.3
 
         hash_type b;
         auto add = [&](auto &&v) {
@@ -52,20 +53,21 @@ struct argon2 {
         constexpr auto SL = 4; // number of vertical slices
         auto col_count_in_slice = q / SL;
 
-        std::vector<uint8_t> B(block_count * 1024);
+        std::vector<uint8_t> B(block_count * block_size);
         auto pd = B.data();
 
         for (uint32_t i = 0; i < p; ++i) {
             uint8_t tmp[hash_size + sizeof(uint32_t) + sizeof(i)];
             memcpy(tmp, h0.data(), h0.size());
-            *(uint32_t*)(tmp + h0.size()) = 0;
             *(uint32_t*)(tmp + h0.size() + sizeof(uint32_t)) = i;
-            hash(tmp, 1024, B.data() + (q * i + 0) * 1024);
+
+            *(uint32_t*)(tmp + h0.size()) = 0;
+            hash(tmp, block_size, B.data() + (q * i + 0) * block_size);
             *(uint32_t*)(tmp + h0.size()) = 1;
-            hash(tmp, 1024, B.data() + (q * i + 1) * 1024);
+            hash(tmp, block_size, B.data() + (q * i + 1) * block_size);
         }
 
-        uint8_t tmp[1024];
+        uint8_t tmp[block_size];
         for (uint32_t it = 0; it < t; ++it) { // iterations
             for (uint32_t is = 0; is < SL; ++is) { // slices
                 auto calc_l = [&](uint32_t j2, uint32_t j) {
@@ -85,51 +87,38 @@ struct argon2 {
                      * blocks in this segment
                      *      Other lanes : (SL - 1) last segments
                      */
-                    uint32_t reference_area_size;
-                    uint64_t relative_position;
-                    uint32_t start_position, absolute_position;
-
+                    uint32_t W;
                     if (it == 0) {
                         if (is == 0) {
-                            reference_area_size = j - 1; /* all but the previous */
+                            // all but the previous
+                            // never happens?
+                            W = j - 1;
                         } else {
                             if (same_lane) {
-                                /* The same lane => add current segment */
-                                reference_area_size =
-                                    is * col_count_in_slice +
-                                    j - 1;
+                                // same lane => add current segment
+                                W = is * col_count_in_slice + j - 1;
                             } else {
-                                reference_area_size =
-                                    is * col_count_in_slice +
-                                    ((j == 0) ? (-1) : 0);
+                                W = is * col_count_in_slice + ((j == 0) ? (-1) : 0);
                             }
                         }
                     } else {
                         if (same_lane) {
-                            reference_area_size = q -
-                                                  col_count_in_slice + j -
-                                                  1;
+                            W = q - col_count_in_slice + j - 1;
                         } else {
-                            reference_area_size = q -
-                                                  col_count_in_slice +
-                                                  ((j == 0) ? (-1) : 0);
+                            W = q - col_count_in_slice + ((j == 0) ? (-1) : 0);
                         }
                     }
 
-                    /* 1.2.4. Mapping pseudo_rand to 0..<reference_area_size-1> and produce
-                     * relative position */
-                    relative_position = j1;
-                    relative_position = relative_position * relative_position >> 32;
-                    relative_position = reference_area_size - 1 -
-                                        (reference_area_size * relative_position >> 32);
+                    uint64_t x = j1;
+                    x = x * x >> 32;
+                    auto y = W * x >> 32;
+                    auto zz = W - 1 - y;
 
-                    start_position = 0;
+                    uint32_t start_position{};
                     if (it != 0) {
-                        start_position = (is == SL - 1)
-                                             ? 0
-                                             : (is + 1) * col_count_in_slice;
+                        start_position = (is == SL - 1) ? 0 : (is + 1) * col_count_in_slice;
                     }
-                    absolute_position = (start_position + relative_position) % q;
+                    uint32_t absolute_position = (start_position + zz) % q;
                     return absolute_position;
                 };
                 auto use_pseudorandom = (y == argon2i) || (y == argon2id && it == 0 && (is == 0 || is == 1));
@@ -148,7 +137,7 @@ struct argon2 {
                                 uint64_t qsl;
                                 uint8_t zeros[968];
                             };
-                            static_assert(sizeof(z) == 1024);
+                            static_assert(sizeof(z) == block_size);
 
                             z Z {
                                 .r = it,
@@ -160,11 +149,11 @@ struct argon2 {
                             };
 
                             // gen random numbers
-                            uint8_t out[1024];
+                            uint8_t out[block_size];
                             for (int i = 1; i <= col_count_in_slice; ++i) {
                                 // TODO: see libsodium argon2-fill-block-ref.c:generate_addresses()
                                 Z.qsl = i;
-                                uint8_t z[1024]{};
+                                uint8_t z[block_size]{};
                                 G(z, G(z, (uint8_t*)&Z, out), out);
                                 break; // is first block of numbers enough?
                             }
@@ -172,27 +161,27 @@ struct argon2 {
                             j1 = *(uint32_t*)(out + base * 8 + 0);
                             j2 = *(uint32_t*)(out + base * 8 + 4);
                         } else {
-                            j1 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * 1024);
-                            j2 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * 1024 + sizeof(j1));
+                            j1 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size);
+                            j2 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size + sizeof(j1));
                         }
 
                         auto l = calc_l(j2, j);
                         auto z = calc_z(j1, j % col_count_in_slice, l == i);
-                        auto Bij = B.data() + (q * i + j) * 1024;
+                        auto Bij = B.data() + (q * i + j) * block_size;
                         if (it > 0) {
-                            memcpy(tmp, Bij, 1024);
+                            memcpy(tmp, Bij, block_size);
                             G(
-                                B.data() + (q * i + (j == 0 ? q : j) - 1) * 1024,
-                                B.data() + (q * l + z) * 1024,
+                                B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size,
+                                B.data() + (q * l + z) * block_size,
                                 Bij
                             );
-                            for (int i = 0; i < 1024; ++i) {
+                            for (int i = 0; i < block_size; ++i) {
                                 Bij[i] ^= tmp[i];
                             }
                         } else {
                             G(
-                                B.data() + (q * i + j - 1) * 1024,
-                                B.data() + (q * l + z) * 1024,
+                                B.data() + (q * i + j - 1) * block_size,
+                                B.data() + (q * l + z) * block_size,
                                 Bij
                             );
                         }
@@ -202,10 +191,10 @@ struct argon2 {
         }
 
         // calc C
-        memcpy(tmp, B.data() + (q * 0 + q - 1) * 1024, 1024);
+        memcpy(tmp, B.data() + (q * 0 + q - 1) * block_size, block_size);
         for (uint32_t i = 1; i < p; ++i) {
-            auto p = B.data() + (q * i + q - 1) * 1024;
-            for (int i = 0; i < 1024; ++i) {
+            auto p = B.data() + (q * i + q - 1) * block_size;
+            for (int i = 0; i < block_size; ++i) {
                 tmp[i] ^= p[i];
             }
         }
@@ -215,11 +204,11 @@ struct argon2 {
         return out;
     }
     static uint8_t *G(uint8_t *X, uint8_t *Y, uint8_t *out) {
-        uint8_t R[1024], Q[1024], Z[1024];
-        for (int i = 0; i < 1024; ++i) {
+        uint8_t R[block_size], Q[block_size], Z[block_size];
+        for (int i = 0; i < block_size; ++i) {
             R[i] = X[i] ^ Y[i];
         }
-        memcpy(Q, R, 1024);
+        memcpy(Q, R, block_size);
         for (int i = 0; i < 8; ++i) {
             P(Q + i * 128);
         }
@@ -235,7 +224,7 @@ struct argon2 {
                 memcpy(Z + j * 128 + i * 16, Qinput + j * 16, 16);
             }
         }
-        for (int i = 0; i < 1024; ++i) {
+        for (int i = 0; i < block_size; ++i) {
             out[i] = R[i] ^ Z[i];
         }
         return out;

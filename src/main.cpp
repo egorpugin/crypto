@@ -910,6 +910,46 @@ void test_argon2() {
             b5 25 20 e9 6b 01 e6 59
     )"_sb);
     }
+    {
+    auto pass = R"(
+70617373
+)"_sb;
+    auto salt = R"(
+6161616161616161
+)"_sb;
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .taglen = 4,
+            .p = 1,
+            .m = 8,
+            .t = 1,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+7953c074
+    )"_sb);
+    }
+    {
+    auto pass = R"(
+70617373
+)"_sb;
+    auto salt = R"(
+6161616161616161
+)"_sb;
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .taglen = 5,
+            .p = 1,
+            .m = 8,
+            .t = 1,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+6d6fc6afe9
+    )"_sb);
+    }
 }
 
 void test_chacha20() {
