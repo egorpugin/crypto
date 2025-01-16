@@ -838,6 +838,7 @@ void test_scrypt() {
 void test_argon2() {
     using namespace crypto;
 
+    // from rfc
     auto pass = R"(
         01 01 01 01 01 01 01 01
         01 01 01 01 01 01 01 01
@@ -910,6 +911,7 @@ void test_argon2() {
             b5 25 20 e9 6b 01 e6 59
     )"_sb);
     }
+    // https://github.com/randombit/botan/blob/master/src/tests/data/argon2.vec
     {
     auto pass = R"(
 70617373
@@ -948,6 +950,22 @@ void test_argon2() {
         };
         cmp_bytes(a(), R"(
 6d6fc6afe9
+    )"_sb);
+    }
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 64,
+            .p = 16,
+            .m = 256,
+            .t = 10,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+f73b80dd42a7669e98aa98c58007b022055a0c0024d6b9064119b9d3ecba2476e4dcf4e444ba59762960a16660fff039ea80448a1f1e9b35814a05e311f52426
     )"_sb);
     }
 }

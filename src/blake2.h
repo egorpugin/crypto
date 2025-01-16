@@ -74,6 +74,7 @@ private:
     message_length_type bytelen{};
     int blockpos{};
     // parameters
+    // make templated?
     uint8_t output_bytes;
 
     constexpr void pad() noexcept {
