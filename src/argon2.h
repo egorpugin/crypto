@@ -4,6 +4,7 @@
 
 namespace crypto {
 
+// make fully templated?
 struct argon2 {
     enum type : uint32_t {
         argon2d, // not recommended
@@ -51,7 +52,7 @@ struct argon2 {
         auto block_count = 4 * p * (m / (4 * p));
         auto q = block_count / p; // column count
         constexpr auto SL = 4; // number of vertical slices
-        auto col_count_in_slice = q / SL;
+        auto cols_in_slice = q / SL;
 
         std::vector<uint8_t> B(block_count * block_size);
         auto pd = B.data();
@@ -70,43 +71,18 @@ struct argon2 {
         uint8_t tmp[block_size];
         for (uint32_t it = 0; it < t; ++it) { // iterations
             for (uint32_t is = 0; is < SL; ++is) { // slices
-                auto calc_l = [&](uint32_t j2, uint32_t j) {
+                auto calc_l = [&](uint32_t j2, uint32_t i) {
                     if (it == 0 && is == 0) {
-                        return j;
+                        return i;
                     }
                     return j2 % p;
                 };
                 auto calc_z = [&](uint32_t j1, uint32_t j, bool same_lane) {
-                    /*
-                     * Pass 0:
-                     *      This lane : all already finished segments plus already constructed
-                     * blocks in this segment
-                     *      Other lanes : all already finished segments
-                     * Pass 1+:
-                     *      This lane : (SL - 1) last segments plus already constructed
-                     * blocks in this segment
-                     *      Other lanes : (SL - 1) last segments
-                     */
                     uint32_t W;
-                    if (it == 0) {
-                        if (is == 0) {
-                            // all but the previous
-                            // never happens?
-                            W = j - 1;
-                        } else {
-                            if (same_lane) {
-                                // same lane => add current segment
-                                W = is * col_count_in_slice + j - 1;
-                            } else {
-                                W = is * col_count_in_slice + ((j == 0) ? (-1) : 0);
-                            }
-                        }
+                    if (it == 0 && is == 0) {
+                        W = j - 1;
                     } else {
-                        if (same_lane) {
-                            W = q - col_count_in_slice + j - 1;
-                        } else {
-                            W = q - col_count_in_slice + ((j == 0) ? (-1) : 0);
-                        }
+                        W = (it == 0 ? is : SL - 1) * cols_in_slice + (same_lane ? j - 1 : ((j == 0) * (-1)));
                     }
 
                     uint64_t x = j1;
@@ -116,57 +92,63 @@ struct argon2 {
 
                     uint32_t start_position{};
                     if (it != 0) {
-                        start_position = (is == SL - 1) ? 0 : (is + 1) * col_count_in_slice;
+                        start_position = (is == SL - 1) ? 0 : (is + 1) * cols_in_slice;
                     }
                     uint32_t absolute_position = (start_position + zz) % q;
                     return absolute_position;
                 };
                 auto use_pseudorandom = (y == argon2i) || (y == argon2id && it == 0 && (is == 0 || is == 1));
                 for (uint32_t i = 0; i < p; ++i) {
-                    auto j_start = it > 0 ? is * col_count_in_slice : std::max(2u, is * col_count_in_slice);
-                    for (uint32_t j = j_start; j < (is + 1) * col_count_in_slice; ++j) {
-                        uint32_t j1,j2;
-                        if (use_pseudorandom) {
-                            struct z {
-                                uint64_t r;
-                                uint64_t l;
-                                uint64_t sl;
-                                uint64_t m;
-                                uint64_t t;
-                                uint64_t y;
-                                uint64_t qsl;
-                                uint8_t zeros[968];
-                            };
-                            static_assert(sizeof(z) == block_size);
+                    using pseudo_rand_type = uint64_t;
+                    std::vector<pseudo_rand_type> pseudo_rands(cols_in_slice);
+                    if (use_pseudorandom) {
+                        struct z {
+                            uint64_t r;
+                            uint64_t l;
+                            uint64_t sl;
+                            uint64_t m;
+                            uint64_t t;
+                            uint64_t y;
+                            uint64_t qsl;
+                            uint8_t zeros[968];
+                        };
+                        static_assert(sizeof(z) == block_size);
 
-                            z Z {
-                                .r = it,
-                                .l = i,
-                                .sl = is,
-                                .m = block_count,
-                                .t = t,
-                                .y = y,
-                            };
+                        z Z {
+                            .r = it,
+                            .l = i,
+                            .sl = is,
+                            .m = block_count,
+                            .t = t,
+                            .y = y,
+                        };
 
-                            // gen random numbers
-                            uint8_t out[block_size];
-                            for (int i = 1; i <= col_count_in_slice; ++i) {
-                                // TODO: see libsodium argon2-fill-block-ref.c:generate_addresses()
-                                Z.qsl = i;
+                        // gen random numbers
+                        uint8_t out[block_size];
+                        for (int i = 0; i < cols_in_slice; ++i) {
+                            auto i_out = i % (block_size / sizeof(pseudo_rand_type));
+                            if (i_out == 0) {
+                                ++Z.qsl;
                                 uint8_t z[block_size]{};
                                 G(z, G(z, (uint8_t*)&Z, out), out);
-                                break; // is first block of numbers enough?
                             }
-                            auto base = j % col_count_in_slice;
-                            j1 = *(uint32_t*)(out + base * 8 + 0);
-                            j2 = *(uint32_t*)(out + base * 8 + 4);
+                            memcpy(&pseudo_rands[i], out + i_out * sizeof(pseudo_rand_type), sizeof(pseudo_rand_type));
+                        }
+                    }
+                    auto j_start = it > 0 ? is * cols_in_slice : std::max(2u, is * cols_in_slice);
+                    for (uint32_t j = j_start; j < (is + 1) * cols_in_slice; ++j) {
+                        uint32_t j1,j2;
+                        if (use_pseudorandom) {
+                            auto base = j % cols_in_slice;
+                            j1 = ((uint32_t*)(&pseudo_rands[base]))[0];
+                            j2 = ((uint32_t*)(&pseudo_rands[base]))[1];
                         } else {
                             j1 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size);
                             j2 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size + sizeof(j1));
                         }
 
-                        auto l = calc_l(j2, j);
-                        auto z = calc_z(j1, j % col_count_in_slice, l == i);
+                        auto l = calc_l(j2, i);
+                        auto z = calc_z(j1, j % cols_in_slice, l == i);
                         auto Bij = B.data() + (q * i + j) * block_size;
                         if (it > 0) {
                             memcpy(tmp, Bij, block_size);

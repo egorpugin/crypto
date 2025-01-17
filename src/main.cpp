@@ -968,6 +968,61 @@ void test_argon2() {
 f73b80dd42a7669e98aa98c58007b022055a0c0024d6b9064119b9d3ecba2476e4dcf4e444ba59762960a16660fff039ea80448a1f1e9b35814a05e311f52426
     )"_sb);
     }
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 64,
+            .p = 64,
+            .m = 4096,
+            .t = 32,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+f76f7ac4e23bae5c3d1797f5d8a7b40222f770f0b6d339d8b5d4c168a2dfb512838b2bd5f110397e1c15267f782f0067d8ef567a7556470cd13af4dedf1d585d
+    )"_sb);
+    }
+    // custom
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 64,
+            .p = 1,
+            .m = 4096,
+            .t = 32,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+e5 e7 84 a7 19 f2 2b 70 e9 ac 5f 2e 87 57 31 81
+b0 99 ff 9e fd 7c 16 0c 85 e3 bc 9e 5e fe d2 50
+6e c1 9b b8 87 f5 43 24 ae 0c be 28 e4 5c 2b 5e
+db 8f 1d c8 3f f3 f0 00 22 05 76 c5 4f 3b ed a4
+    )"_sb);
+    }
+    {
+        argon2 a{
+            .password = pass,
+            .salt = salt,
+            .key = key,
+            .associated_data = associated_data,
+            .taglen = 64,
+            .p = 10,
+            .m = 4096,
+            .t = 32,
+            .y = argon2::argon2id
+        };
+        cmp_bytes(a(), R"(
+12 73 12 13 2f 2a 9a 5d df f4 07 c7 59 a4 1a a5
+20 1a 2c 25 92 c1 46 c9 98 24 ac 91 e0 06 c6 59
+e6 40 c7 91 80 e8 ed eb 36 e0 44 d7 88 e4 fa af
+69 1b 0f d4 35 a8 81 d2 ed fd cb 57 e0 bc 10 53
+    )"_sb);
+    }
 }
 
 void test_chacha20() {
@@ -1449,7 +1504,7 @@ int main() {
     //test_sha1();
     //test_sha2();
     //test_sha3();
-    test_blake2();
+    //test_blake2();
     //test_sm3();
     //test_sm4();
     //test_ec();
