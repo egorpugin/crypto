@@ -5,6 +5,7 @@
 #include "sha2.h"
 #include "sha3.h"
 #include "blake2.h"
+#include "blake3.h"
 #include "sm4.h"
 #include "tls.h"
 #include "random.h"
@@ -446,6 +447,35 @@ void test_blake2() {
             "."
             , "c93a777c384d3186824ad214090cecfed185f0f9a618d696c5fea2dc63096643f87eac776f4c95a2b456f21aa225a092c46807c91b8656a79941af7d4cd82668");
     }
+}
+
+void test_blake3() {
+    using namespace crypto;
+    {
+        blake3 b;
+        b.compress("", 0, 0xb);
+        cmp_bytes(b.h, R"(af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262)"_sb);
+    }
+    {
+        blake3 b;
+        b.compress("IETF", 0, 0xb);
+        cmp_bytes(b.h, R"(83a2de1ee6f4e6ab686889248f4ec0cf4cc5709446a682ffd1cbb4d6165181e2)"_sb);
+    }
+    {
+        blake3 b;
+        b.compress("83a2de1ee6f4e6ab686889248f4ec0cf4cc5709446a682ffd1cbb4d6165181e2"s, 0, 0xb);
+        cmp_bytes(b.h, R"(9471e2d3a751a5944aed95dc8a8eb1d9411d95cc61cdac6cdb892cd0dc098b48)"_sb);
+    }
+    /*{
+        blake3 b;
+        b.compress("83a2de1ee6f4e6ab686889248f4ec0cf4cc5709446a682ffd1cbb4d6165181e29471e2d3a751a5944aed95dc8a8eb1d9411d95cc61cdac6cdb892cd0dc098b48"s, 0, 0xb);
+        cmp_bytes(b.h, R"(0d4fe4332d952c162479d5ce5548f2be1d27fd48f58e1793f33c3190d35dcedc)"_sb);
+    }
+    {
+        blake3 b;
+        b.compress("83a2de1ee6f4e6ab686889248f4ec0cf4cc5709446a682ffd1cbb4d6165181e29471e2d3a751a5944aed95dc8a8eb1d9411d95cc61cdac6cdb892cd0dc098b48."s, 0, 0xb);
+        cmp_bytes(b.h, R"(435c6b135d9cabcbe817208379b1209e558ff707538e762851d5d366e47178e8)"_sb);
+    }*/
 }
 
 void test_sm3() {
@@ -1505,6 +1535,7 @@ int main() {
     //test_sha2();
     //test_sha3();
     //test_blake2();
+    test_blake3();
     //test_sm3();
     //test_sm4();
     //test_ec();
@@ -1513,7 +1544,7 @@ int main() {
     //test_chacha20();
     //test_chacha20_aead();
     //test_scrypt();
-    test_argon2();
+    //test_argon2();
     //test_asn1();
     //test_streebog();
     //test_grasshopper();
