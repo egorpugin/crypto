@@ -157,6 +157,7 @@ struct argon2 {
             }
         }
 
+        // final
         std::vector<uint8_t> out(taglen);
         hash(tmp, taglen, out.data());
         return out;

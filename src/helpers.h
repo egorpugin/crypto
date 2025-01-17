@@ -60,6 +60,9 @@ struct bytes_concept {
     template <typename T, auto N>
     bytes_concept(T (&d)[N]) : p{(uint8_t*)d}, sz{sizeof(T) * N} {
     }
+    template <auto N>
+    bytes_concept(const char (&d)[N]) : p{(uint8_t*)d}, sz{N - 1} {
+    }
     bytes_concept(const std::string &s) {
         p = (uint8_t *)s.data();
         sz = s.size();
