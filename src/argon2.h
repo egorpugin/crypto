@@ -55,7 +55,13 @@ struct argon2 {
         auto cols_in_slice = q / SL;
 
         std::vector<uint8_t> B(block_count * block_size);
-        auto pd = B.data();
+        struct {
+            uint8_t *p;
+            uint32_t q;
+            uint8_t *operator()(int i, int j) {
+                return p + (q * i + j) * block_size;
+            }
+        } pb{B.data(), q};
 
         for (uint32_t i = 0; i < p; ++i) {
             uint8_t tmp[hash_size + sizeof(uint32_t) + sizeof(i)];
@@ -63,9 +69,9 @@ struct argon2 {
             *(uint32_t*)(tmp + h0.size() + sizeof(uint32_t)) = i;
 
             *(uint32_t*)(tmp + h0.size()) = 0;
-            hash(tmp, block_size, B.data() + (q * i + 0) * block_size);
+            hash(tmp, block_size, pb(i, 0));
             *(uint32_t*)(tmp + h0.size()) = 1;
-            hash(tmp, block_size, B.data() + (q * i + 1) * block_size);
+            hash(tmp, block_size, pb(i, 1));
         }
 
         uint8_t tmp[block_size];
@@ -101,34 +107,13 @@ struct argon2 {
                 for (uint32_t i = 0; i < p; ++i) {
                     using pseudo_rand_type = uint64_t;
                     std::vector<pseudo_rand_type> pseudo_rands(cols_in_slice);
-                    if (use_pseudorandom) {
-                        struct z {
-                            uint64_t r;
-                            uint64_t l;
-                            uint64_t sl;
-                            uint64_t m;
-                            uint64_t t;
-                            uint64_t y;
-                            uint64_t qsl;
-                            uint8_t zeros[968];
-                        };
-                        static_assert(sizeof(z) == block_size);
-
-                        z Z {
-                            .r = it,
-                            .l = i,
-                            .sl = is,
-                            .m = block_count,
-                            .t = t,
-                            .y = y,
-                        };
-
-                        // gen random numbers
+                    if (use_pseudorandom) { // gen random numbers
+                        uint64_t Z[block_size / sizeof(uint64_t)] { it, i, is, block_count, t, y, };
                         uint8_t out[block_size];
                         for (int i = 0; i < cols_in_slice; ++i) {
                             auto i_out = i % (block_size / sizeof(pseudo_rand_type));
                             if (i_out == 0) {
-                                ++Z.qsl;
+                                ++Z[6];
                                 uint8_t z[block_size]{};
                                 G(z, G(z, (uint8_t*)&Z, out), out);
                             }
@@ -136,36 +121,27 @@ struct argon2 {
                         }
                     }
                     auto j_start = it > 0 ? is * cols_in_slice : std::max(2u, is * cols_in_slice);
-                    for (uint32_t j = j_start; j < (is + 1) * cols_in_slice; ++j) {
-                        uint32_t j1,j2;
+                    for (uint32_t j = j_start, j_end = (is + 1) * cols_in_slice; j < j_end; ++j) {
+                        uint32_t j1, j2;
                         if (use_pseudorandom) {
-                            auto base = j % cols_in_slice;
-                            j1 = ((uint32_t*)(&pseudo_rands[base]))[0];
-                            j2 = ((uint32_t*)(&pseudo_rands[base]))[1];
+                            auto base = (uint32_t*)&pseudo_rands[j % cols_in_slice];
+                            j1 = base[0];
+                            j2 = base[1];
                         } else {
-                            j1 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size);
-                            j2 = *(uint32_t*)(B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size + sizeof(j1));
+                            j1 = *(uint32_t*)(pb(i, (j == 0 ? q : j) - 1));
+                            j2 = *(uint32_t*)(pb(i, (j == 0 ? q : j) - 1) + sizeof(j1));
                         }
-
                         auto l = calc_l(j2, i);
                         auto z = calc_z(j1, j % cols_in_slice, l == i);
-                        auto Bij = B.data() + (q * i + j) * block_size;
+                        auto Bij = pb(i, j);
                         if (it > 0) {
                             memcpy(tmp, Bij, block_size);
-                            G(
-                                B.data() + (q * i + (j == 0 ? q : j) - 1) * block_size,
-                                B.data() + (q * l + z) * block_size,
-                                Bij
-                            );
+                            G(pb(i, (j == 0 ? q : j) - 1), pb(l, z), Bij);
                             for (int i = 0; i < block_size; ++i) {
                                 Bij[i] ^= tmp[i];
                             }
                         } else {
-                            G(
-                                B.data() + (q * i + j - 1) * block_size,
-                                B.data() + (q * l + z) * block_size,
-                                Bij
-                            );
+                            G(pb(i, j - 1), pb(l, z), Bij);
                         }
                     }
                 }
@@ -173,9 +149,9 @@ struct argon2 {
         }
 
         // calc C
-        memcpy(tmp, B.data() + (q * 0 + q - 1) * block_size, block_size);
+        memcpy(tmp, pb(0, q - 1), block_size);
         for (uint32_t i = 1; i < p; ++i) {
-            auto p = B.data() + (q * i + q - 1) * block_size;
+            auto p = pb(i, q - 1);
             for (int i = 0; i < block_size; ++i) {
                 tmp[i] ^= p[i];
             }
