@@ -81,6 +81,7 @@ struct blake3 {
                 fl |= ROOT;
                 flags = fl;
                 n_chunks = 1;
+                blockpos = sizeof(m);
             }
             compress(h, m, sizeof(m), 0, fl);
             tree.pop_back();
@@ -118,7 +119,7 @@ struct blake3 {
     }
     std::vector<uint8_t> digest(size_t outlen = digest_size_bytes) noexcept {
         decltype(h) hsaved;
-        auto empty = !n_chunks && !n_blocks;
+        auto empty = !n_blocks;
         if (blockpos || empty) {
             if (empty) {
                 flags |= CHUNK_START;
