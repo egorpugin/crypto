@@ -109,7 +109,11 @@ struct sha2_data {
 };
 
 template <auto ShaType, auto DigestSizeBits = ShaType>
-struct sha2_base {
+struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
+    using hash_traits = hash_traits<sha2_base<ShaType, DigestSizeBits>>;
+    using hash_traits::digest;
+    using hash_traits::update;
+
     static_assert(ShaType == 256 || ShaType == 512);
     static inline constexpr auto small_sha = ShaType == 256;
     static inline constexpr auto rounds = small_sha ? 64 : 80;
@@ -123,12 +127,11 @@ struct sha2_base {
     static inline constexpr auto s = sha2_data::sigma<small_sha>();
     static inline constexpr auto S = sha2_data::sum<small_sha>();
 
-    void update(bytes_concept b) noexcept {
-        update(b.data(), b.size());
-    }
     void update(const uint8_t *data, size_t length) noexcept {
         bitlen += length * 8;
-        return update_slow(data, length);
+        hash_traits::update_fast_post(data, length, m_data, sizeof(m_data), blockpos, [&]() {
+            transform();
+        });
     }
     auto digest() noexcept {
         pad();
@@ -221,15 +224,6 @@ private:
             m_data[padding_size - i - 1] = (uint8_t)(bitlen >> (i * 8));
         }
         transform();
-    }
-    void update_slow(const uint8_t *data, size_t length) noexcept {
-        for (size_t i = 0; i < length; ++i) {
-            m_data[blockpos++] = data[i];
-            if (blockpos == chunk_size_bytes) {
-                transform();
-                blockpos = 0;
-            }
-        }
     }
 
     friend struct sha2_data;

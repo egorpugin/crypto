@@ -378,4 +378,62 @@ using uint128_t = std::_Unsigned128;
 using uint128_t = unsigned __int128;
 #endif
 
+template <typename T>
+concept data_and_size_members = requires (T v) {
+    v.data();
+    v.size();
+};
+
+template <typename T>
+struct hash_traits {
+    void update_fast_pre(const uint8_t *data, size_t length, uint8_t *dst, size_t dstsize, auto &blockpos, auto &&f) {
+        auto p = data;
+        while (length > 0) {
+            if (blockpos == dstsize) {
+                f();
+                blockpos = 0;
+            }
+            auto to_copy = std::min(length, dstsize - blockpos);
+            memcpy(dst + blockpos, p, to_copy);
+            p += to_copy;
+            blockpos += to_copy;
+            length -= to_copy;
+        }
+    }
+    void update_fast_post(const uint8_t *data, size_t length, uint8_t *dst, size_t dstsize, auto &blockpos, auto &&f) {
+        auto p = data;
+        while (length > 0) {
+            auto to_copy = std::min(length, dstsize - blockpos);
+            memcpy(dst + blockpos, p, to_copy);
+            p += to_copy;
+            blockpos += to_copy;
+            length -= to_copy;
+            if (blockpos == dstsize) {
+                f();
+                blockpos = 0;
+            }
+        }
+    }
+    void update(this auto &&obj, bytes_concept v, auto && ... v2) {
+        obj.update(v.data(), v.size());
+        (obj.update(v2),...);
+    }
+    // still not ready
+    /*void update(this auto &&obj, const uint8_t *data, size_t size) {
+        obj.update1(data, size);
+    }*/
+    static auto digest(std::initializer_list<bytes_concept> list) {
+        T h;
+        for (auto &&v : list) {
+            h.update(v);
+        }
+        return h.digest();
+    }
+    static auto digest(data_and_size_members auto && ... v) {
+        T h;
+        (h.update(v),...);
+        return h.digest();
+    }
+};
+
 } // namespace crypto
