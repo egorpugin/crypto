@@ -1,6 +1,6 @@
 #include <array>
-#include <string>
 #include <stdexcept>
+#include <string>
 
 struct deflater {
     template <auto MaxSize>
@@ -27,7 +27,6 @@ struct deflater {
         encoded_table<31> distance_code;
     };
 
-    static inline constexpr size_t datasz = 6400;
     static inline constexpr size_t outsz = 33000 * 2; // 32*1024*2+258;
     static inline constexpr auto reversed_bytes = []() {
         std::array<uint8_t, 256> v;
@@ -37,34 +36,53 @@ struct deflater {
         return v;
     }();
 
-    enum {
-        no_compression,
-        static_huffman,
-        dynamic_huffman,
-        error,
-    };
+    using extracted_type = uint32_t;
 
-    uint8_t data[datasz];
+    extracted_type data;
+    const uint8_t *ptr;
     int bitpos;
+    size_t bitsleft;
     std::string out;
 
     deflater() {
         out.reserve(outsz);
     }
     auto decode(const uint8_t *d, size_t len) {
-        auto tocopy = std::min(datasz, len);
-        memcpy(data, d, tocopy);
-        bitpos = 0;
-        process();
+        if (len > sizeof(extracted_type)) {
+            ptr = d;
+            auto sz = len - sizeof(extracted_type);
+            bitsleft = sz * 8;
+            len -= sz;
+            d += sz;
+            bitpos = 0;
+            process();
+        }
+        if (len) {
+            memcpy(&data, d, len);
+            ptr = (const uint8_t *)d;
+            bitpos = 0;
+            process();
+        }
+    }
+    auto getbits(int n) {
+        if (n > 16) [[unlikely]] {
+            throw std::runtime_error{"too big bit length"};
+        }
+        int byte = bitpos / 8;
+        // currently if we are on the page boundary, this can segv
+        auto u = *(extracted_type *)(ptr + byte);
+        u >>= bitpos % 8;
+        bitpos += n;
+        u &= (1 << n) - 1;
+        return u;
     }
     void process() {
         static constexpr int distance_offsets[]{1,   2,   3,   4,   5,   7,    9,    13,   17,   25,   33,   49,   65,    97,    129,
                                                 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577};
     more:
-        auto bfinal = getbits(1);
-        auto btype = getbits(2);
-        switch (btype) {
-        case no_compression: {
+        auto header = getbits(3);
+        switch (header >> 1) {
+        case 0: {
             bitpos = (bitpos + 8 - 1) / 8 * 8;
             auto len = getbits(16);
             auto nlen = getbits(16);
@@ -75,7 +93,7 @@ struct deflater {
             bitpos += len * 8;
             break;
         }
-        case static_huffman: {
+        case 0b01: {
             static constexpr auto code_index = []() {
                 struct code_entry {
                     int8_t length;
@@ -101,10 +119,13 @@ struct deflater {
             while (1) {
                 auto c = code_index[getbits(8)];
                 bitpos += c.length - 8;
-                if (c.code == 256) [[unlikely]] {
+                auto word = c.code;
+                if (word < 256) {
+                    out += (uint8_t)(word < 144 ? word : (((word - 144)) << 1) + 144 + getbits(1));
+                } else if (word == 256) [[unlikely]] {
                     break;
-                } else if (c.code > 256) {
-                    int length = c.code - 254;
+                } else {
+                    int length = word - 254;
                     if (length > 10) {
                         if (length == 31) {
                             length = 258;
@@ -127,13 +148,12 @@ struct deflater {
                         distance = distance_offsets[distance - 1] + getbits((distance - 3) >> 1);
                     }
                     append(length, distance);
-                } else {
-                    out += (uint8_t)(c.code < 144 ? c.code : (((c.code - 144)) << 1) + 144 + getbits(1));
                 }
             }
             break;
         }
-        case dynamic_huffman: {
+        [[likely]]
+        case 0b10: {
             auto hliteral = getbits(5);
             if (hliteral > 29) [[unlikely]] {
                 throw std::runtime_error{"bad length"};
@@ -289,40 +309,37 @@ struct deflater {
                 }
                 return word;
             };
-            auto read_data = [&](this auto &&read_data, auto &t) {
-                while (1) {
-                    auto word = read_word(t.codes);
-                    if (word < 256) {
-                        out += (uint8_t)word;
-                    } else if (word == 256) [[unlikely]] {
-                        break;
-                    } else {
-                        int length = word - 254;
-                        if (length > 10) {
-                            if (length == 31) {
-                                length = 258;
-                            } else {
-                                int next_bits = (length++ - 7) >> 2;
-                                auto additional_bits = getbits(next_bits);
-                                // this is a generalization of the size table at 3.2.5
-                                length = ((((length & 0x3) << next_bits) | additional_bits)) + ((1 << (length >> 2)) + 3);
-                            }
+            while (1) {
+                auto word = read_word(dc.codes);
+                if (word < 256) {
+                    out += (uint8_t)word;
+                } else if (word == 256) [[unlikely]] {
+                    break;
+                } else {
+                    int length = word - 254;
+                    if (length > 10) {
+                        if (length == 31) {
+                            length = 258;
+                        } else {
+                            int next_bits = (length++ - 7) >> 2;
+                            auto additional_bits = getbits(next_bits);
+                            // this is a generalization of the size table at 3.2.5
+                            length = ((((length & 0x3) << next_bits) | additional_bits)) + ((1 << (length >> 2)) + 3);
                         }
-                        int distance = read_word(t.distance_code) + 1;
-                        if (distance > 4) {
-                            distance = distance_offsets[distance - 1] + getbits((distance - 3) >> 1);
-                        }
-                        append(length, distance);
                     }
+                    int distance = read_word(dc.distance_code) + 1;
+                    if (distance > 4) {
+                        distance = distance_offsets[distance - 1] + getbits((distance - 3) >> 1);
+                    }
+                    append(length, distance);
                 }
-            };
-            read_data(dc);
+            }
             break;
         }
         default:
             throw std::runtime_error{"bad type"};
         }
-        if (!bfinal) {
+        if (!(header & 1)) {
             goto more;
         }
     }
@@ -334,16 +351,5 @@ struct deflater {
             length -= tocopy;
             distance += tocopy;
         }
-    }
-    auto getbits(int n) {
-        if (n > 16) [[unlikely]] {
-            throw std::runtime_error{"too big bit length"};
-        }
-        int byte = bitpos / 8;
-        auto u = *(uint32_t *)(data + byte);
-        u >>= bitpos % 8;
-        bitpos += n;
-        u &= (1 << n) - 1;
-        return u;
     }
 };
