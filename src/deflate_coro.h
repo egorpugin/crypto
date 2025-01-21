@@ -3,7 +3,9 @@
 #include <stdexcept>
 #include <string>
 
-struct deflater {
+//#include <iostream>
+
+struct deflater_coro {
     template <auto MaxSize>
     struct encoded_table {
         static inline constexpr auto max_size = MaxSize;
@@ -33,16 +35,27 @@ struct deflater {
         struct promise_type_base {
             std::coroutine_handle<> parent;
 
+            /*void *operator new(std::size_t n) noexcept {
+                if (auto mem = std::malloc(n)) {
+                    //std::cerr << std::format("alloc {:4} {}\n", n, mem);
+                    return mem;
+                }
+                return nullptr;
+            }
+            void operator delete(void *p) noexcept {
+                //std::cerr << std::format("free       {}\n", p);
+                std::free(p);
+            }*/
             auto get_return_object(this auto &&self) {
                 return resumable{std::coroutine_handle<std::decay_t<decltype(self)>>::from_promise(self)};
             }
-            auto initial_suspend() noexcept {return std::suspend_never{};}
+            auto initial_suspend() noexcept {return std::suspend_always{};}
             auto final_suspend() noexcept {
                 struct awaitable {
                     promise_type_base &self;
 
                     bool await_ready() noexcept {
-                        return false;
+                        return !self.parent;
                     }
                     auto await_suspend(std::coroutine_handle<>) noexcept {
                         return self.parent ? self.parent : std::noop_coroutine();
@@ -63,9 +76,9 @@ struct deflater {
                     bool await_ready() noexcept {
                         return std::coroutine_handle<typename resumable<U>::promise_type>::from_promise(p).done();
                     }
-                    bool await_suspend(std::coroutine_handle<> h) noexcept {
+                    auto await_suspend(std::coroutine_handle<> h) noexcept {
                         p.parent = h;
-                        return true;
+                        return std::coroutine_handle<typename resumable<U>::promise_type>::from_promise(p);
                     }
                     U await_resume() noexcept {
                         auto v = p.value;
@@ -82,9 +95,9 @@ struct deflater {
                     bool await_ready() noexcept {
                         return std::coroutine_handle<typename resumable<void>::promise_type>::from_promise(p).done();
                     }
-                    bool await_suspend(std::coroutine_handle<> h) noexcept {
+                    auto await_suspend(std::coroutine_handle<> h) noexcept {
                         p.parent = h;
-                        return true;
+                        return std::coroutine_handle<typename resumable<void>::promise_type>::from_promise(p);
                     }
                     void await_resume() noexcept {
                         std::coroutine_handle<typename resumable<void>::promise_type>::from_promise(p).destroy();
@@ -99,12 +112,10 @@ struct deflater {
         struct promise_type_value : promise_type_base {
             T value;
             void return_value(T v) {value = v;}
-            auto final_suspend() noexcept {return std::suspend_always{};}
         };
         using promise_type = std::conditional_t<std::is_same_v<T,void>,promise_type_void,promise_type_value>;
 
         std::coroutine_handle<promise_type> h;
-        //T value;
     };
 
     static inline constexpr size_t outsz = 33000 * 2; // 32*1024*2+258;
@@ -133,7 +144,7 @@ struct deflater {
             ptr = d;
             bitpos = 0;
             bitsleft = len * 8;
-            process();
+            process().h();
         } else {
             auto minusbytes = (bitsleft + 8 - 1) / 8;
             ptr = d - minusbytes;

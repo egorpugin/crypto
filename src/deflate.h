@@ -38,31 +38,19 @@ struct deflater {
 
     using extracted_type = uint32_t;
 
-    extracted_type data;
     const uint8_t *ptr;
-    int bitpos;
-    size_t bitsleft;
+    int64_t bitpos{};
+    int64_t bitsleft;
     std::string out;
 
     deflater() {
         out.reserve(outsz);
     }
     auto decode(const uint8_t *d, size_t len) {
-        if (len > sizeof(extracted_type)) {
-            ptr = d;
-            auto sz = len - sizeof(extracted_type);
-            bitsleft = sz * 8;
-            len -= sz;
-            d += sz;
-            bitpos = 0;
-            process();
-        }
-        if (len) {
-            memcpy(&data, d, len);
-            ptr = (const uint8_t *)d;
-            bitpos = 0;
-            process();
-        }
+        ptr = d;
+        bitsleft = len * 8;
+        process();
+        //return std::move(out);
     }
     auto getbits(int n) {
         if (n > 16) [[unlikely]] {
@@ -89,7 +77,7 @@ struct deflater {
             if ((~len & 0xffff) != nlen) {
                 throw std::runtime_error("Corrupted data, inverted length of literal block is mismatching");
             }
-            out.append((const char *)data + bitpos / 8, len);
+            out.append((const char *)ptr + bitpos / 8, len);
             bitpos += len * 8;
             break;
         }
