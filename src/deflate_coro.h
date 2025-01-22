@@ -136,7 +136,7 @@ struct deflater_coro {
     std::string out;
     std::coroutine_handle<> h;
 
-    deflater() {
+    deflater_coro() {
         out.reserve(outsz);
     }
     auto decode(const uint8_t *d, size_t len) {
@@ -158,7 +158,7 @@ struct deflater_coro {
             throw std::runtime_error{"too big bit length"};
         }
         struct awaitable {
-            deflater &d;
+            deflater_coro &d;
             int n;
             bool peek;
 
@@ -199,7 +199,7 @@ struct deflater_coro {
             auto len = co_await getbits(16);
             auto nlen = co_await getbits(16);
             if ((~len & 0xffff) != nlen) {
-                throw std::runtime_error("Corrupted data, inverted length of literal block is mismatching");
+                throw std::runtime_error{"Corrupted data, inverted length of literal block is mismatching"};
             }
             while (len) {
                 if (bitsleft == 0) {
@@ -316,7 +316,7 @@ struct deflater_coro {
                 };
                 struct unindexed_entry {
                     int quantity;
-                    int startIndex;
+                    int start_index;
                     int filled;
                 };
                 std::array<code_entry, t.max_size> codes{};
@@ -352,7 +352,7 @@ struct deflater_coro {
                     }
                 }
                 // Generate the codes
-                std::array<unindexed_entry, 256> unindexedEntries{};
+                std::array<unindexed_entry, 256> unindexed_entries{};
                 for (int size = 1, nextCode = 0; size <= 16; size++) {
                     if (quantities[size] > 0) {
                         for (int i = 0; i <= real_size; i++) {
@@ -372,7 +372,7 @@ struct deflater_coro {
                                     auto start = reversed_bytes[(uint8_t)(nextCode >> (size - 8))];
                                     codes[i].start = start;
                                     t.codes_index[start].valid = true;
-                                    unindexedEntries[start].quantity++;
+                                    unindexed_entries[start].quantity++;
                                     codes[i].ending = reversed_bytes[(uint8_t)nextCode] >> (16 - size);
                                 }
                                 nextCode++;
@@ -382,22 +382,22 @@ struct deflater_coro {
                     nextCode <<= 1;
                 }
                 // Calculate ranges of the longer parts
-                for (int currentStartIndex{}; auto &&entry : unindexedEntries) {
-                    entry.startIndex = currentStartIndex;
-                    currentStartIndex += entry.quantity;
+                for (int i{}; auto &&entry : unindexed_entries) {
+                    entry.start_index = i;
+                    i += entry.quantity;
                 }
                 // Index the longer parts
                 for (int i = 0; i < codes.size(); i++) {
                     auto &code = codes[i];
                     if (code.length > 8) {
-                        auto &unindexedEntry = unindexedEntries[code.start];
-                        auto &remainder = t.remainders[unindexedEntry.startIndex + unindexedEntry.filled];
-                        t.codes_index[code.start].word = t.max_size + unindexedEntry.startIndex;
-                        unindexedEntry.filled++;
+                        auto &ue = unindexed_entries[code.start];
+                        auto &remainder = t.remainders[ue.start_index + ue.filled];
+                        t.codes_index[code.start].word = t.max_size + ue.start_index;
+                        ue.filled++;
                         remainder.remainder = code.ending; // The upper bits are cut
                         remainder.bits_left = code.length - 8;
                         remainder.index = i;
-                        if (unindexedEntry.filled == unindexedEntry.quantity) {
+                        if (ue.filled == ue.quantity) {
                             remainder.index |= 0x8000;
                         }
                     }
