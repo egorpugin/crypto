@@ -225,6 +225,9 @@ struct static_string {
     }
     operator auto() const { return &p[0]; }
     operator string_view() const { return string_view{p, N-1}; }
+    constexpr auto size() const { return N-1; }
+    constexpr auto begin() const {return p;}
+    constexpr auto end() const {return p+size();}
 };
 template<static_string s>
 constexpr auto operator""_s() { return s; }

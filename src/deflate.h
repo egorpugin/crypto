@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <string>
 
-struct deflater {
+struct deflate {
     static inline constexpr auto reversed_bytes = []() {
         std::array<uint8_t, 256> v;
         for (int i = 0; i < 256; ++i) {
@@ -66,7 +66,7 @@ struct deflater {
     int64_t bitsleft;
     std::string out;
 
-    deflater() {
+    deflate() {
         static constexpr size_t outsz = 33000 * 2; // 32*1024*2+258;
         out.reserve(outsz);
     }
@@ -75,6 +75,14 @@ struct deflater {
         bitsleft = len * 8;
         process();
         //return std::move(out);
+    }
+    static auto inflate(const uint8_t *d, size_t len) {
+        deflate r;
+        r.decode(d, len);
+        return std::move(r.out);
+    }
+    static auto inflate(auto &&d) {
+        return inflate((const uint8_t *)d.data(), d.size());
     }
     auto getbits(int n, bool peek = false) {
         if (n > 16) [[unlikely]] {
