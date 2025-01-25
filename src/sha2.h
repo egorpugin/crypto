@@ -151,11 +151,6 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
             return hash;
         }
     }
-    static auto digest(auto &&v) noexcept {
-        sha2_base h;
-        h.update(v);
-        return h.digest();
-    }
 
 private:
     uint8_t m_data[chunk_size_bytes];
