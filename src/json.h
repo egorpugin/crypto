@@ -251,6 +251,7 @@ struct json_raw {
         return v;
     }
     static this_type parse1(std::string_view &p) {
+        if (!p.empty())
         switch (get_symbol(p)) {
         case '{':
             return {parse1<object, '{', '}'>(p, [&](auto &&v) {

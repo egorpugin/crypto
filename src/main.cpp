@@ -1639,23 +1639,24 @@ void test_tls() {
 void test_jwt() {
     using namespace crypto;
 
-    auto check_hs256 = [](auto &&payload, auto &&secret, auto &&res) {
-        auto x = jwt{jwt::hs<256>{}, payload, secret};
-        if (!cmp_base(x, res)) {
+    auto check = [](auto &&h, auto &&payload, auto &&res, bool verify_only, auto &&...args) {
+        jwt x{payload};
+        x.sign(h, args...);
+        if (!verify_only && !cmp_base(x, res)) {
+            std::println("{}", (std::string)x);
+        }
+        if (!cmp_base(x.verify(h, args...), true)) {
             std::println("{}", (std::string)x);
         }
     };
-    auto check_rs256 = [](auto &&payload, auto &&secret, auto &&res) {
-        auto x = jwt{jwt::rs<256>{}, payload, secret};
-        if (!cmp_base((std::string)x, (std::string)res)) {
-            std::println("{}", (std::string)x);
-        }
+    auto check_hs256 = [&](auto &&payload, auto &&secret, auto &&res) {
+        check(jwt::hs<256>{}, payload, res, false, secret);
     };
-    auto check_ps256 = [](auto &&payload, auto &&secret, auto &&res) {
-        auto x = jwt{jwt::ps<256>{}, payload, secret};
-        if (!cmp_base(x, res)) {
-            std::println("{}", (std::string)x);
-        }
+    auto check_rs256 = [&](auto &&payload, auto &&secret, auto &&res) {
+        check(jwt::rs<256>{}, payload, res, false, secret);
+    };
+    auto check_ps512 = [&](auto &&payload, auto &&secret, auto &&res) {
+        check(jwt::ps<512>{}, payload, res, true, secret);
     };
 
     check_hs256(
@@ -1688,6 +1689,7 @@ void test_jwt() {
 
     struct rsa_pkey {
         bigint n;
+        bigint e;
         bigint d;
     };
     rsa_pkey pk;
@@ -1705,10 +1707,12 @@ void test_jwt() {
 
         auto pkey = a.get<asn1_sequence>(pkcs8::private_key::main,pkcs8::private_key::privatekey,rsa_private_key::main);
         pk.n = set(pkey, rsa_private_key::modulus);
+        pk.e = set(pkey, rsa_private_key::public_exponent);
         pk.d = set(pkey, rsa_private_key::private_exponent);
     } else if (type == pkcs1) {
         auto pkey = a.get<asn1_sequence>(pkcs8::private_key::main);
         pk.n = set(pkey, rsa_private_key::modulus);
+        pk.e = set(pkey, rsa_private_key::public_exponent);
         pk.d = set(pkey, rsa_private_key::private_exponent);
     } else {
         throw;
@@ -1723,13 +1727,14 @@ void test_jwt() {
         "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.MmNFMRvbzG6eb9kYkHXRMwOiEbkDBMXIQOk0Vrnipt4GL39Vz-y5YayzgfUOE_-xZdQGWYQWhxGnBIBQDRqkIBR1UMzL_adWd4FgpdMxaGdXScWupTj8_chBPsCzYvvImqm0b5buLHSs7FwXUVrMeEodpN3lyeuu8RV7vwTiitV3HwuQdm9z5TcOSPJjYw0tv1qNfoKscNiJK4-1VGl00rbneKevRKtlmuz8ddLMW7el-IoY9mwZyEkFpL5BsWZUiYN_64PgTmGYuBN7qU32PgWX9QAgwn6YjgwaY43pyet65jUwC7-bx2QnL6lBeja3rACuk3ph0PWNUZHZgNXbrg"_jwt
     );
 
-    check_ps256(
+    // salt is different every time, but verify will work
+    check_ps512(
         R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk,
-        "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.BEuyvUt_1wnbpXkK1uXqzImtMQ90ssmKZr-6HJKdJmQbvEa2hl1-iLGdIo32TJbVCvTmdB2Bj3V-9R5YOkN1SxgHe4H2KphwCwgiat5HRbfnXoTd_o1IO_GPaqDw9c1HFdbCLH8oWEBZTcqkB_lFhHMnXm0nvApw9sIsnFwH9S41vbOyCU95nEE4lZWj_qmEVIM7EtIdcGpMFjebdf_K5G7rlEEnZtufcvgTPyY-cD-god1Y_3eV7LntT3rrQNF90h-GFsjgUP5gw9DW2iG7ThGGN2j2cnLy6gN-JBdI0ZLsxE2zJqinVjO8c6tdQo0Gl1RDCXMporkh5WS5tN-ZLA"_jwt
+        ""_jwt
     );
-    check_ps256(
+    check_ps512(
         R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk,
-        "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.aqqHeq-XRjUZ3aejoGzXlUwX8FNhn5uItV80YKM7O1EhdIewa0GkrpWdYXoO34APV71dGYio6j8JT0WY69BIkEQxadKMN9Gc0c5ZoUpQ1IAw4TkVr9eMAPJypmK76zylPh28Zd2gbsFeYCdwY5RchqQxQTnsqLliy36jQ1b4dHQ2cQ-3geKMKj3Ep9U8hbd6bME1yTRbOACQ4Y-_Wn_0Kd4FqXZqyg5ZatnDg3R7Mo3wPzRYPGi538D5ng1X2-GpGAs6s4HFU3NebvoBihIDk8iF1A2_szjq0CWQdrH6lXCeden1f1iONcTN5Vl-AGId22VmcUo0ep_Yh0HTH2ciEw"_jwt
+        ""_jwt
     );
 }
 

@@ -16,8 +16,11 @@ struct jwt {
         static auto name() {
             return std::format("HS{}", Bits);
         }
-        auto operator()(auto &&msg, auto &&secret) {
+        auto sign(auto &&msg, auto &&secret) {
             return hmac<sha2<Bits>>(secret,msg);
+        }
+        auto verify(auto &&msg, auto &&signature, auto &&secret) {
+            return bytes_concept{sign(msg, secret)} == bytes_concept{signature};
         }
     };
     template <auto Bits>
@@ -31,7 +34,7 @@ struct jwt {
             if (Bits == 512) return 3;
             throw;
         }
-        auto operator()(auto &&m, auto &&pkey) {
+        auto sign(auto &&m, auto &&pkey) {
             // RSA_PKCS1
             // RSA_PKCS1_PADDING
             auto mhash = sha2<Bits>::digest(m);
@@ -57,29 +60,35 @@ struct jwt {
             h = h.powm(pkey.d, pkey.n);
             return h.to_string();
         }
+        bool verify(auto &&m, auto &&signature, auto &&pkey) {
+            return bytes_concept{sign(m, pkey)} == bytes_concept{signature};
+        }
     };
     template <auto Bits>
     struct pkcs1_pss_mgf1_sha2 {
+        static inline constexpr unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
         static auto name() {
             return std::format("PS{}", Bits);
         }
-        auto operator()(auto &&m, auto &&pkey) {
+        static auto pkcs1_mgf1(auto &&p, auto &&sz, auto &&seed) {
+            for (uint32_t i = 0, outlen = 0; outlen < sz; ++i) {
+                sha2<Bits> h;
+                h.update(seed);
+                auto counter = std::byteswap(i);
+                h.update((const uint8_t *)&counter, 4);
+                auto r = h.digest();
+                auto to_copy = std::min<int>(sz - outlen, r.size());
+                memcpy(p + outlen, r.data(), to_copy);
+                outlen += to_copy;
+            }
+        }
+        auto sign(auto &&m, auto &&pkey) {
             // PKCS1_PSS_mgf1
             // RSA_PKCS1_PSS_PADDING + salt size = hash size
-            auto pkcs1_mgf1 = [](auto &&p, auto &&sz, auto &&seed) {
-                for (uint32_t i = 0, outlen = 0; outlen < sz; ++i) {
-                    sha2<Bits> h;
-                    h.update(seed);
-                    auto counter = std::byteswap(i);
-                    h.update((const uint8_t *)&counter, 4);
-                    auto r = h.digest();
-                    auto to_copy = std::min<int>(sz - outlen, r.size());
-                    memcpy(p + outlen, r.data(), to_copy);
-                    outlen += to_copy;
-                }
-            };
 
             auto mhash = sha2<Bits>::digest(m);
+            auto hlen = mhash.size();
+            auto slen = hlen; // same size
             auto emlen = pkey.n.size();
             std::string em(emlen, 0);
             auto embits = (emlen * 8 - 1) & 0x7;
@@ -88,27 +97,27 @@ struct jwt {
                 *EM++ = 0;
                 --emlen;
             }
-            if (emlen < mhash.size() + 2) {
+            if (emlen < hlen + slen + 2) {
                 throw std::runtime_error{"encoding error"};
             }
-            std::string salt(mhash.size(), 0);
+            std::string salt(hlen, 0);
             get_random_secure_bytes(salt);
 
-            auto masked_db_len = emlen - mhash.size() - 1;
+            auto masked_db_len = emlen - hlen - 1;
             auto H = EM + masked_db_len;
             sha2<Bits> hh;
-            hh.update((const uint8_t *)em.data(), 8);
+            hh.update(zeroes);
             hh.update(mhash);
             hh.update(salt);
-            auto h2 = hh.digest();
-            memcpy(H, h2.data(), h2.size());
+            auto mseed = hh.digest();
+            memcpy(H, mseed.data(), mseed.size());
 
-            pkcs1_mgf1(EM, masked_db_len, h2);
+            pkcs1_mgf1(EM, masked_db_len, mseed);
 
             auto p = EM;
-            p += emlen - mhash.size() - salt.size() - 2;
+            p += emlen - hlen - slen - 2;
             *p++ ^= 0x01;
-            for (int i = 0; i < mhash.size(); ++i) {
+            for (int i = 0; i < slen; ++i) {
                 *p++ ^= salt[i];
             }
             if (embits) {
@@ -120,6 +129,50 @@ struct jwt {
             auto h = bytes_to_bigint(em);
             h = h.powm(pkey.d, pkey.n);
             return h.to_string();
+        }
+        bool verify(auto &&m, auto &&signature, auto &&pkey) {
+            auto h = bytes_to_bigint(signature);
+            h = h.powm(pkey.e, pkey.n);
+            auto em = h.to_string();
+
+            auto mhash = sha2<Bits>::digest(m);
+            auto hlen = mhash.size();
+            auto slen = hlen;
+            auto emlen = em.size();
+            auto embits = (emlen * 8 - 1) & 0x7;
+            auto EM = em.data();
+            if (embits == 0) {
+                *EM++ = 0;
+                --emlen;
+            }
+            if (emlen < hlen + slen + 2) {
+                return false; // inconsistent
+            }
+            if ((uint8_t)EM[emlen - 1] != 0xbc) {
+                return false; // inconsistent
+            }
+            auto masked_db_len = emlen - hlen - 1;
+            auto H = EM + masked_db_len;
+            std::string db(masked_db_len, 9);
+            std::string_view mseed{H, hlen};
+            pkcs1_mgf1(db.data(), masked_db_len, mseed);
+            for (int i = 0; i < masked_db_len; ++i) {
+                db[i] ^= EM[i];
+            }
+            if (embits) {
+                db[0] &= 0xFF >> (8 - embits);
+            }
+            int i;
+            for (i = 0; db[i] == 0 && i < masked_db_len - 1; i++){}
+            if (db[i++] != 0x1) {
+                return false;
+            }
+
+            sha2<Bits> hh;
+            hh.update(zeroes);
+            hh.update(mhash);
+            hh.update((const uint8_t *)db.data() + i, masked_db_len - i);
+            return bytes_concept{mseed} == bytes_concept{hh.digest()};
         }
     };
 
@@ -134,6 +187,7 @@ struct jwt {
     json payload;
     std::string signature;
 
+    jwt() = default;
     jwt(std::string_view s) {
         auto sp = std::views::split(s, '.');
         auto it = std::begin(sp);
@@ -141,21 +195,17 @@ struct jwt {
         payload = json::parse(b64::decode(std::string_view(*it++)));
         signature = b64::decode(std::string_view(*it++));
     }
-    template <auto Bits>
-    jwt(hmac_sha2<Bits> h, auto &&payload, auto &&secret) {
-        make_header(h.name());
-        this->payload = payload;
-        make_sig([&](auto &&msg){return h(msg, secret);});
+    jwt(const json &payload) : payload{payload} {
     }
-    jwt(rs<256> h, auto &&payload, auto &&private_key) {
+
+    std::string sign(auto h, auto &&...args) {
         make_header(h.name());
-        this->payload = payload;
-        make_sig([&](auto &&msg){return h(msg, private_key);});
+        auto sig = h.sign(concat(), args...);
+        signature = std::string(sig.begin(), sig.end());
+        return *this;
     }
-    jwt(ps<256> h, auto &&payload, auto &&private_key) {
-        make_header(h.name());
-        this->payload = payload;
-        make_sig([&](auto &&msg){return h(msg, private_key);});
+    bool verify(auto h, auto &&...args) {
+        return h.verify(concat(), signature, args...);
     }
 
     auto operator<=>(const jwt &) const = default;
@@ -167,12 +217,11 @@ private:
     void make_header(auto &&type) {
         header = json::parse(std::format(R"({{"alg":"{}","typ":"JWT"}})", type));
     }
-    void make_sig(auto &&fsig) {
+    std::string concat() {
         auto header_encoded = b64::encode(header.dump());
         auto payload_encoded = b64::encode(payload.dump());
         auto concat = header_encoded + "." + payload_encoded;
-        auto sig = fsig(concat);
-        signature = std::string(sig.begin(), sig.end());
+        return concat;
     }
 };
 
