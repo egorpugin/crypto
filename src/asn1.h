@@ -152,19 +152,79 @@ struct asn1_base : asn1_container {
         };
         return x{data};
     }
+
+    static constexpr auto count_bytes(auto v) {
+        int bytes = 1;
+        while (v >= 0x80) {
+            ++bytes;
+            v >>= 8;
+        }
+        return bytes;
+    }
+    static constexpr auto write_bytes(auto &p, auto v) {
+        if (v < 0x80) {
+            *p++ = v;
+        } else {
+            auto b = count_bytes(v);
+            p += b - 1;
+            *p-- = v & 0b0111'1111;
+            v >>= 7;
+            while (v >= 0x80) {
+                *p-- = 0x80 | v;
+                v >>= 7;
+            }
+            *p = 0x80 | v;
+            p += b;
+        }
+    }
+    static constexpr auto make_bytes(auto sz) {
+        std::string s(count_bytes(sz), 0);
+        auto p = s.data();
+        write_bytes(p, sz);
+        return s;
+    }
 };
 struct asn1_sequence : asn1_base {
     static inline constexpr auto tag = 0x30;
     using asn1_base::asn1_base;
+
+    static auto make(auto &&...data) {
+        auto len = (0 + ... + data.size());
+        std::string s(1 + len + count_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_bytes(p, len);
+        ((memcpy(p, data.data(), data.size()),p += data.size()),...);
+        return s;
+    }
 };
 struct asn1_set : asn1_base {
     static inline constexpr auto tag = 0x31;
+};
+struct asn1_integer : asn1_base {
+    static inline constexpr auto tag = 0x02;
 };
 struct asn1_bit_string : asn1_base {
     static inline constexpr auto tag = 0x03;
 };
 struct asn1_octet_string : asn1_base {
     static inline constexpr auto tag = 0x04;
+
+    static auto make(auto &&data) {
+        auto len = make_bytes(data.size());
+        std::string s(len.size() + data.size() + 1, 0);
+        s[0] = tag;
+        memcpy(s.data() + 1, len.data(), len.size());
+        memcpy(s.data() + 1 + len.size(), data.data(), data.size());
+        return s;
+    }
+};
+struct asn1_null : asn1_base {
+    static inline constexpr auto tag = 0x05;
+
+    static auto make() {
+        return std::string{tag, 0};
+    }
 };
 struct asn1_printable_string : asn1_base {
     static inline constexpr auto tag = 0x13;
@@ -203,11 +263,31 @@ struct asn1_oid : asn1_base {
         }
         return s;
     }
+    static auto make(auto &&data) {
+        auto len = data.size();
+        std::string s(1 + len + count_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_bytes(p, len);
+        memcpy(p, data.data(), data.size());
+        return s;
+    }
 };
 struct asn1 : asn1_sequence {
     using asn1_sequence::asn1_sequence;
 };
 
+template <auto n1, auto n2, auto ... nodes>
+constexpr auto make_oid() {
+    constexpr int nbytes = (1 + ... + asn1::count_bytes(nodes));
+    std::array<uint8_t, nbytes> data;
+    data[0] = n1 * 40 + n2;
+    auto p = data.data() + 1;
+    (asn1::write_bytes(p, nodes),...);
+    return data;
+}
+
+// some structures of asn1 objects
 struct x509 {
     /*
     struct certificate {
@@ -243,38 +323,73 @@ struct x509 {
     };
 };
 
-template <auto n1, auto n2, auto ... nodes>
-constexpr auto make_oid() {
-    auto count_bytes = [](auto v) {
-        int bytes = 1;
-        while (v >= 0x80) {
-            ++bytes;
-            v >>= 8;
-        }
-        return bytes;
+struct pkcs8 {
+    struct private_key {
+        enum {
+            main, // main object
+        };
+        enum {
+            version,
+            algorithm,
+            privatekey,
+        };
+        enum {
+            algorithm_oid,
+            parameters,
+        };
     };
-    auto make_bytes = [&](uint8_t *&p, auto v) {
-        if (v < 0x80) {
-            *p++ = v;
-        } else {
-            auto b = count_bytes(v);
-            p += b - 1;
-            *p-- = v & 0b0111'1111;
-            v >>= 7;
-            while (v >= 0x80) {
-                *p-- = 0x80 | v;
-                v >>= 7;
-            }
-            *p = 0x80 | v;
-            p += b;
-        }
+};
+
+struct rsa_private_key {
+    enum {
+        main, // main object
     };
-    constexpr int nbytes = (1 + ... + count_bytes(nodes));
-    std::array<uint8_t, nbytes> data;
-    data[0] = n1 * 40 + n2;
-    auto p = data.data() + 1;
-    (make_bytes(p, nodes),...);
-    return data;
-}
+    enum {
+        version,
+        modulus, // n
+        public_exponent, // e
+        private_exponent, // d
+        prime1, // p
+        prime2, // q
+        exponent1, // d mod (p-1)
+        exponent2, // d mod (q-1)
+        coefficient, // (inverse of q) mod p
+        other_infos,
+    };
+};
+
+struct oid {
+    enum {
+        iso = 1,
+        joint_iso_itu_t,
+    };
+    enum {
+        member_body = 2,
+        country = 16,
+    };
+    enum {
+        us = 840,
+    };
+    enum {
+        organization = 1,
+    };
+    enum {
+        gov = 101,
+    };
+    enum {
+        csor = 3,
+    };
+    enum {
+        nistalgorithm = 4,
+    };
+    enum {
+        hashalgs = 2,
+    };
+    enum {
+        sha256 = 1,
+        sha384,
+        sha512,
+    };
+};
 
 } // namespace crypto
