@@ -29,19 +29,93 @@ some of replacements
     case 0x2029:  stream << "\\P";  break;
 */
 
-struct json {
-    //using string_view = std::u8string_view;
-    using string_type = std::string;
+template <typename K, typename T, typename IgnoredLess = std::less<K>,
+    typename Allocator = std::allocator<std::pair<const K, T>>>
+struct ordered_map : std::vector<std::pair<const K, T>, Allocator>
+{
+    using key_type = K;
+    using mapped_type = T;
+    using base = std::vector<std::pair<const K, T>, Allocator>;
+    using typename base::iterator;
+    using typename base::value_type;
 
-    using array = std::vector<json>;
-    using object = ::std::map<string_type, json>;
-    using simple_value = variant<string_type, int64_t, double, bool, nullptr_t>;
+    auto find(this auto &&self, auto &&key) {
+        return std::find_if(self.begin(), self.end(), [&](auto &&p){return key == p.first;});
+    }
+    std::pair<iterator, bool> emplace(auto &&key, T &&t) {
+        auto it = find(key);
+        if (it != base::end())  {
+            return {it, false};
+        }
+        base::emplace_back(key, t);
+        return {--this->end(), true};
+    }
+    T &operator[](auto &&key) {
+        return emplace(std::move(key), T{}).first->second;
+    }
+    auto erase(const K &key) {
+        auto it = find(key);
+        if (it != base::end())  {
+            // cannot move const keys, re-construct inplace
+            for (auto next = it; ++next != this->end(); ++it) {
+                it->~value_type();
+                new (&*it) value_type{std::move(*next)};
+            }
+            base::pop_back();
+            return 1;
+        }
+        return 0;
+    }
+};
+
+// options:
+// view or owning
+template <bool Owning, bool Ordered>
+struct json_raw {
+    //using string_view = std::u8string_view;
+    using string_type = std::conditional_t<Owning, std::string, std::string_view>;
+    template <typename K, typename T>
+    using map_type = std::conditional_t<Ordered, ordered_map<K,T>, ::std::map<K,T>>;
+    static inline constexpr auto json_view = std::same_as<string_type, std::string_view>;
+    using this_type = json_raw;
+
+    using array = std::vector<this_type>;
+    using object = map_type<string_type, this_type>;
+    using simple_value = variant<string_type, int64_t, double
+        //, bool, nullptr_t
+    >;
     //using simple_value = std::variant<string_type>;
     using value_type = std::variant<simple_value, array, object>;
 
     value_type value;
 
-    auto operator<=>(const json &) const = default;
+    /*template <bool B1, bool B2>
+    this_type &operator=(const json_raw<B1, B2> &rhs) {
+        auto &self = *this;
+        visit_any(rhs.value
+            , [&](const simple_value &v) {
+                value = v;
+            }
+            , [&](const array &v) {
+                value = array{};
+                for (auto &&k : v) {
+                    push_back(k);
+                }
+            }
+            , [&](const object &m) {
+                value = object{};
+                for (auto &&[k,v] : m) {
+                    self[k] = v;
+                }
+            }
+        );
+        return self;
+    }*/
+    void push_back(auto &&v) {
+        auto &a = std::get<array>(value);
+        a.push_back(v);
+    }
+    auto operator<=>(const this_type &) const = default;
     auto &operator[](auto &&key) const {
         auto &p = std::get<object>(value);
         if (auto i = p.find(key); i != p.end()) {
@@ -82,9 +156,6 @@ struct json {
         std::ranges::copy(p, std::back_inserter(v));
         return v;
     }
-    operator string_view() const {
-        return std::get<string_view>(std::get<simple_value>(value));
-    }
     operator vector<string_view>() const {
         auto &p = std::get<array>(value);
         vector<string_view> v;
@@ -92,77 +163,104 @@ struct json {
         std::ranges::copy(p, std::back_inserter(v));
         return v;
     }*/
+    operator std::string() const {
+        return std::get<string_type>(std::get<simple_value>(value));
+    }
+
+    template <bool ToJson>
+    static void replace_chars(std::string &s) {
+        auto repl = [&](auto &&from, auto &&to) {
+            if constexpr (ToJson) {
+                replace_all(s, to, from);
+            } else {
+                replace_all(s, from, to);
+            }
+        };
+        repl("\\n"sv, "\n"sv);
+    }
 
     static void check_null(auto p) {
         if (!*p) {
             throw std::runtime_error{"unexpected eof"};
         }
     }
-    static void eat_space(auto &p) {
-        while (*p && isspace(*p)) {
-            ++p;
+    static void eat_space(std::string_view &p) {
+        while (p[0] && isspace(p[0])) {
+            p.remove_prefix(1);
         }
     }
-    static auto get_symbol(auto &p) {
+    static auto get_symbol(std::string_view &p) {
         eat_space(p);
-        return *p;
+        return p[0];
     }
-    static void eat_symbol(auto &p, auto c) {
+    static void eat_symbol(std::string_view &p, auto c) {
         if (get_symbol(p) != c) {
             throw std::runtime_error{"unexpected '"s + c + "'"s};
         }
-        ++p;
+        p.remove_prefix(1);
     }
-    static auto eat_string(auto &p) {
-        auto start = p;
-        while (!(*p == '\"' && *(p - 1) != '\\')) {
-            ++p;
+    static auto eat_string(std::string_view &p) {
+        auto start = p.data();
+        while (!(p[0] == '\"' && *(p.data()-1) != '\\')) {
+            p.remove_prefix(1);
         }
-        return std::string_view{start, p};
+        return std::string_view{start, p.data()};
     }
-    static auto eat_string_quoted(auto &p) {
+    static auto eat_string_quoted(std::string_view &p) {
         eat_symbol(p, '\"');
-        auto s = eat_string(p);
-        eat_symbol(p, '\"');
-        return s;
+        if constexpr (!json_view) {
+            std::string s(eat_string(p));
+            replace_chars<false>(s);
+            eat_symbol(p, '\"');
+            return s;
+        } else {
+            auto s = eat_string(p);
+            eat_symbol(p, '\"');
+            return s;
+        }
     }
-    static simple_value eat_number(auto &p) {
-        auto end = strpbrk(p, ",}]");
-        int i;
-        if (std::from_chars(p, end, i).ec != std::errc{}) {
+    static simple_value eat_number(std::string_view &p) {
+        auto endp = p.find_first_of(",}] "sv);
+        auto end = p.data() + endp;
+        int64_t i;
+        auto [e,ec] = std::from_chars(p.data(), end, i);
+        if (ec != std::errc{} || e != end) {
             double d;
-            if (std::from_chars(p, end, i).ec != std::errc{}) {
+            auto [e,ec] = std::from_chars(p.data(), end, i);
+            if (ec != std::errc{} || e != end) {
                 throw std::runtime_error{"bad number"};
             }
+            p.remove_prefix(endp);
             return d;
         }
+        p.remove_prefix(endp);
         return i;
     }
 
     template <typename T, auto start_sym, auto end_sym>
-    static auto parse(auto &p, auto &&f) {
+    static auto parse1(std::string_view &p, auto &&f) {
         eat_symbol(p, start_sym);
         T v;
-        while (*p != end_sym) {
+        while (p[0] != end_sym) {
             f(v);
             if (get_symbol(p) == ',') {
-                ++p;
+                p.remove_prefix(1);
             }
         }
         eat_symbol(p, end_sym);
         return v;
     }
-    static json parse(const char *&p) {
+    static this_type parse1(std::string_view &p) {
         switch (get_symbol(p)) {
         case '{':
-            return {parse<object, '{', '}'>(p, [&](auto &&v) {
+            return {parse1<object, '{', '}'>(p, [&](auto &&v) {
                 auto key = eat_string_quoted(p);
                 eat_symbol(p, ':');
-                v.emplace(key, parse(p));
+                v.emplace(key, parse1(p));
             })};
         case '[':
-            return {parse<array, '[', ']'>(p, [&](auto &&v) {
-                v.emplace_back(parse(p));
+            return {parse1<array, '[', ']'>(p, [&](auto &&v) {
+                v.emplace_back(parse1(p));
             })};
         case '\"':
             return {std::string{eat_string_quoted(p)}};
@@ -186,15 +284,26 @@ struct json {
         }
         return {};
     }
-    static json parse(std::string_view s) {
-        auto p = s.data();
-        return parse(p);
+    static this_type parse(std::string_view s) {
+        return parse1(s);
     }
 
     static std::string dump(const value_type &value) {
         return visit(value
             , [](const simple_value &v) {
-                return std::get<0>(v);
+                return visit(v
+                    , [](int64_t v){return std::format("{}",v);}
+                    , [](double v){return std::format("{}",v);}
+                    , [](const std::string &v){
+                        if constexpr (!json_view) {
+                            auto s = v;
+                            replace_chars<true>(s);
+                            return std::format("\"{}\"",s);
+                        } else {
+                            return std::format("\"{}\"",v);
+                        }
+                    }
+                );
             }
             , [](const array &v) {
                 std::string s = "[";
@@ -210,7 +319,7 @@ struct json {
             , [](const object &m) {
                 std::string s = "{";
                 for (auto &&[k,v] : m) {
-                    s += std::format("\"{}\":\"{}\",", k, dump(v.value));
+                    s += std::format("\"{}\":{},", k, dump(v.value));
                 }
                 if (s.size() > 1) {
                     s.pop_back();
@@ -225,7 +334,10 @@ struct json {
     }
 };
 
+using json = json_raw<true, false>;
+
 auto operator""_json(const char *s, size_t len) {
+    //return json_raw<false, true>::parse(s);
     return json::parse(s);
 }
 
