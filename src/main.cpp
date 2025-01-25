@@ -1671,9 +1671,7 @@ void test_jwt() {
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.bHroWl3rTXUTNjwZQ_N8w2YRYs6x1ZWkEMckM53_D9E"_jwt
     );
 
-    auto acc = json::parse(read_file("swift-hangar-448610-q9-1cf45d824c10.json"));
-    std::string s = acc["private_key"];
-    s = read_file("jwtRS256.key");
+    auto s = read_file("jwtRS256.key");
     enum {unk, pkcs1, pkcs8};
     // see <openssl/pem.h> for possible BEGIN markers
     auto type = s.contains("BEGIN PRIVATE KEY") ? pkcs8 : unk;
