@@ -25,9 +25,9 @@ struct bigint {
     bigint(const char *c) {
         mpz_init_set_str(*this, c, 0);
     }
-    bigint(string_view sv) {
-        std::string s;
-        s += sv;
+    bigint(string_view sv) : bigint{std::string(sv)} {
+    }
+    bigint(const std::string &s) {
         mpz_init_set_str(*this, s.data(), 0);
     }
     bigint(bigint &&v) noexcept {
@@ -45,6 +45,15 @@ struct bigint {
     }
     ~bigint() {
         mpz_clear(*this);
+    }
+
+    auto size() const {
+        return mpz_size(*this) * sizeof(mp_limb_t);
+    }
+    auto powm(const bigint &e, const bigint &m) {
+        bigint r;
+        mpz_powm(r, *this, e, m);
+        return r;
     }
 
     operator __mpz_struct *() {
@@ -76,6 +85,16 @@ struct bigint {
         A<N> d;
         mpz_export(d.data(), 0, Order, 1, 0, 0, *this);
         return d;
+    }
+    auto to_string() {
+        auto size = 1;
+        auto nail = 0;
+        auto numb = 8 * size - nail;
+        auto count1 = (mpz_sizeinbase(*this, 2) + numb - 1) / numb;
+
+        std::string s(count1, 0);
+        mpz_export(s.data(), 0, 1, 1, 0, 0, *this);
+        return s;
     }
     template <auto N, int Order = 1>
     operator array<N>() const {
@@ -167,6 +186,11 @@ template <auto N>
 bigint bytes_to_bigint(const array<N> &v, int order = 1) {
     bigint b;
     mpz_import(b, N, order, sizeof(v[0]), 0, 0, v.data());
+    return b;
+}
+bigint bytes_to_bigint(auto &&v, int order = 1) {
+    bigint b;
+    mpz_import(b, v.size(), order, 1, 0, 0, v.data());
     return b;
 }
 template <auto N>
