@@ -33,6 +33,7 @@ struct jwt {
         }
         auto operator()(auto &&m, auto &&pkey) {
             // RSA_PKCS1
+            // RSA_PKCS1_PADDING
             auto mhash = sha2<Bits>::digest(m);
             auto t = asn1_sequence::make(
                 asn1_sequence::make(
@@ -43,7 +44,8 @@ struct jwt {
             );
             auto tlen = t.size();
             auto emlen = pkey.n.size();
-            if (emlen < tlen + 11) {
+            constexpr auto RSA_PKCS1_PADDING_SIZE = 11;
+            if (emlen < tlen + RSA_PKCS1_PADDING_SIZE) {
                 throw std::runtime_error{"intended encoded message length too short"};
             }
             std::string ps(emlen - tlen - 3, 0xff);
@@ -63,42 +65,67 @@ struct jwt {
         }
         auto operator()(auto &&m, auto &&pkey) {
             // PKCS1_PSS_mgf1
-            auto mgf1 = [](auto &&m, auto &&outsz) {
-                auto h = sha2<Bits>::digest(m);
-
-                auto sha256 = make_oid<2,16,840,1,101,3,4,2,6>();
-                return h;
+            // RSA_PKCS1_PSS_PADDING + salt size = hash size
+            auto pkcs1_mgf1 = [](auto &&p, auto &&sz, auto &&seed) {
+                for (uint32_t i = 0, outlen = 0; outlen < sz; ++i) {
+                    sha2<Bits> h;
+                    h.update(seed);
+                    auto counter = std::byteswap(i);
+                    h.update((const uint8_t *)&counter, 4);
+                    auto r = h.digest();
+                    auto to_copy = std::min<int>(sz - outlen, r.size());
+                    memcpy(p + outlen, r.data(), to_copy);
+                    outlen += to_copy;
+                }
             };
 
             auto mhash = sha2<Bits>::digest(m);
-            std::string salt(mhash.size(), 0);
-            get_random_secure_bytes(salt);
-            auto embits = mhash.size() * 8 + salt.size() * 8 + 9;
-            auto emlen = (embits + 8 - 1) / 8;
-            if (emlen < mhash.size() + salt.size() + 2) {
+            auto emlen = pkey.n.size();
+            std::string em(emlen, 0);
+            auto embits = (emlen * 8 - 1) & 0x7;
+            auto EM = em.data();
+            if (embits == 0) {
+                *EM++ = 0;
+                --emlen;
+            }
+            if (emlen < mhash.size() + 2) {
                 throw std::runtime_error{"encoding error"};
             }
-            std::string m2(8 + mhash.size() + salt.size(), 0);
-            memcpy(m2.data() + 8, mhash.data(), mhash.size());
-            memcpy(m2.data() + 8 + mhash.size(), salt.data(), salt.size());
-            auto h = sha2<Bits>::digest(m2);
-            std::string ps(emlen - salt.size() - h.size() - 2, 0);
-            auto db = ps + '\x01' + salt;
-            auto dbsz = db.size();
-            auto dbmask = mgf1(h, dbsz);
-            for (int i = 0; i < dbsz; ++i) {
-                db[i] ^= dbmask[i];
+            std::string salt(mhash.size(), 0);
+            get_random_secure_bytes(salt);
+
+            auto masked_db_len = emlen - mhash.size() - 1;
+            auto H = EM + masked_db_len;
+            sha2<Bits> hh;
+            hh.update((const uint8_t *)em.data(), 8);
+            hh.update(mhash);
+            hh.update(salt);
+            auto h2 = hh.digest();
+            memcpy(H, h2.data(), h2.size());
+
+            pkcs1_mgf1(EM, masked_db_len, h2);
+
+            auto p = EM;
+            p += emlen - mhash.size() - salt.size() - 2;
+            *p++ ^= 0x01;
+            for (int i = 0; i < mhash.size(); ++i) {
+                *p++ ^= salt[i];
             }
-            db[0] &= 1;
-            std::string em(dbsz + h.size() + 1, 0);
-            memcpy(em.data(), db.data(), dbsz);
-            memcpy(em.data() + dbsz, h.data(), h.size());
-            em[dbsz + h.size()] = '\xbc';
-            return em;
+            if (embits) {
+                EM[0] &= 0xFF >> (8 - embits);
+            }
+            EM[emlen - 1] = 0xbc;
+
+            //
+            auto h = bytes_to_bigint(em);
+            h = h.powm(pkey.d, pkey.n);
+            return h.to_string();
         }
     };
 
     using b64 = base64url<false>;
+    //using json = json_raw<true, true>;
+    using json = json;
     template <auto Bits> using hs = hmac_sha2<Bits>;
     template <auto Bits> using rs = rsassa_pkcs1_v1_5_sha2<Bits>;
     template <auto Bits> using ps = pkcs1_pss_mgf1_sha2<Bits>;
