@@ -161,7 +161,7 @@ struct base_raw {
         if (sz == 0) {
             return s;
         }
-        s.resize(sz / b_chars * b_size);
+        s.resize(sz * b_size / b_chars);
         auto p = (b*)s.data();
         for (int i = 0; i < sz; i += b_chars, p += b_size) {
             p->template decode<b_chars>(&data[i]);
