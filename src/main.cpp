@@ -18,6 +18,7 @@
 #include "magma.h"
 #include "mmap.h"
 #include "scrypt.h"
+#include "jwt.h"
 
 #include <array>
 #include <chrono>
@@ -117,6 +118,13 @@ auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
     to_string2(type{}, "The quick brown fox jumps over the lazy dog", h1);
     to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
+auto read_file(auto &&fn) {
+    std::ifstream i{fn};
+    auto sz = std::filesystem::file_size(fn);
+    std::string s(sz, 0);
+    i.read(s.data(), sz);
+    return s;
+}
 
 void test_aes() {
     using namespace crypto;
@@ -1628,13 +1636,112 @@ void test_tls() {
     // run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
 }
 
+void test_jwt() {
+    using namespace crypto;
+
+    auto check_hs256 = [](auto &&payload, auto &&secret, auto &&res) {
+        auto x = jwt{jwt::hs<256>{}, payload, secret};
+        if (!cmp_base(x, res)) {
+            std::println("{}", (std::string)x);
+        }
+    };
+    auto check_rs256 = [](auto &&payload, auto &&secret, auto &&res) {
+        auto x = jwt{jwt::rs<256>{}, payload, secret};
+        if (!cmp_base((std::string)x, (std::string)res)) {
+            std::println("{}", (std::string)x);
+        }
+    };
+    auto check_ps256 = [](auto &&payload, auto &&secret, auto &&res) {
+        auto x = jwt{jwt::ps<256>{}, payload, secret};
+        if (!cmp_base(x, res)) {
+            std::println("{}", (std::string)x);
+        }
+    };
+
+    check_hs256(
+        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, "000",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.kH64lXJbz0NS5uG8NaoQjxmi-zgSgA-U1UCe5Plkzhw"_jwt
+    );
+    check_hs256(
+        R"( { "sub" : "1234567890" , "name":"John Doe","iat":1516239022 })"_json, "0000",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.ABtGopfXew_rfoHUtAlV58GLAMWmdhsecKxVlDTuZAE"_jwt
+    );
+    check_hs256(
+        R"({"loggedInAs":"admin","iat":1422779638} )"_json, "secretkey",
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.bHroWl3rTXUTNjwZQ_N8w2YRYs6x1ZWkEMckM53_D9E"_jwt
+    );
+
+    auto acc = json::parse(read_file("swift-hangar-448610-q9-1cf45d824c10.json"));
+    std::string s = acc["private_key"];
+    s = read_file("jwtRS256.key");
+    enum {unk, pkcs1, pkcs8};
+    // see <openssl/pem.h> for possible BEGIN markers
+    auto type = s.contains("BEGIN PRIVATE KEY") ? pkcs8 : unk;
+    type = s.contains("BEGIN RSA PRIVATE KEY") ? pkcs1 : type;
+    if (s.starts_with("-"sv)) {
+        s = s.substr(s.find('\n') + 1);
+    }
+    if (auto p = s.find('-'); p != -1) {
+        s = s.substr(0, p);
+    }
+    replace_all(s, "\n", "");
+    auto raw = base64::decode(s);
+    asn1 a{raw};
+
+    struct rsa_pkey {
+        bigint n;
+        bigint d;
+    };
+    rsa_pkey pk;
+    auto set = [&](auto &&pkey, auto...args){
+        return bytes_to_bigint(pkey.get<asn1_integer>(args...).data);
+    };
+    if (type == pkcs8) {
+        auto pka = a.get<asn1_oid>(pkcs8::private_key::main,pkcs8::private_key::algorithm,pkcs8::private_key::algorithm_oid);
+
+        //rsaEncryption (PKCS #1)
+        auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
+        if (pka != rsaEncryption) {
+            throw std::runtime_error{"unknown pkcs8::private_key_algorithm"};
+        }
+
+        auto pkey = a.get<asn1_sequence>(pkcs8::private_key::main,pkcs8::private_key::privatekey,rsa_private_key::main);
+        pk.n = set(pkey, rsa_private_key::modulus);
+        pk.d = set(pkey, rsa_private_key::private_exponent);
+    } else if (type == pkcs1) {
+        auto pkey = a.get<asn1_sequence>(pkcs8::private_key::main);
+        pk.n = set(pkey, rsa_private_key::modulus);
+        pk.d = set(pkey, rsa_private_key::private_exponent);
+    } else {
+        throw;
+    }
+
+    check_rs256(
+        R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk,
+        "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.VJkvpYvlELE2Hrnz6JKGZuoWshycW3HNdrgV8KOoIKatI64KYBs-a1wK6JUaTY1bkViEh_YrdrKKb3iDU_nJYkRZHIfNmM7J_sQeE04zUpit4ketxWzGk2daF10gRaO8nefH7b9bvMYLMyiqq4kOaaCVhTgTFHm73iu42Tl_ybqRVp5ArWzru2MYQrdCxK2X3qJ5mPx9GgHBtjjBSQkT6Np-XZphdEYXj7juOxeX6oE6FAl749PlYQXjWU23UaHDwIDzM8vfk9gPmQeuA1PQ7UMZ-MWrhC-ym7_cA4zq4USn-YmFSOsf_A96kSMlh9xiL2FlgE1C6DvrjGoyVl025w"_jwt
+    );
+    check_rs256(
+        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk,
+        "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.MmNFMRvbzG6eb9kYkHXRMwOiEbkDBMXIQOk0Vrnipt4GL39Vz-y5YayzgfUOE_-xZdQGWYQWhxGnBIBQDRqkIBR1UMzL_adWd4FgpdMxaGdXScWupTj8_chBPsCzYvvImqm0b5buLHSs7FwXUVrMeEodpN3lyeuu8RV7vwTiitV3HwuQdm9z5TcOSPJjYw0tv1qNfoKscNiJK4-1VGl00rbneKevRKtlmuz8ddLMW7el-IoY9mwZyEkFpL5BsWZUiYN_64PgTmGYuBN7qU32PgWX9QAgwn6YjgwaY43pyet65jUwC7-bx2QnL6lBeja3rACuk3ph0PWNUZHZgNXbrg"_jwt
+    );
+
+    check_ps256(
+        R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk,
+        "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.BEuyvUt_1wnbpXkK1uXqzImtMQ90ssmKZr-6HJKdJmQbvEa2hl1-iLGdIo32TJbVCvTmdB2Bj3V-9R5YOkN1SxgHe4H2KphwCwgiat5HRbfnXoTd_o1IO_GPaqDw9c1HFdbCLH8oWEBZTcqkB_lFhHMnXm0nvApw9sIsnFwH9S41vbOyCU95nEE4lZWj_qmEVIM7EtIdcGpMFjebdf_K5G7rlEEnZtufcvgTPyY-cD-god1Y_3eV7LntT3rrQNF90h-GFsjgUP5gw9DW2iG7ThGGN2j2cnLy6gN-JBdI0ZLsxE2zJqinVjO8c6tdQo0Gl1RDCXMporkh5WS5tN-ZLA"_jwt
+    );
+    check_ps256(
+        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk,
+        "eyJhbGciOiJQUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.aqqHeq-XRjUZ3aejoGzXlUwX8FNhn5uItV80YKM7O1EhdIewa0GkrpWdYXoO34APV71dGYio6j8JT0WY69BIkEQxadKMN9Gc0c5ZoUpQ1IAw4TkVr9eMAPJypmK76zylPh28Zd2gbsFeYCdwY5RchqQxQTnsqLliy36jQ1b4dHQ2cQ-3geKMKj3Ep9U8hbd6bME1yTRbOACQ4Y-_Wn_0Kd4FqXZqyg5ZatnDg3R7Mo3wPzRYPGi538D5ng1X2-GpGAs6s4HFU3NebvoBihIDk8iF1A2_szjq0CWQdrH6lXCeden1f1iONcTN5Vl-AGId22VmcUo0ep_Yh0HTH2ciEw"_jwt
+    );
+}
+
 int main() {
     //test_aes();
     //test_sha1();
     //test_sha2();
     //test_sha3();
     //test_blake2();
-    test_blake3();
+    //test_blake3();
     //test_sm3();
     //test_sm4();
     //test_ec();
@@ -1651,4 +1758,5 @@ int main() {
     //test_gost();
     //
     //test_tls();
+    test_jwt();
 }
