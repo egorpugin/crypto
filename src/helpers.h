@@ -439,4 +439,13 @@ struct hash_traits {
     }
 };
 
+void replace_all(auto &&s, std::string_view from, std::string_view to) {
+    auto oldlen = from.size(), newlen = to.size();
+    size_t p{};
+    while ((p = s.find(from, p)) != -1) {
+        s.replace(p, oldlen, to);
+        p += newlen;
+    }
+}
+
 } // namespace crypto
