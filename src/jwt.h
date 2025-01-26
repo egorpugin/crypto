@@ -34,7 +34,7 @@ struct jwt {
             if (Bits == 512) return 3;
             throw;
         }
-        auto sign(auto &&m, auto &&pkey) {
+        auto op(auto &&m, auto &&modulus) {
             // RSA_PKCS1
             // RSA_PKCS1_PADDING
             auto mhash = sha2<Bits>::digest(m);
@@ -46,7 +46,7 @@ struct jwt {
                 asn1_octet_string::make(mhash)
             );
             auto tlen = t.size();
-            auto emlen = pkey.n.size();
+            auto emlen = modulus.size();
             constexpr auto RSA_PKCS1_PADDING_SIZE = 11;
             if (emlen < tlen + RSA_PKCS1_PADDING_SIZE) {
                 throw std::runtime_error{"intended encoded message length too short"};
@@ -56,12 +56,19 @@ struct jwt {
             em[1] = 0x01;
             memcpy(em.data() + 2, ps.data(), ps.size());
             memcpy(em.data() + 2 + ps.size() + 1, t.data(), t.size());
+            return em;
+        }
+        auto sign(auto &&m, auto &&pkey) {
+            auto em = op(m, pkey.n);
             auto h = bytes_to_bigint(em);
             h = h.powm(pkey.d, pkey.n);
             return h.to_string();
         }
-        bool verify(auto &&m, auto &&signature, auto &&pkey) {
-            return bytes_concept{sign(m, pkey)} == bytes_concept{signature};
+        bool verify(auto &&m, auto &&signature, auto &&pubkey) {
+            auto em = op(m, pubkey.n);
+            auto h = bytes_to_bigint(signature);
+            h = h.powm(pubkey.e, pubkey.n);
+            return bytes_concept{em} == bytes_concept{h.to_string(pubkey.n.size())};
         }
     };
     template <auto Bits>
@@ -84,8 +91,7 @@ struct jwt {
         }
         auto sign(auto &&m, auto &&pkey) {
             // PKCS1_PSS_mgf1
-            // RSA_PKCS1_PSS_PADDING + salt size = hash size
-
+            // RSA_PKCS1_PSS_PADDING; salt size = hash size
             auto mhash = sha2<Bits>::digest(m);
             auto hlen = mhash.size();
             auto slen = hlen; // same size
@@ -127,13 +133,11 @@ struct jwt {
 
             //
             auto h = bytes_to_bigint(em);
-            h = h.powm(pkey.d, pkey.n);
-            return h.to_string();
+            return pkey.encrypt(h).to_string();
         }
-        bool verify(auto &&m, auto &&signature, auto &&pkey) {
+        bool verify(auto &&m, auto &&signature, auto &&pubkey) {
             auto h = bytes_to_bigint(signature);
-            h = h.powm(pkey.e, pkey.n);
-            auto em = h.to_string();
+            auto em = pubkey.decrypt(h).to_string();
 
             auto mhash = sha2<Bits>::digest(m);
             auto hlen = mhash.size();
@@ -153,7 +157,7 @@ struct jwt {
             }
             auto masked_db_len = emlen - hlen - 1;
             auto H = EM + masked_db_len;
-            std::string db(masked_db_len, 9);
+            std::string db(masked_db_len, 0);
             std::string_view mseed{H, hlen};
             pkcs1_mgf1(db.data(), masked_db_len, mseed);
             for (int i = 0; i < masked_db_len; ++i) {

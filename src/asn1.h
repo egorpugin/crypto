@@ -184,26 +184,11 @@ struct asn1_base : asn1_container {
         return s;
     }
 };
-struct asn1_sequence : asn1_base {
-    static inline constexpr auto tag = 0x30;
-    using asn1_base::asn1_base;
 
-    static auto make(auto &&...data) {
-        auto len = (0 + ... + data.size());
-        std::string s(1 + len + count_bytes(len), 0);
-        s[0] = tag;
-        auto p = s.data() + 1;
-        write_bytes(p, len);
-        ((memcpy(p, data.data(), data.size()),p += data.size()),...);
-        return s;
-    }
-};
-struct asn1_set : asn1_base {
-    static inline constexpr auto tag = 0x31;
-};
 struct asn1_integer : asn1_base {
     static inline constexpr auto tag = 0x02;
 };
+// has leading byte - number of unused bits in the tail
 struct asn1_bit_string : asn1_base {
     static inline constexpr auto tag = 0x03;
 };
@@ -273,6 +258,28 @@ struct asn1_oid : asn1_base {
         return s;
     }
 };
+struct asn1_sequence : asn1_base {
+    static inline constexpr auto tag = 0x30;
+    using asn1_base::asn1_base;
+
+    asn1_sequence &operator=(const asn1_bit_string &rhs) {
+        data = rhs.data.subspan(1);
+        return *this;
+    }
+    static auto make(auto &&...data) {
+        auto len = (0 + ... + data.size());
+        std::string s(1 + len + count_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_bytes(p, len);
+        ((memcpy(p, data.data(), data.size()),p += data.size()),...);
+        return s;
+    }
+};
+struct asn1_set : asn1_base {
+    static inline constexpr auto tag = 0x31;
+};
+
 struct asn1 : asn1_sequence {
     using asn1_sequence::asn1_sequence;
 };
@@ -323,6 +330,17 @@ struct x509 {
     };
 };
 
+struct pkcs1 {
+    struct public_key {
+        enum {
+            main, // main object
+        };
+        enum {
+            modulus,
+            public_exponent,
+        };
+    };
+};
 struct pkcs8 {
     struct private_key {
         enum {
@@ -332,6 +350,19 @@ struct pkcs8 {
             version,
             algorithm,
             privatekey,
+        };
+        enum {
+            algorithm_oid,
+            parameters,
+        };
+    };
+    struct public_key {
+        enum {
+            main, // main object
+        };
+        enum {
+            algorithm,
+            publickey,
         };
         enum {
             algorithm_oid,

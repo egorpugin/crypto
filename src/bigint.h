@@ -50,7 +50,7 @@ struct bigint {
     auto size() const {
         return mpz_size(*this) * sizeof(mp_limb_t);
     }
-    auto powm(const bigint &e, const bigint &m) {
+    auto powm(const bigint &e, const bigint &m) const {
         bigint r;
         mpz_powm(r, *this, e, m);
         return r;
@@ -86,15 +86,27 @@ struct bigint {
         mpz_export(d.data(), 0, Order, 1, 0, 0, *this);
         return d;
     }
+    auto to_string(int count) {
+        auto size = 1;
+        auto nail = 0;
+        auto numb = 8 * size - nail;
+        auto count1 = (mpz_sizeinbase(*this, 2) + numb - 1) / numb;
+
+        std::string s(count, 0);
+        auto p = s.data();
+        if (count > count1) {
+            p += count - count1;
+        }
+        mpz_export(p, 0, 1, 1, 0, 0, *this);
+        return s;
+    }
     auto to_string() {
         auto size = 1;
         auto nail = 0;
         auto numb = 8 * size - nail;
         auto count1 = (mpz_sizeinbase(*this, 2) + numb - 1) / numb;
 
-        std::string s(count1, 0);
-        mpz_export(s.data(), 0, 1, 1, 0, 0, *this);
-        return s;
+        return to_string(count1);
     }
     template <auto N, int Order = 1>
     operator array<N>() const {
