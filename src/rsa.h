@@ -39,7 +39,7 @@ struct private_key {
         return encrypt(m);
     }
 
-    static auto load_from_string_container(auto &&s) {
+    static auto load_from_string_container(std::string s) {
         auto [raw,type] = prepare_string(s);
         asn1 a{raw};
 
@@ -80,7 +80,7 @@ struct public_key {
         return m.powm(e, n);
     }
 
-    static auto load_from_string_container(auto &&s) {
+    static auto load_from_string_container(std::string s) {
         auto [raw,type] = prepare_string(s);
         asn1 a{raw};
 

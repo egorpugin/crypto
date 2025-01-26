@@ -31,8 +31,7 @@ some of replacements
 
 template <typename K, typename T, typename IgnoredLess = std::less<K>,
     typename Allocator = std::allocator<std::pair<const K, T>>>
-struct ordered_map : std::vector<std::pair<const K, T>, Allocator>
-{
+struct ordered_map : std::vector<std::pair<const K, T>, Allocator> {
     using key_type = K;
     using mapped_type = T;
     using base = std::vector<std::pair<const K, T>, Allocator>;
@@ -66,6 +65,9 @@ struct ordered_map : std::vector<std::pair<const K, T>, Allocator>
         }
         return 0;
     }
+    bool contains(auto &&key) const {
+        return find(key) != this->end();
+    }
 };
 
 // options:
@@ -79,16 +81,29 @@ struct json_raw {
     static inline constexpr auto json_view = std::same_as<string_type, std::string_view>;
     using this_type = json_raw;
 
-    using array = std::vector<this_type>;
-    using object = map_type<string_type, this_type>;
-    using simple_value = variant<string_type, int64_t, double
-        //, bool, nullptr_t
+    using array_type = std::vector<this_type>;
+    using object_type = map_type<string_type, this_type>;
+    using simple_value = variant<string_type, int64_t, double, bool
+        //, nullptr_t
     >;
     //using simple_value = std::variant<string_type>;
-    using value_type = std::variant<simple_value, array, object>;
+    using value_type = std::variant<object_type, array_type, simple_value>;
 
     value_type value;
 
+    template <auto N>
+    this_type &operator=(const char (&rhs)[N]) {
+        value = simple_value{string_type{rhs}};
+        return *this;
+    }
+    /*this_type &operator=(const value_type &rhs) {
+        value = rhs;
+        return *this;
+    }*/
+    this_type &operator=(const simple_value &rhs) {
+        value = rhs;
+        return *this;
+    }
     /*template <bool B1, bool B2>
     this_type &operator=(const json_raw<B1, B2> &rhs) {
         auto &self = *this;
@@ -112,16 +127,21 @@ struct json_raw {
         return self;
     }*/
     void push_back(auto &&v) {
-        auto &a = std::get<array>(value);
+        auto &a = std::get<array_type>(value);
         a.push_back(v);
     }
     auto operator<=>(const this_type &) const = default;
-    auto &operator[](auto &&key) const {
-        auto &p = std::get<object>(value);
-        if (auto i = p.find(key); i != p.end()) {
-            return i->second;
-        }
-        throw std::runtime_error{"not such key"};
+    auto &operator[](const string_type &key) {
+        return std::get<object_type>(value)[key];
+    }
+    auto &operator[](const string_type &key) const {
+        return std::get<object_type>(value).at(key);
+    }
+    auto &object(this auto &&self) {return std::get<object_type>(self.value);}
+    auto &array(this auto &&self) {return std::get<array_type>(self.value);}
+    bool contains(const string_type &key) const {
+        auto p = std::get_if<object_type>(&value);
+        return p && p->contains(key);
     }
     /*template <typename T> requires std::same_as<T, string> || std::same_as<T, std::u8string>
     operator T() const {
@@ -236,6 +256,12 @@ struct json_raw {
         p.remove_prefix(endp);
         return i;
     }
+    static void eat_token(std::string_view &p, std::string_view token) {
+        if (!p.starts_with(token)) {
+            throw std::runtime_error{"unexpected token number"};
+        }
+        p.remove_prefix(token.size());
+    }
 
     template <typename T, auto start_sym, auto end_sym>
     static auto parse1(std::string_view &p, auto &&f) {
@@ -254,13 +280,13 @@ struct json_raw {
         if (!p.empty())
         switch (get_symbol(p)) {
         case '{':
-            return {parse1<object, '{', '}'>(p, [&](auto &&v) {
+            return {parse1<object_type, '{', '}'>(p, [&](auto &&v) {
                 auto key = eat_string_quoted(p);
                 eat_symbol(p, ':');
                 v.emplace(key, parse1(p));
             })};
         case '[':
-            return {parse1<array, '[', ']'>(p, [&](auto &&v) {
+            return {parse1<array_type, '[', ']'>(p, [&](auto &&v) {
                 v.emplace_back(parse1(p));
             })};
         case '\"':
@@ -279,7 +305,13 @@ struct json_raw {
         case '-':
         case '.': // .123
             return {eat_number(p)};
-        // null, true, false, ...
+        case 't':
+            eat_token(p, "true"sv);
+            return {simple_value{true}};
+        case 'f':
+            eat_token(p, "false"sv);
+            return {simple_value{false}};
+        // null, ...
         default:
             throw std::runtime_error{"not implemented"};
         }
@@ -293,6 +325,7 @@ struct json_raw {
         return visit(value
             , [](const simple_value &v) {
                 return visit(v
+                    , [](bool v){return v ? "true"s : "false"s;}
                     , [](int64_t v){return std::format("{}",v);}
                     , [](double v){return std::format("{}",v);}
                     , [](const std::string &v){
@@ -306,7 +339,7 @@ struct json_raw {
                     }
                 );
             }
-            , [](const array &v) {
+            , [](const array_type &v) {
                 std::string s = "[";
                 for (auto &&k : v) {
                     s += std::format("\"{}\",", dump(k.value));
@@ -317,7 +350,7 @@ struct json_raw {
                 s += "]";
                 return s;
             }
-            , [](const object &m) {
+            , [](const object_type &m) {
                 std::string s = "{";
                 for (auto &&[k,v] : m) {
                     s += std::format("\"{}\":{},", k, dump(v.value));

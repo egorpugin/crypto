@@ -5,8 +5,10 @@
 #include "hmac.h"
 #include "json.h"
 #include "random.h"
+#include "rsa.h"
 
 #include <algorithm>
+#include <ranges>
 
 namespace crypto {
 
@@ -191,15 +193,18 @@ struct jwt {
     json payload;
     std::string signature;
 
-    jwt() = default;
+    jwt() {
+        header["typ"] = "JWT";
+    }
+    jwt(const json &payload) : payload{payload} {
+        header["typ"] = "JWT";
+    }
     jwt(std::string_view s) {
         auto sp = std::views::split(s, '.');
         auto it = std::begin(sp);
         header = json::parse(b64::decode(std::string_view(*it++)));
         payload = json::parse(b64::decode(std::string_view(*it++)));
         signature = b64::decode(std::string_view(*it++));
-    }
-    jwt(const json &payload) : payload{payload} {
     }
 
     std::string sign(auto h, auto &&...args) {
@@ -219,7 +224,7 @@ struct jwt {
 
 private:
     void make_header(auto &&type) {
-        header = json::parse(std::format(R"({{"alg":"{}","typ":"JWT"}})", type));
+        header["alg"] = type;
     }
     std::string concat() {
         auto header_encoded = b64::encode(header.dump());
