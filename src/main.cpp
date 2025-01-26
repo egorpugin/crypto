@@ -19,6 +19,7 @@
 #include "mmap.h"
 #include "scrypt.h"
 #include "jwt.h"
+#include "rsa.h"
 
 #include <array>
 #include <chrono>
@@ -118,8 +119,12 @@ auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
     to_string2(type{}, "The quick brown fox jumps over the lazy dog", h1);
     to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
-auto read_file(auto &&fn) {
-    std::ifstream i{fn};
+auto read_file(const std::filesystem::path &fn) {
+    if (!std::filesystem::exists(fn)) {
+        throw std::runtime_error{"file does not exist: " + fn.string()};
+    }
+    // better mmap
+    std::ifstream i{fn, std::ios::binary};
     auto sz = std::filesystem::file_size(fn);
     std::string s(sz, 0);
     i.read(s.data(), sz);
@@ -1638,6 +1643,7 @@ void test_tls() {
 
 void test_jwt() {
     using namespace crypto;
+    using namespace crypto::rsa;
 
     auto check = [](auto &&h, auto &&payload, auto &&res, bool verify_only, auto &&...args) {
         jwt x{payload};
@@ -1652,11 +1658,24 @@ void test_jwt() {
     auto check_hs256 = [&](auto &&payload, auto &&secret, auto &&res) {
         check(jwt::hs<256>{}, payload, res, false, secret);
     };
-    auto check_rs256 = [&](auto &&payload, auto &&secret, auto &&res) {
-        check(jwt::rs<256>{}, payload, res, false, secret);
+    auto check_rs256 = [&](auto &&payload, auto &&pkey, auto &&pubkey, auto &&res) {
+        jwt x{payload};
+        jwt::rs<256> h{};
+        x.sign(h, pkey);
+        if (!cmp_base(x, res)) {
+            std::println("{}", (std::string)x);
+        }
+        if (!cmp_base(x.verify(h, pubkey), true)) {
+            std::println("{}", (std::string)x);
+        }
     };
-    auto check_ps512 = [&](auto &&payload, auto &&secret, auto &&res) {
-        check(jwt::ps<512>{}, payload, res, true, secret);
+    auto check_ps512 = [&](auto &&payload, auto &&pkey, auto &&pubkey, auto &&res) {
+        jwt x{payload};
+        jwt::ps<512> h{};
+        x.sign(h, pkey);
+        if (!cmp_base(x.verify(h, pubkey), true)) {
+            std::println("{}", (std::string)x);
+        }
     };
 
     check_hs256(
@@ -1672,73 +1691,63 @@ void test_jwt() {
         "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.bHroWl3rTXUTNjwZQ_N8w2YRYs6x1ZWkEMckM53_D9E"_jwt
     );
 
-    auto s = read_file("jwtRS256.key");
-    enum {unk, pkcs1, pkcs8};
-    // see <openssl/pem.h> for possible BEGIN markers
-    auto type = s.contains("BEGIN PRIVATE KEY") ? pkcs8 : unk;
-    type = s.contains("BEGIN RSA PRIVATE KEY") ? pkcs1 : type;
-    if (s.starts_with("-"sv)) {
-        s = s.substr(s.find('\n') + 1);
-    }
-    if (auto p = s.find('-'); p != -1) {
-        s = s.substr(0, p);
-    }
-    replace_all(s, "\n", "");
-    auto raw = base64::decode(s);
-    asn1 a{raw};
+    auto pks = read_file("jwtRS256.key");
+    auto pubs = read_file("jwtRS256.key.pub");
 
-    struct rsa_pkey {
-        bigint n;
-        bigint e;
-        bigint d;
-    };
-    rsa_pkey pk;
-    auto set = [&](auto &&pkey, auto...args){
-        return bytes_to_bigint(pkey.get<asn1_integer>(args...).data);
-    };
-    if (type == pkcs8) {
-        auto pka = a.get<asn1_oid>(pkcs8::private_key::main,pkcs8::private_key::algorithm,pkcs8::private_key::algorithm_oid);
-
-        //rsaEncryption (PKCS #1)
-        auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
-        if (pka != rsaEncryption) {
-            throw std::runtime_error{"unknown pkcs8::private_key_algorithm"};
-        }
-
-        auto pkey = a.get<asn1_sequence>(pkcs8::private_key::main,pkcs8::private_key::privatekey,rsa_private_key::main);
-        pk.n = set(pkey, rsa_private_key::modulus);
-        pk.e = set(pkey, rsa_private_key::public_exponent);
-        pk.d = set(pkey, rsa_private_key::private_exponent);
-    } else if (type == pkcs1) {
-        auto pkey = a.get<asn1_sequence>(pkcs8::private_key::main);
-        pk.n = set(pkey, rsa_private_key::modulus);
-        pk.e = set(pkey, rsa_private_key::public_exponent);
-        pk.d = set(pkey, rsa_private_key::private_exponent);
-    } else {
-        throw;
-    }
+    auto pk = private_key::load_from_string_container(pks);
+    auto pubk = public_key::load_from_string_container(pubs);
 
     check_rs256(
-        R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk,
+        R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk, pubk,
         "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.VJkvpYvlELE2Hrnz6JKGZuoWshycW3HNdrgV8KOoIKatI64KYBs-a1wK6JUaTY1bkViEh_YrdrKKb3iDU_nJYkRZHIfNmM7J_sQeE04zUpit4ketxWzGk2daF10gRaO8nefH7b9bvMYLMyiqq4kOaaCVhTgTFHm73iu42Tl_ybqRVp5ArWzru2MYQrdCxK2X3qJ5mPx9GgHBtjjBSQkT6Np-XZphdEYXj7juOxeX6oE6FAl749PlYQXjWU23UaHDwIDzM8vfk9gPmQeuA1PQ7UMZ-MWrhC-ym7_cA4zq4USn-YmFSOsf_A96kSMlh9xiL2FlgE1C6DvrjGoyVl025w"_jwt
     );
     check_rs256(
-        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk,
+        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk, pubk,
         "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.MmNFMRvbzG6eb9kYkHXRMwOiEbkDBMXIQOk0Vrnipt4GL39Vz-y5YayzgfUOE_-xZdQGWYQWhxGnBIBQDRqkIBR1UMzL_adWd4FgpdMxaGdXScWupTj8_chBPsCzYvvImqm0b5buLHSs7FwXUVrMeEodpN3lyeuu8RV7vwTiitV3HwuQdm9z5TcOSPJjYw0tv1qNfoKscNiJK4-1VGl00rbneKevRKtlmuz8ddLMW7el-IoY9mwZyEkFpL5BsWZUiYN_64PgTmGYuBN7qU32PgWX9QAgwn6YjgwaY43pyet65jUwC7-bx2QnL6lBeja3rACuk3ph0PWNUZHZgNXbrg"_jwt
     );
 
     // salt is different every time, but verify will work
     check_ps512(
-        R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk,
+        R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk, pubk,
         ""_jwt
     );
     check_ps512(
-        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk,
+        R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk, pubk,
         ""_jwt
     );
 }
 
+void test_all() {
+    test_aes();
+    test_sha1();
+    test_sha2();
+    test_sha3();
+    test_blake2();
+    test_blake3();
+    test_sm3();
+    test_sm4();
+    test_ec();
+    test_hmac();
+    test_pbkdf2();
+    test_chacha20();
+    test_chacha20_aead();
+    test_scrypt();
+    test_argon2();
+    test_asn1();
+    test_streebog();
+    test_grasshopper();
+    test_mgm();
+    test_gost();
+
+    test_tls();
+    test_jwt();
+}
+
 int main() {
+#ifdef CI_TESTS
+    test_all();
+#endif
+
     //test_aes();
     //test_sha1();
     //test_sha2();
