@@ -29,7 +29,7 @@
 #include <span>
 #include <sstream>
 
-#define LOG_TEST() std::println("{}", __FUNCTION__);scoped_timer ____timer;
+#define LOG_TEST() std::print("{} ... ", __FUNCTION__);scoped_timer ____timer;
 
 static int total, success;
 static struct stats {
@@ -45,10 +45,13 @@ struct timer {
     using clock = std::chrono::high_resolution_clock;
 
     clock::time_point tp{clock::now()};
+    int total{::total};
+    int success{::success};
 
     void end() {
         auto diff = clock::now() - tp;
-        std::println("time of the last op: {:7.4f}", std::chrono::duration_cast<std::chrono::duration<float>>(diff).count());
+        auto ok = ::total - total == ::success - success;
+        std::println("{} in {:.4f}", ok ? "ok" : "errored", std::chrono::duration_cast<std::chrono::duration<float>>(diff).count());
     }
 };
 struct scoped_timer {
@@ -78,7 +81,7 @@ auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
     auto r = res == s2;
     ++total;
     success += !!r;
-    printf("%s\n", r ? "ok" : "false");
+    //printf("%s\n", r ? "ok" : "false");
     if (!r) {
         printf("\n");
         printf("input: %s\n", s.c_str());
@@ -631,30 +634,31 @@ void test_sm4() {
 
     {
         sm4_encrypt enc{tv_key};
-        enc.encrypt(tv_plain);
+        auto res = enc.encrypt(tv_plain);
 
         uint8_t tv_cipher[] = {0x68, 0x1e, 0xdf, 0x34, 0xd2, 0x06, 0x96, 0x5e,
                                0x86, 0xb3, 0xe9, 0x4f, 0x53, 0x6e, 0x42, 0x46};
-        cmp_bytes(tv_cipher, tv_plain);
+        cmp_bytes(tv_cipher, res);
 
         sm4_decrypt dec{tv_key};
-        dec.decrypt(tv_plain);
-        cmp_bytes(tv_key, tv_plain);
+        res = dec.decrypt(res);
+        cmp_bytes(res, tv_plain);
     }
     {
         sm4_encrypt enc{tv_key};
-        for (int i = 0; i < 1000000; i++) {
-            enc.encrypt(tv_plain);
+        auto res = enc.encrypt(tv_plain);
+        for (int i = 0; i < 1000000-1; i++) {
+            res = enc.encrypt(res);
         }
         uint8_t tv_cipher[] = {0x59, 0x52, 0x98, 0xc7, 0xc6, 0xfd, 0x27, 0x1f,
                                0x04, 0x02, 0xf8, 0x04, 0xc3, 0x3d, 0x3f, 0x66};
-        cmp_bytes(tv_cipher, tv_plain);
+        cmp_bytes(tv_cipher, res);
 
         sm4_decrypt dec{tv_key};
         for (int i = 0; i < 1000000; i++) {
-            dec.decrypt(tv_plain);
+            res = dec.decrypt(res);
         }
-        cmp_bytes(tv_key, tv_plain);
+        cmp_bytes(res, tv_plain);
     }
     {
         gcm<sm4_encrypt> g{"0123456789ABCDEFFEDCBA9876543210"_sb};
@@ -1817,5 +1821,5 @@ int main() {
     //test_gost();
     //
     //test_tls();
-    test_jwt();
+    //test_jwt();
 }
