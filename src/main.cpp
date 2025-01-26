@@ -29,6 +29,8 @@
 #include <span>
 #include <sstream>
 
+#define LOG_TEST() std::println("{}", __FUNCTION__);scoped_timer ____timer;
+
 static int total, success;
 static struct stats {
     ~stats() {
@@ -46,7 +48,7 @@ struct timer {
 
     void end() {
         auto diff = clock::now() - tp;
-        std::println("time of the last op: {}", std::chrono::duration_cast<std::chrono::duration<float>>(diff).count());
+        std::println("time of the last op: {:7.4f}", std::chrono::duration_cast<std::chrono::duration<float>>(diff).count());
     }
 };
 struct scoped_timer {
@@ -132,6 +134,8 @@ auto read_file(const std::filesystem::path &fn) {
 }
 
 void test_aes() {
+    LOG_TEST();
+
     using namespace crypto;
 
     unsigned char plain[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
@@ -179,6 +183,8 @@ void test_aes() {
 }
 
 void test_sha1() {
+    LOG_TEST();
+
     using namespace crypto;
     {
         sha1 sha;
@@ -207,6 +213,8 @@ void test_sha1() {
 }
 
 void test_sha2() {
+    LOG_TEST();
+
     using namespace crypto;
     {
         sha2<224> sha;
@@ -277,6 +285,8 @@ void test_sha2() {
 }
 
 void test_sha3() {
+    LOG_TEST();
+
     using namespace crypto;
     {
         sha3<224> sha;
@@ -383,6 +393,8 @@ void test_sha3() {
 }
 
 void test_blake2() {
+    LOG_TEST();
+
     using namespace crypto;
     {
         blake2s<224> sha;
@@ -463,6 +475,8 @@ void test_blake2() {
 }
 
 void test_blake3() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto check = [](auto &&in, auto &&out) {
@@ -591,6 +605,8 @@ void test_blake3() {
 }
 
 void test_sm3() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto sm3t = [](auto &&l, auto &&r) {
@@ -606,6 +622,8 @@ void test_sm3() {
 }
 
 void test_sm4() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto tv_key = "0123456789ABCDEFFEDCBA9876543210"_sb;
@@ -654,6 +672,8 @@ void test_sm4() {
 }
 
 void test_ec() {
+    LOG_TEST();
+
     using namespace crypto;
 
     // std::cout << std::hex;
@@ -780,6 +800,8 @@ void test_ec() {
 }
 
 void test_hmac() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto f = [](auto h, auto &&r1, auto &&r2) {
@@ -808,6 +830,8 @@ void test_hmac() {
 }
 
 void test_pbkdf2() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto pass = "123"s;
@@ -861,6 +885,8 @@ void test_pbkdf2() {
 }
 
 void test_scrypt() {
+    LOG_TEST();
+
     using namespace crypto;
 
     //scoped_timer st;
@@ -978,6 +1004,8 @@ void test_scrypt() {
 }
 
 void test_argon2() {
+    LOG_TEST();
+
     using namespace crypto;
 
     // from rfc
@@ -1168,6 +1196,8 @@ e6 40 c7 91 80 e8 ed eb 36 e0 44 d7 88 e4 fa af
 }
 
 void test_chacha20() {
+    LOG_TEST();
+
     using namespace crypto;
 
     {
@@ -1369,6 +1399,8 @@ f3 9c 64 02 c4 22 34 e3 2a 35 6b 3e 76 43 12 a6
 }
 
 void test_chacha20_aead() {
+    LOG_TEST();
+
     using namespace crypto;
 
     {
@@ -1455,6 +1487,8 @@ ee ad 9d 67 89 0c bb 22 39 23 36 fe a1 85 1f 38
 }
 
 void test_asn1() {
+    LOG_TEST();
+
     using namespace crypto;
 
     mmap_file<uint8_t> f{"d:/dev/crypto/_.gosuslugi.ru.der"};
@@ -1476,6 +1510,8 @@ void test_asn1() {
 }
 
 void test_streebog() {
+    LOG_TEST();
+
     using namespace crypto;
 
     {
@@ -1501,6 +1537,8 @@ void test_streebog() {
 }
 
 void test_grasshopper() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto f = [](auto &&key, auto &&enc, auto &&dec) {
@@ -1524,6 +1562,8 @@ void test_grasshopper() {
 }
 
 void test_mgm() {
+    LOG_TEST();
+
     using namespace crypto;
 
     {
@@ -1556,6 +1596,8 @@ void test_mgm() {
 }
 
 void test_gost() {
+    LOG_TEST();
+
     using namespace crypto;
 
     // hmac
@@ -1578,6 +1620,8 @@ void test_gost() {
 }
 
 void test_tls() {
+    LOG_TEST();
+
     using namespace crypto;
 
     auto run = [](auto &&url) {
@@ -1642,6 +1686,8 @@ void test_tls() {
 }
 
 void test_jwt() {
+    LOG_TEST();
+
     using namespace crypto;
     using namespace crypto::rsa;
 
@@ -1717,7 +1763,7 @@ void test_jwt() {
     );
 }
 
-void test_all() {
+auto test_all() {
     test_aes();
     test_sha1();
     test_sha2();
@@ -1741,11 +1787,12 @@ void test_all() {
 
     test_tls();
     test_jwt();
+    return success == total;
 }
 
 int main() {
 #ifdef CI_TESTS
-    test_all();
+    return test_all();
 #endif
 
     //test_aes();

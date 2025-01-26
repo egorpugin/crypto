@@ -17,6 +17,9 @@ void build(Solution &s) {
         t += cpp23;
         t += "src/main.cpp";
         t += crypto;
+        if (s.getExternalVariables()["ci-build"] == "true") {
+            t += "CI_TESTS"_def;
+        }
     }
 
     {

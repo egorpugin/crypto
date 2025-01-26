@@ -1,0 +1,65 @@
+name: sw
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # every day
+    - cron: 0 0 * * *
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    steps:
+    - uses: actions/checkout@v1
+    - uses: egorpugin/sw-action@master
+    - name: build
+      run: ./sw build
+    - name: test
+      run: ./sw -Dci-build=true run test-0.0.1
+
+  linux:
+    runs-on: ubuntu-22.04
+    container: fedora:latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: prepare
+      run: |
+        sudo dnf -y update
+        sudo dnf -y install flex bison cmake which gcc clang clang-tools-extra lld git \
+          mesa-libGL-devel mesa-libEGL-devel libbsd-devel
+    - uses: egorpugin/sw-action@master
+    - name: build
+      run: ./sw build -compiler gcc
+    - name: test
+      run: ./sw -Dci-build=true run test-0.0.1
+
+  macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - uses: egorpugin/sw-action@master
+    - run: which m4
+    - name: install
+      run: brew install flex bison gcc m4
+    - run: which m4
+    - run: sudo xcode-select --switch /Applications/Xcode_15.4.app
+    - run: sudo xcode-select -p
+    - run: which m4
+    - run: /usr/bin/clang --version
+    - name: build
+      run: |
+        export PATH="/opt/homebrew/opt/bison/bin:$PATH"
+        export PATH="/opt/homebrew/opt/flex/bin:$PATH"
+        export PATH="/opt/homebrew/opt/m4/bin:$PATH"
+        export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+        export PATH="/opt/homebrew/opt/gcc/bin:$PATH"
+        ./sw build -compiler gcc-14
+    - name: test
+      run: |
+        export PATH="/opt/homebrew/opt/bison/bin:$PATH"
+        export PATH="/opt/homebrew/opt/flex/bin:$PATH"
+        export PATH="/opt/homebrew/opt/m4/bin:$PATH"
+        export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
+        export PATH="/opt/homebrew/opt/gcc/bin:$PATH"
+        ./sw -compiler gcc-14 -Dci-build=true run test-0.0.1
