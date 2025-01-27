@@ -756,13 +756,13 @@ struct tls13_ {
                 auto s2 = s.substream((uint32_t)h.length);
                 uint8_t certificate_request_context = s2.read();
                 s2.step(certificate_request_context);
-                length<3> len = s2.read();
+                length_type<3> len = s2.read();
                 static int d = -1;
                 ++d;
                 int cert_number = 0;
                 while (s2) {
                     // read one cert
-                    length<3> len = s2.read();
+                    length_type<3> len = s2.read();
                     // If the corresponding certificate type extension
                     // ("server_certificate_type" or "client_certificate_type") was not negotiated in
                     // EncryptedExtensions, or the X .509 certificate type was negotiated, then each CertificateEntry
