@@ -13,8 +13,6 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - uses: egorpugin/sw-action@master
-    - name: build
-      run: ./sw build
     - name: test
       run: ./sw -Dci-build=true run test-0.0.1
 
