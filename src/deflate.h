@@ -4,6 +4,7 @@
 #include <array>
 #include <stdexcept>
 #include <string>
+#include <stdint.h>
 
 struct deflate {
     static inline constexpr auto reversed_bytes = []() {
@@ -196,7 +197,7 @@ struct deflate {
                     int start_index;
                     int filled;
                 };
-                std::array<code_entry, t.max_size> codes{};
+                std::array<code_entry, std::decay_t<decltype(t)>::max_size> codes{};
                 std::array<int, 17> quantities{};
                 for (int i = 0; i < real_size;) {
                     auto length = codeCodingLookup[getbits(8, true)];

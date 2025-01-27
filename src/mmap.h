@@ -20,7 +20,9 @@
 
 namespace crypto {
 
+#ifdef _WIN32
 namespace win32 = ::win32;
+#endif
 
 template <typename T = uint8_t>
 struct mmap_file {

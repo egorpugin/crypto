@@ -48,7 +48,7 @@ struct private_key {
 
         private_key pk;
         auto get = [&](auto &&pkey, auto...args){
-            return bytes_to_bigint(pkey.get<asn1_integer>(args...).data);
+            return bytes_to_bigint(pkey.template get<asn1_integer>(args...).data);
         };
         asn1_sequence pkey;
         if (type == pkcs8) {
@@ -89,7 +89,7 @@ struct public_key {
 
         public_key pubk;
         auto get = [&](auto &&pkey, auto...args){
-            return bytes_to_bigint(pkey.get<asn1_integer>(args...).data);
+            return bytes_to_bigint(pkey.template get<asn1_integer>(args...).data);
         };
         asn1_sequence pubkey;
         if (type == pkcs8_pubkey) {

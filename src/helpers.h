@@ -10,6 +10,8 @@
 #undef small
 
 #include <array>
+#include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <format>
 using std::format;
@@ -18,6 +20,7 @@ using std::format;
 #include <string>
 #include <string_view>
 #include <variant>
+#include <utility>
 #include <vector>
 #ifdef _MSC_VER
 #include <__msvc_int128.hpp>
@@ -122,10 +125,10 @@ struct bytes_concept {
         if (sz != rhs.size()) {
             return false;
         }
-        return memcmp(data(), rhs.data(), size()) == 0;
+        return std::memcmp(data(), rhs.data(), size()) == 0;
     }
     bool contains(uint8_t c) const {
-        return memchr(data(), c, sz);
+        return std::memchr(data(), c, sz);
     }
 
     template <auto N>
@@ -134,7 +137,7 @@ struct bytes_concept {
             throw std::runtime_error{"bad array conversion"};
         }
         array<N> a;
-        memcpy(a.data(), p, sz);
+        std::memcpy(a.data(), p, sz);
         return a;
     }
     template <auto N>
@@ -143,7 +146,7 @@ struct bytes_concept {
             throw std::runtime_error{"bad array conversion"};
         }
         array_gost<N> a;
-        memcpy(a.data(), p, sz);
+        std::memcpy(a.data(), p, sz);
         return a;
     }
     /*template <typename T, auto N>
@@ -152,7 +155,7 @@ struct bytes_concept {
             throw std::runtime_error{"bad array conversion"};
         }
         array<N> a;
-        memcpy(a.data(), p, sz);
+        std::memcpy(a.data(), p, sz);
         return a;
     }*/
     operator std::string() const {

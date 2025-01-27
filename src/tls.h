@@ -850,11 +850,11 @@ struct tls13_ {
                                 return false;
                             };
                             auto check_name = [&](auto &&name) {
-                                if (name.is<asn1_printable_string>()) {
-                                    auto s = name.get<asn1_printable_string>();
+                                if (name.template is<asn1_printable_string>()) {
+                                    auto s = name.template get<asn1_printable_string>();
                                     servername_ok |= compare_servername(s);
-                                } else if (name.is<asn1_utf8_string>()) {
-                                    auto s = name.get<asn1_utf8_string>();
+                                } else if (name.template is<asn1_utf8_string>()) {
+                                    auto s = name.template get<asn1_utf8_string>();
                                     servername_ok |= compare_servername(s);
                                 }
                             };
