@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
+
 // https://www.rfc-editor.org/rfc/rfc8446
 // https://tls.dxdt.ru/tls.html
 // https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml

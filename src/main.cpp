@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
+
 #include "aes.h"
 #include "argon2.h"
 #include "bigint.h"
@@ -134,6 +137,10 @@ auto read_file(const std::filesystem::path &fn) {
     std::string s(sz, 0);
     i.read(s.data(), sz);
     return s;
+}
+void write_file(const std::filesystem::path &fn, auto &&s) {
+    std::ofstream o{fn, std::ios::binary};
+    o << s;
 }
 
 void test_aes() {
