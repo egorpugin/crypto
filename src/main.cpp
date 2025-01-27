@@ -800,6 +800,32 @@ void test_ec() {
             cmp_base(r.x, "0x115dc5bc96760c7b48598d8ab9e740d4c4a85a65be33c1815b5c320c854621dd5a515856d13314af69bc5b924c8b4ddff75c45415c1d9dd9dd33612cd530efe1"_bi);
             cmp_base(r.y, "0x37c7c90cd40b0f5621dc3ac1b751cfa0e2634fa0503b3d52639f5d7fb72afd61ea199441d943ffe7f0c70a2759a3cdb84c114e1f9339fdf27f35eca93677beec"_bi);
         }
+        //
+        {
+            auto pubs = "350208a00f0a78c15ef3faa68feefb0ec804cd9eae9cfa0b4f4b8e3351563ae957aa47e08a421e8373e5b7d1947b46f62c0db53b55ffaffe48dafba7d68ac5a2"_sb;
+            auto pubc = "f52612c43cbc122e897929919339e1b9221de15ea8553a836439bdbe10842aeaf605f689bef098b3726446cbe63bb7aab240d8a7d5590f009633d9ac464c5949"_sb;
+            auto shared = "cd9fe19836b50edbe35dee4e0d6fc3d8e8b08533af1a47a2f16ee02444f5c4b5"_sb;
+
+            using curve = ec::gost::r34102012::ec256a;
+            curve s,c;
+            s.private_key_ = bytes_concept{"316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb};
+            c.private_key_ = bytes_concept{"30bd7301f388a808c3362b415692c1638e3b90d254803ef8c1e3401d328f5887"_sb};
+
+            auto check_pub = [](auto &&c, auto &&v) {
+                curve::public_key_type pub;
+                c.public_key(pub);
+                cmp_bytes(pub, v);
+            };
+            check_pub(s,pubs);
+            check_pub(c,pubc);
+
+            auto check_shared = [&](auto &&c, bytes_concept v) {
+                auto sc = c.shared_secret(v);
+                cmp_bytes(sc, shared);
+            };
+            check_shared(s,pubc);
+            check_shared(c,pubs);
+        }
     }
 }
 
@@ -1628,13 +1654,14 @@ void test_tls() {
 
     using namespace crypto;
 
-    auto run = [](auto &&url) {
+    auto run0 = [](auto &&t, auto &&url) {
         //std::cout << "connecting to " << url << "\n";
         try {
-            http_client t{url};
             t.run();
+#ifndef NDEBUG
             std::cout << "connecting to " << url << "\n";
             std::cout << "ok" << "\n";
+#endif
             cmp_base(0, 0);
         } catch (std::exception &e) {
             std::cout << "connecting to " << url << "\n";
@@ -1642,7 +1669,45 @@ void test_tls() {
             cmp_base(0, 1);
         }
     };
+    auto run = [&](auto &&url) {
+        http_client t{url};
+        run0(t, url);
+    };
+    auto run_with_params = [&](auto &&url, auto suite, auto kex) {
+        http_client t{url};
+        t.tls_layer.force_suite = (parameters::cipher_suites)suite;
+        t.tls_layer.force_kex = (parameters::supported_groups)kex;
+        run0(t, url);
+    };
 
+    for (auto s : {
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+    }) {
+        for (auto k : {
+            parameters::supported_groups::GC256A,
+            parameters::supported_groups::GC256B,
+            parameters::supported_groups::GC256C,
+            parameters::supported_groups::GC256D,
+            parameters::supported_groups::GC512A,
+            parameters::supported_groups::GC512B,
+            parameters::supported_groups::GC512C,
+        }) {
+#ifndef NDEBUG
+            run_with_params("127.0.0.1:443", s, k);
+#endif
+        }
+        // does not support 1.3 yet
+        //run_with_params("https://tlsgost-256.cryptopro.ru:2443", s, parameters::supported_groups::GC256A);
+        //run_with_params("https://tlsgost-256.cryptopro.ru:3443", s, parameters::supported_groups::GC256B);
+        //run_with_params("https://tlsgost-256.cryptopro.ru:4443", s, parameters::supported_groups::GC256C);
+        //run_with_params("https://tlsgost-512.cryptopro.ru", s, parameters::supported_groups::GC512A);
+        //run_with_params("https://tlsgost-512.cryptopro.ru:1443", s, parameters::supported_groups::GC512B);
+    }
+    //return;
+    //
     //
     //run("pugin.goststand.ru:1443");
     //run("pugin.goststand.ru:2443"); // magma
@@ -1650,16 +1715,27 @@ void test_tls() {
     //run("pugin.goststand.ru:4443"); // magma
     ////
     ////// https://infotecs.ru/stand_tls/
-    run("91.244.183.22:15001"); // ignore client cert
     //
-    run("91.244.183.22:15002");
-    //return;
-    run("91.244.183.22:15012");
-    run("91.244.183.22:15022");
-    run("91.244.183.22:15032");
-    run("91.244.183.22:15072");
-    run("91.244.183.22:15082");
-    run("91.244.183.22:15092");
+    for (auto s : {
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+    }) {
+        run_with_params("91.244.183.22:15002",0,0);//, s, parameters::supported_groups::GC256A);
+        run_with_params("91.244.183.22:15012",0,0);//, s, parameters::supported_groups::GC256B);
+        run_with_params("91.244.183.22:15022",0,0);//, s, parameters::supported_groups::GC256C);
+        run_with_params("91.244.183.22:15032",0,0);//, s, parameters::supported_groups::GC256D);
+        run_with_params("91.244.183.22:15072",0,0);//, s, parameters::supported_groups::GC512A);
+        run_with_params("91.244.183.22:15082",0,0);//, s, parameters::supported_groups::GC512B); // this server or their suite does not work well
+        run_with_params("91.244.183.22:15092",0,0);//, s, parameters::supported_groups::GC512C);
+
+        //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
+        //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
+    }
+    //
+    //
+    //run("91.244.183.22:15001"); // ignore client cert
     //return;
     ////
     //
@@ -1667,7 +1743,9 @@ void test_tls() {
     run("software-network.org");
     run("letsencrypt.org");
     run("example.com");
-    run("google.com");
+#ifdef NDEBUG
+    run("google.com"); // causes hangs
+#endif
     run("nalog.gov.ru");
     run("github.com");
     run("gmail.com");
@@ -1691,6 +1769,9 @@ void test_tls() {
     //run("gost.cryptopro.ru");
     //// requires RFC 5746(Renegotiation Indication)
     //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
+    // return tls 1.0/1.1
+    //run("https://tlsgost-512.cryptopro.ru");
+    //run("https://tlsgost-512.cryptopro.ru:1443");
 }
 
 void test_jwt() {
