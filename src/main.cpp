@@ -1677,6 +1677,7 @@ void test_tls() {
         http_client t{url};
         t.tls_layer.force_suite = (parameters::cipher_suites)suite;
         t.tls_layer.force_kex = (parameters::supported_groups)kex;
+        std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
         run0(t, url);
     };
 
@@ -1696,7 +1697,7 @@ void test_tls() {
             parameters::supported_groups::GC512C,
         }) {
 #ifndef CI_TESTS
-            run_with_params("127.0.0.1:443", s, k);
+            //run_with_params("127.0.0.1:443", s, k);
 #endif
         }
         // does not support 1.3 yet
@@ -1718,13 +1719,13 @@ void test_tls() {
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
     }) {
-        run_with_params("91.244.183.22:15002",0,0);//, s, parameters::supported_groups::GC256A);
-        run_with_params("91.244.183.22:15012",0,0);//, s, parameters::supported_groups::GC256B);
-        run_with_params("91.244.183.22:15022",0,0);//, s, parameters::supported_groups::GC256C);
-        run_with_params("91.244.183.22:15032",0,0);//, s, parameters::supported_groups::GC256D);
-        run_with_params("91.244.183.22:15072",0,0);//, s, parameters::supported_groups::GC512A);
-        run_with_params("91.244.183.22:15082",0,0);//, s, parameters::supported_groups::GC512B);
-        run_with_params("91.244.183.22:15092",0,0);//, s, parameters::supported_groups::GC512C);
+        run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
+        run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
+        run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C);
+        run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D);
+        run_with_params("91.244.183.22:15072", s, parameters::supported_groups::GC512A);
+        run_with_params("91.244.183.22:15082", s, parameters::supported_groups::GC512B);
+        run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C);
 
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
