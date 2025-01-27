@@ -31,4 +31,11 @@ void build(Solution &s) {
         t += "pub.egorpugin.primitives.sw.main"_dep;
         t += "org.sw.demo.zeux.pugixml"_dep;
     }
+
+    auto &test2 = s.addTarget<Executable>("test2");
+    {
+        auto &t = test2;
+        t += cpp23;
+        t += "src/test.cpp";
+    }
 }
