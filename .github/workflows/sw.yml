@@ -29,10 +29,10 @@ jobs:
         sudo dnf -y install flex bison cmake which gcc clang clang-tools-extra lld git \
           mesa-libGL-devel mesa-libEGL-devel libbsd-devel
     - uses: egorpugin/sw-action@master
-    - name: build
-      run: ./sw build -compiler gcc
+    #- name: build
+      #run: ./sw build -compiler gcc
     - name: test
-      run: ./sw -Dci-build=true run test-0.0.1
+      run: ./sw -compiler gcc -Dci-build=true run test-0.0.1
 
   macos:
     runs-on: macos-latest
@@ -47,14 +47,6 @@ jobs:
     - run: sudo xcode-select -p
     - run: which m4
     - run: /usr/bin/clang --version
-    - name: build
-      run: |
-        export PATH="/opt/homebrew/opt/bison/bin:$PATH"
-        export PATH="/opt/homebrew/opt/flex/bin:$PATH"
-        export PATH="/opt/homebrew/opt/m4/bin:$PATH"
-        export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
-        export PATH="/opt/homebrew/opt/gcc/bin:$PATH"
-        ./sw build -compiler gcc-14
     - name: test
       run: |
         export PATH="/opt/homebrew/opt/bison/bin:$PATH"
