@@ -39,6 +39,9 @@ enum class CipherSuite : uint16_t {
     TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
 
     TLS_SM4_GCM_SM3 = 0x00C6,
+
+    // helper mechanism
+    TLS_FALLBACK_SCSV = 0x5600,
 };
 
 enum class ExtensionType : uint16_t {
@@ -70,6 +73,8 @@ enum class ExtensionType : uint16_t {
     key_share = 51,                 /* RFC 8446 */
 
     message_hash = 254,
+
+    renegotiation_info = 0xff01,
 };
 
 enum class tls_version : uint16_t {
@@ -113,6 +118,10 @@ struct key_share {
 };
 struct padding {
     ube16 extension_type = ExtensionType::padding;
+    ube16 length;
+};
+struct renegotiation_info {
+    ube16 extension_type = ExtensionType::renegotiation_info;
     ube16 length;
 };
 

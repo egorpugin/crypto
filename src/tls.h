@@ -237,6 +237,9 @@ struct tls13_ {
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
         // cn
         suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>
+        // security, parameters are incorrect, so we can't use it for real
+        // we don't support fallback to prev. tls
+        //suite_<gcm<aes_ecb<128>>, sha2<512>, tls13::CipherSuite::TLS_FALLBACK_SCSV>
         >;
     using all_key_exchanges = key_exchanges<
         key_exchange<curve25519, parameters::supported_groups::x25519>,
@@ -289,6 +292,8 @@ struct tls13_ {
 
     all_suites::variant_type suite;
     all_key_exchanges::variant_type kex;
+    parameters::cipher_suites force_suite{};
+    parameters::supported_groups force_kex{};
 
     //
     struct buf_type {
@@ -453,6 +458,7 @@ struct tls13_ {
 
         buf = buf_type{};
 
+        // client hello
         {
             packet_writer w;
             TLSPlaintext &msg = w;
@@ -470,19 +476,15 @@ struct tls13_ {
             hello.random = random;
 
             ube16 &ciphers_len = w;
-            if (hello_retry_request) {
-                ciphers_len = sizeof(ube16) * 1;
-                auto client_suites = w.next<ube16, 1>();
-                visit(suite, [&, i = 0](auto &&s) mutable {
-                    client_suites[i++] = s.suite();
-                });
-            } else {
-                ciphers_len = sizeof(ube16) * all_suites::size();
-                auto client_suites = w.next<ube16, all_suites::size()>();
-                all_suites::for_each([&, i = 0](auto &&s) mutable {
-                    client_suites[i++] = s.suite();
-                });
-            }
+            int n_suites{};
+            all_suites::for_each([&](auto &&s) {
+                if (!(int)force_suite || force_suite == (decltype(force_suite))s.suite()) {
+                    ube16 &su = w;
+                    su = s.suite();
+                    ++n_suites;
+                }
+            });
+            ciphers_len = sizeof(ube16) * n_suites;
 
             uint8_t &legacy_compression_methods_len = w;
             legacy_compression_methods_len = 1;
@@ -507,21 +509,17 @@ struct tls13_ {
             sv.len += sizeof(supported_version1);
 
             supported_groups &sg = w;
-            if (hello_retry_request) {
-                visit(kex, [&](auto &&s) {
+            all_key_exchanges::for_each([&, i = 0](auto &&s) mutable {
+                if (!(int)force_kex || force_kex == (decltype(force_kex))s.group_name) {
                     ube16 &v = w;
                     v = s.group_name;
                     sg.length += sizeof(v);
                     sg.len += sizeof(v);
-                });
-            } else {
-                all_key_exchanges::for_each([&, i = 0](auto &&s) mutable {
-                    ube16 &v = w;
-                    v = s.group_name;
-                    sg.length += sizeof(v);
-                    sg.len += sizeof(v);
-                });
-            }
+                    if ((int)force_kex) {
+                        kex = s;
+                    }
+                }
+            });
 
             signature_algorithms &sa = w;
             for (auto &&a : all_signature_algorithms) {
@@ -560,6 +558,10 @@ struct tls13_ {
                 w += cookie;
                 cookie.clear();
             }
+
+            /*renegotiation_info &reneg = w;
+            reneg.length += 1;
+            uint8_t &_ = w;*/
 
             padding &p = w;
             auto msg_size = (w.p - w.buf + 511) / 512 * 512;
@@ -1175,7 +1177,12 @@ struct http_client {
             //host = "localhost";
             //host = "www.wolfssl.com";
         }
-        tls_layer = decltype(tls_layer){&s, host};
+        tls_layer = decltype(tls_layer){
+            .s = &s,
+            .servername = host,
+            .force_suite = tls_layer.force_suite,
+            .force_kex = tls_layer.force_kex
+        };
         if (host == "127.0.0.1") {
             tls_layer.ignore_server_certificate_check = true;
         }
