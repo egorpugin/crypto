@@ -23,6 +23,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <print>
 
 /*
 * security notes
@@ -284,6 +285,7 @@ struct tls13_ {
     bool ignore_server_certificate_check{};
     uint8_t legacy_session_id[32];
     tls13::Random random;
+    std::string cookie;
 
     all_suites::variant_type suite;
     all_key_exchanges::variant_type kex;
@@ -468,11 +470,19 @@ struct tls13_ {
             hello.random = random;
 
             ube16 &ciphers_len = w;
-            ciphers_len = sizeof(ube16) * all_suites::size();
-            auto client_suites = w.next<ube16, all_suites::size()>();
-            all_suites::for_each([&, i = 0](auto &&s) mutable {
-                client_suites[i++] = s.suite();
-            });
+            if (hello_retry_request) {
+                ciphers_len = sizeof(ube16) * 1;
+                auto client_suites = w.next<ube16, 1>();
+                visit(suite, [&, i = 0](auto &&s) mutable {
+                    client_suites[i++] = s.suite();
+                });
+            } else {
+                ciphers_len = sizeof(ube16) * all_suites::size();
+                auto client_suites = w.next<ube16, all_suites::size()>();
+                all_suites::for_each([&, i = 0](auto &&s) mutable {
+                    client_suites[i++] = s.suite();
+                });
+            }
 
             uint8_t &legacy_compression_methods_len = w;
             legacy_compression_methods_len = 1;
@@ -497,12 +507,21 @@ struct tls13_ {
             sv.len += sizeof(supported_version1);
 
             supported_groups &sg = w;
-            all_key_exchanges::for_each([&, i = 0](auto &&s) mutable {
-                ube16 &v = w;
-                v = s.group_name;
-                sg.length += sizeof(v);
-                sg.len += sizeof(v);
-            });
+            if (hello_retry_request) {
+                visit(kex, [&](auto &&s) {
+                    ube16 &v = w;
+                    v = s.group_name;
+                    sg.length += sizeof(v);
+                    sg.len += sizeof(v);
+                });
+            } else {
+                all_key_exchanges::for_each([&, i = 0](auto &&s) mutable {
+                    ube16 &v = w;
+                    v = s.group_name;
+                    sg.length += sizeof(v);
+                    sg.len += sizeof(v);
+                });
+            }
 
             signature_algorithms &sa = w;
             for (auto &&a : all_signature_algorithms) {
@@ -532,6 +551,14 @@ struct tls13_ {
                     len += w.p - e_start;
                     k.length += w.p - e_start;
                 });
+            }
+
+            if (!cookie.empty()) {
+                cookie_extension_type &c = w;
+                c.len += cookie.size();
+                c.length = cookie.size();
+                w += cookie;
+                cookie.clear();
             }
 
             padding &p = w;
@@ -617,6 +644,7 @@ struct tls13_ {
             }
             case tls13::ExtensionType::key_share: {
                 parameters::supported_groups group = s.read();
+                len2 -= sizeof(group);
                 bool changed_key{};
                 visit(kex, [&](auto &&k) {
                     if (group != k.group_name) {
@@ -631,6 +659,7 @@ struct tls13_ {
                         }
                     }
                 });
+                if (len2)
                 visit(kex, [&](auto &&k) {
                     uint16_t len = s.read();
                     if (len != 0 && !hello_retry_request) {
@@ -650,9 +679,14 @@ struct tls13_ {
                 }
                 break;
             }
+            case tls13::ExtensionType::cookie: {
+                uint16_t len = s.read();
+                cookie = s.span(len);
+                break;
+            }
             default:
                 s.step(len2);
-                std::cout << "unhandled ext: " << (uint16_t)type << "\n";
+                std::println("unhandled ext: {} ({:X})", (uint16_t)type, (uint16_t)type);
             }
         }
     }

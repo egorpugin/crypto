@@ -97,6 +97,11 @@ struct signature_algorithms {
     ube16 len = sizeof(length);
     length<2> length;
 };
+struct cookie_extension_type {
+    ube16 extension_type = ExtensionType::cookie;
+    ube16 len = sizeof(length);
+    length<2> length;
+};
 struct supported_groups {
     ube16 extension_type = ExtensionType::supported_groups;
     ube16 len = sizeof(length);

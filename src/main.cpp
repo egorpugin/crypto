@@ -975,7 +975,7 @@ void test_scrypt() {
         // very long in debug mode, 1 GB of mem
 #ifdef NDEBUG
         {
-            scoped_timer t;
+            //scoped_timer t;
             cmp_bytes(scr("pleaseletmein"s, "SodiumChloride"s, 1048576, 8, 1, 64), R"(
            21 01 cb 9b 6a 51 1a ae ad db be 09 cf 70 f8 81
            ec 56 8d 57 4a 2f fd 4d ab e5 ee 98 20 ad aa 47
@@ -984,7 +984,7 @@ void test_scrypt() {
             )"_sb);
         }
         {
-            scoped_timer t;
+            //scoped_timer t;
             cmp_bytes(scr("Rabbit"s, "Mouse"s, 1048576, 8, 1, 32), R"(
                 E277EA2CACB23EDAFC039D229B79DC13ECEDB601D99B182A9FEDBA1E2BFB4F58
             )"_sb);
@@ -1634,32 +1634,36 @@ void test_tls() {
             http_client t{url};
             t.run();
             std::cout << "connecting to " << url << "\n";
-            std::cout << "ok" << "\n\n";
+            std::cout << "ok" << "\n";
             cmp_base(0, 0);
         } catch (std::exception &e) {
             std::cout << "connecting to " << url << "\n";
-            std::cerr << e.what() << "\n\n";
+            std::cerr << e.what() << "\n";
             cmp_base(0, 1);
         }
     };
 
     //
-    // run("pugin.goststand.ru:1443");
-    // run("pugin.goststand.ru:2443"); // magma
-    // run("pugin.goststand.ru:3443");
-    // run("pugin.goststand.ru:4443"); // magma
+    //run("pugin.goststand.ru:1443");
+    //run("pugin.goststand.ru:2443"); // magma
+    //run("pugin.goststand.ru:3443");
+    //run("pugin.goststand.ru:4443"); // magma
     ////
     ////// https://infotecs.ru/stand_tls/
-    // run("91.244.183.22:15002");
-    // run("91.244.183.22:15012");
-    // run("91.244.183.22:15022");
-    // run("91.244.183.22:15032");
-    // run("91.244.183.22:15072");
-    // run("91.244.183.22:15082");
-    // run("91.244.183.22:15092");
+    run("91.244.183.22:15001"); // ignore client cert
+    //
+    run("91.244.183.22:15002");
+    //return;
+    run("91.244.183.22:15012");
+    run("91.244.183.22:15022");
+    run("91.244.183.22:15032");
+    run("91.244.183.22:15072");
+    run("91.244.183.22:15082");
+    run("91.244.183.22:15092");
+    //return;
     ////
     //
-    run("infotecs.ru");
+    //run("infotecs.ru"); // uses tls12
     run("software-network.org");
     run("letsencrypt.org");
     run("example.com");
@@ -1677,16 +1681,16 @@ void test_tls() {
     run("https://www.reuters.com/");
     run("https://edition.cnn.com/");
     run("https://www.cloudflare.com/");
+    run("gosuslugi.ru");
     //
     //// does not support tls13
-    // run("https://www.globaltimes.cn/");
-    // run("https://www.gov.cn/");
-    // run("https://english.news.cn/");
-    // run("sberbank.ru");
-    // run("gosuslugi.ru");
-    // run("gost.cryptopro.ru");
+    //run("https://www.globaltimes.cn/");
+    //run("https://www.gov.cn/");
+    //run("https://english.news.cn/");
+    //run("sberbank.ru");
+    //run("gost.cryptopro.ru");
     //// requires RFC 5746(Renegotiation Indication)
-    // run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
+    //run("tlsgost-512.cryptopro.ru"); // https://www.cryptopro.ru/products/csp/tc26tls
 }
 
 void test_jwt() {
@@ -1820,6 +1824,6 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    //test_tls();
+    test_tls();
     //test_jwt();
 }
