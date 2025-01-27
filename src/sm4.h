@@ -39,7 +39,7 @@ struct decrypt {};
 
 template <typename Mode>
 struct sm4 : sm4_data {
-    static inline constexpr auto encryption = std::same_as<Mode,encrypt>;
+    static inline constexpr auto encryption = std::same_as<Mode,::crypto::encrypt>;
     static inline constexpr auto block_size_bytes = 16;
     static inline constexpr auto key_size_bytes = 16;
 

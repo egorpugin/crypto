@@ -9,6 +9,8 @@
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <wincrypt.h>
+#elif __APPLE__
+#include <sys/random.h>
 #else
 #include <unistd.h>
 #endif

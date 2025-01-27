@@ -23,7 +23,7 @@ namespace crypto::tls13 {
 #pragma pack(push, 1)
 
 template <auto Bytes>
-using length = bigendian_unsigned<Bytes>;
+using length_type = bigendian_unsigned<Bytes>;
 
 using ube16 = bigendian_unsigned<2>;
 using Random = std::array<uint8_t,32>;
@@ -98,17 +98,17 @@ struct server_name {
 struct supported_versions {
     ube16 extension_type = ExtensionType::supported_versions;
     ube16 len = sizeof(length);
-    length<1> length{};
+    length_type<1> length{};
 };
 struct signature_algorithms {
     ube16 extension_type = ExtensionType::signature_algorithms;
     ube16 len = sizeof(length);
-    length<2> length;
+    length_type<2> length;
 };
 struct cookie_extension_type {
     ube16 extension_type = ExtensionType::cookie;
     ube16 len = sizeof(length);
-    length<2> length;
+    length_type<2> length;
 };
 struct supported_groups {
     ube16 extension_type = ExtensionType::supported_groups;
@@ -147,9 +147,9 @@ struct ServerHello {
 struct TLSPlaintext {
     parameters::content_type type;
     ProtocolVersion legacy_record_version = tls_version::tls12;
-    length<2> length;
+    length_type<2> length;
 
-    size_t size() const { return (size_t)length; }
+    size_t size() const { return length; }
 };
 
 struct TLSCiphertext {
@@ -160,7 +160,7 @@ struct TLSCiphertext {
 
 struct Handshake {
     parameters::handshake_type msg_type;
-    length<3> length;
+    length_type<3> length;
 
     /*select (Handshake.msg_type) {
         case end_of_early_data:     EndOfEarlyData;
