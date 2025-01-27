@@ -1747,7 +1747,7 @@ void test_tls() {
     run("software-network.org");
     run("letsencrypt.org");
     run("example.com");
-#ifdef NDEBUG
+#ifndef CI_TESTS
     run("google.com"); // causes hangs
 #endif
     run("nalog.gov.ru");
