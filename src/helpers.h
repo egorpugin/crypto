@@ -81,6 +81,7 @@ struct bytes_concept {
         p = (uint8_t *)s.data();
         sz = N;
     }
+    template <auto N> bytes_concept(const array_gost<N> &) = delete; // bytes are reversed here, so we can't view over them
     bytes_concept(std::span<uint8_t> s) {
         p = s.data();
         sz = s.size();
@@ -130,6 +131,15 @@ struct bytes_concept {
             throw std::runtime_error{"bad array conversion"};
         }
         array<N> a;
+        memcpy(a.data(), p, sz);
+        return a;
+    }
+    template <auto N>
+    operator array_gost<N>() const {
+        if (N != sz) {
+            throw std::runtime_error{"bad array conversion"};
+        }
+        array_gost<N> a;
         memcpy(a.data(), p, sz);
         return a;
     }

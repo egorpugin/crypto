@@ -1658,7 +1658,7 @@ void test_tls() {
         //std::cout << "connecting to " << url << "\n";
         try {
             t.run();
-#ifndef NDEBUG
+#ifndef CI_TESTS
             std::cout << "connecting to " << url << "\n";
             std::cout << "ok" << "\n";
 #endif
@@ -1695,7 +1695,7 @@ void test_tls() {
             parameters::supported_groups::GC512B,
             parameters::supported_groups::GC512C,
         }) {
-#ifndef NDEBUG
+#ifndef CI_TESTS
             run_with_params("127.0.0.1:443", s, k);
 #endif
         }
@@ -1709,10 +1709,6 @@ void test_tls() {
     //return;
     //
     //
-    //run("pugin.goststand.ru:1443");
-    //run("pugin.goststand.ru:2443"); // magma
-    //run("pugin.goststand.ru:3443");
-    //run("pugin.goststand.ru:4443"); // magma
     ////
     ////// https://infotecs.ru/stand_tls/
     //
@@ -1727,7 +1723,7 @@ void test_tls() {
         run_with_params("91.244.183.22:15022",0,0);//, s, parameters::supported_groups::GC256C);
         run_with_params("91.244.183.22:15032",0,0);//, s, parameters::supported_groups::GC256D);
         run_with_params("91.244.183.22:15072",0,0);//, s, parameters::supported_groups::GC512A);
-        run_with_params("91.244.183.22:15082",0,0);//, s, parameters::supported_groups::GC512B); // this server or their suite does not work well
+        run_with_params("91.244.183.22:15082",0,0);//, s, parameters::supported_groups::GC512B);
         run_with_params("91.244.183.22:15092",0,0);//, s, parameters::supported_groups::GC512C);
 
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
