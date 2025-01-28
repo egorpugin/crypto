@@ -9,22 +9,22 @@ namespace crypto {
 
 struct sha1 {
     static inline constexpr auto state_size = 5;
-    static inline constexpr auto digest_size_bytes = state_size * sizeof(uint32_t);
+    static inline constexpr auto digest_size_bytes = state_size * sizeof(u32);
 
-    uint32_t state[state_size] = {
+    u32 state[state_size] = {
         0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0,
     };
-    uint8_t buffer[64]{};
+    u8 buffer[64]{};
     int blockpos{};
-    uint64_t n_bytes{};
+    u64 n_bytes{};
 
     void update(bytes_concept b) noexcept {
         update(b.data(), b.size());
     }
-    void update(const uint8_t *data, size_t length) noexcept {
+    void update(const u8 *data, size_t length) noexcept {
         return update_slow(data, length);
     }
-    void update_slow(const uint8_t *data, size_t length) noexcept {
+    void update_slow(const u8 *data, size_t length) noexcept {
         for (size_t i = 0; i < length; ++i) {
             buffer[blockpos++] = data[i];
             if (blockpos == sizeof(buffer)) {
@@ -34,7 +34,7 @@ struct sha1 {
         }
     }
     auto digest() {
-        uint64_t total_bits = (n_bytes + blockpos) * 8;
+        u64 total_bits = (n_bytes + blockpos) * 8;
 
         // pad
         buffer[blockpos++] = 0x80;
@@ -49,12 +49,12 @@ struct sha1 {
             }
         }
 
-        *(uint64_t *)(buffer + sizeof(buffer) - 8) = std::byteswap(total_bits);
+        *(u64 *)(buffer + sizeof(buffer) - 8) = std::byteswap(total_bits);
         transform();
 
-        std::array<uint8_t, digest_size_bytes> res;
+        std::array<u8, digest_size_bytes> res;
         for (int i = 0; auto &&d : state) {
-            ((uint32_t *)res.data())[i++] = std::byteswap(d);
+            ((u32 *)res.data())[i++] = std::byteswap(d);
         }
         return res;
     }
@@ -66,7 +66,7 @@ struct sha1 {
 
 private:
     void transform() {
-        auto block = (uint32_t *)buffer;
+        auto block = (u32 *)buffer;
         for (int i = 0; i < 16; ++i) {
             block[i] = std::byteswap(block[i]);
         }
@@ -74,29 +74,33 @@ private:
         auto blk = [&](size_t i) {
             block[i] = std::rotl(block[(i + 13) & 15] ^ block[(i + 8) & 15] ^ block[(i + 2) & 15] ^ block[i], 1);
         };
-        auto R0 = [&](uint32_t v, uint32_t &w, uint32_t x, uint32_t y, uint32_t &z, size_t i) {
-            z += ((w & (x ^ y)) ^ y) + block[i] + 0x5a827999 + std::rotl(v, 5);
+        auto tail = [&](u32 v, u32 &w, u32 &z, size_t i, u32 const_) {
+            z += block[i] + const_ + std::rotl(v, 5);
             w = std::rotl(w, 30);
         };
-        auto R1 = [&](uint32_t v, uint32_t &w, uint32_t x, uint32_t y, uint32_t &z, size_t i) {
-            blk(i);
-            z += ((w & (x ^ y)) ^ y) + block[i] + 0x5a827999 + std::rotl(v, 5);
-            w = std::rotl(w, 30);
+        auto R0 = [&](u32 v, u32 &w, u32 x, u32 y, u32 &z, size_t i) {
+            z += (w & (x ^ y)) ^ y;
+            tail(v, w, z, i, 0x5a827999);
         };
-        auto R2 = [&](uint32_t v, uint32_t &w, uint32_t x, uint32_t y, uint32_t &z, size_t i) {
+        auto R1 = [&](u32 v, u32 &w, u32 x, u32 y, u32 &z, size_t i) {
             blk(i);
-            z += (w ^ x ^ y) + block[i] + 0x6ed9eba1 + std::rotl(v, 5);
-            w = std::rotl(w, 30);
+            R0(v,w,x,y,z,i);
         };
-        auto R3 = [&](uint32_t v, uint32_t &w, uint32_t x, uint32_t y, uint32_t &z, size_t i) {
+        auto R2_0 = [&](u32 v, u32 &w, u32 x, u32 y, u32 &z, size_t i, u32 const_) {
             blk(i);
-            z += (((w | x) & y) | (w & x)) + block[i] + 0x8f1bbcdc + std::rotl(v, 5);
-            w = std::rotl(w, 30);
+            z += w ^ x ^ y;
+            tail(v, w, z, i, const_);
         };
-        auto R4 = [&](uint32_t v, uint32_t &w, uint32_t x, uint32_t y, uint32_t &z, size_t i) {
+        auto R2 = [&](auto &&...args) {
+            R2_0(args..., 0x6ed9eba1);
+        };
+        auto R3 = [&](u32 v, u32 &w, u32 x, u32 y, u32 &z, size_t i) {
             blk(i);
-            z += (w ^ x ^ y) + block[i] + 0xca62c1d6 + std::rotl(v, 5);
-            w = std::rotl(w, 30);
+            z += ((w | x) & y) | (w & x);
+            tail(v, w, z, i, 0x8f1bbcdc);
+        };
+        auto R4 = [&](auto &&...args) {
+            R2_0(args..., 0xca62c1d6);
         };
 
         auto a = state[0];
