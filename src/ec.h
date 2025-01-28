@@ -291,7 +291,7 @@ struct curve {
 
     static inline constexpr auto key_size = sizeof(key_type);
     using private_key_type = array_gost<point_size_bytes>;
-    using public_key_type = array<key_size>;
+    using public_key_type = array<key_size>; // just a simple array
 
     private_key_type private_key_;
 

@@ -1747,7 +1747,7 @@ void test_tls() {
     run("software-network.org");
     run("letsencrypt.org");
     run("example.com");
-#ifndef CI_TESTS
+#ifdef CI_TESTS
     run("google.com"); // causes hangs
 #endif
     run("nalog.gov.ru");
@@ -1883,11 +1883,14 @@ auto test_all() {
     return success == total;
 }
 
-int main() {
 #ifdef CI_TESTS
+int main() {
     return test_all();
+}
 #endif
 
+#ifndef CI_TESTS
+int main() {
     //test_aes();
     //test_sha1();
     //test_sha2();
@@ -1912,3 +1915,4 @@ int main() {
     test_tls();
     //test_jwt();
 }
+#endif
