@@ -22,10 +22,10 @@ struct keccak_p {
     }
     static inline constexpr auto l = log2floor(w);
     using state_type = std::conditional_t<
-            w == 64, uint64_t, std::conditional_t<
-                    w == 32, uint32_t, std::conditional_t<
+            w == 64, u64, std::conditional_t<
+                    w == 32, u32, std::conditional_t<
                             w == 16, uint16_t, std::conditional_t<
-                                    w == 8, uint8_t, uint8_t // also 4,2,1
+                                    w == 8, u8, u8 // also 4,2,1
                             >
                     >
             >
@@ -46,7 +46,7 @@ struct keccak_p {
                 0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43,
                 25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14
         };
-        static constexpr uint64_t RC[] = {
+        static constexpr u64 RC[] = {
                 0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808aULL,
                 0x8000000080008000ULL, 0x000000000000808bULL, 0x0000000080000001ULL,
                 0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008aULL,
@@ -94,17 +94,17 @@ struct keccak : keccak_p<1600> {
     static inline constexpr auto digest_size_bytes = DigestSizeBits / 8;
 
     int blockpos{};
-    uint64_t bitlen{};
+    u64 bitlen{};
 
     template <auto N> void update(const char (&s)[N]) noexcept {
-        update((uint8_t*)s, N-1);
+        update((u8*)s, N-1);
     }
     void update(auto &&s) noexcept requires requires { s.size(); } {
-        update((const uint8_t *)s.data(), s.size());
+        update((const u8 *)s.data(), s.size());
     }
-    void update(const uint8_t *buf, auto len) noexcept {
+    void update(const u8 *buf, auto len) noexcept {
         bitlen += len * 8;
-        auto *d = (uint8_t *)A;
+        auto *d = (u8 *)A;
         for (int i = 0; i < len; ++i) {
             d[blockpos++] ^= buf[i];
             if (blockpos == r / 8) {
@@ -114,10 +114,10 @@ struct keccak : keccak_p<1600> {
         }
     }
     void pad() noexcept {
-        auto *d = (uint8_t *)A;
+        auto *d = (u8 *)A;
         auto q = (r - (bitlen % r)) / 8;
-        uint8_t q21 = Padding | (1 << (log2floor(Padding) + 1));
-        uint8_t q22 = 0x80;
+        u8 q21 = Padding | (1 << (log2floor(Padding) + 1));
+        u8 q22 = 0x80;
         d[blockpos++] ^= q21;
         blockpos += q - 2;
         d[blockpos++] ^= q22;
@@ -125,12 +125,12 @@ struct keccak : keccak_p<1600> {
     }
     auto digest() noexcept {
         pad();
-        std::array<uint8_t, DigestSizeBits / 8> hash;
+        std::array<u8, DigestSizeBits / 8> hash;
         auto ptr = hash.data();
         auto sz = hash.size();
         auto step = [&](){
             auto len = std::min<size_t>(r / 8, sz);
-            memcpy(ptr, (uint8_t *)A, len);
+            memcpy(ptr, (u8 *)A, len);
             sz -= len;
             ptr += len;
         };

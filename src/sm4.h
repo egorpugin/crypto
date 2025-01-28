@@ -10,7 +10,7 @@ namespace crypto {
 
 struct sm4_data {
     static constexpr auto rounds = 32;
-    static constexpr uint8_t S[256] = {
+    static constexpr u8 S[256] = {
         0xd6, 0x90, 0xe9, 0xfe, 0xcc, 0xe1, 0x3d, 0xb7, 0x16, 0xb6, 0x14, 0xc2, 0x28, 0xfb, 0x2c, 0x05, 0x2b, 0x67,
         0x9a, 0x76, 0x2a, 0xbe, 0x04, 0xc3, 0xaa, 0x44, 0x13, 0x26, 0x49, 0x86, 0x06, 0x99, 0x9c, 0x42, 0x50, 0xf4,
         0x91, 0xef, 0x98, 0x7a, 0x33, 0x54, 0x0b, 0x43, 0xed, 0xcf, 0xac, 0x62, 0xe4, 0xb3, 0x1c, 0xa9, 0xc9, 0x08,
@@ -26,12 +26,12 @@ struct sm4_data {
         0x2d, 0x74, 0xd0, 0x12, 0xb8, 0xe5, 0xb4, 0xb0, 0x89, 0x69, 0x97, 0x4a, 0x0c, 0x96, 0x77, 0x7e, 0x65, 0xb9,
         0xf1, 0x09, 0xc5, 0x6e, 0xc6, 0x84, 0x18, 0xf0, 0x7d, 0xec, 0x3a, 0xdc, 0x4d, 0x20, 0x79, 0xee, 0x5f, 0x3e,
         0xd7, 0xcb, 0x39, 0x48};
-    static constexpr uint32_t CK[32] = {
+    static constexpr u32 CK[32] = {
         0x00070e15, 0x1c232a31, 0x383f464d, 0x545b6269, 0x70777e85, 0x8c939aa1, 0xa8afb6bd, 0xc4cbd2d9,
         0xe0e7eef5, 0xfc030a11, 0x181f262d, 0x343b4249, 0x50575e65, 0x6c737a81, 0x888f969d, 0xa4abb2b9,
         0xc0c7ced5, 0xdce3eaf1, 0xf8ff060d, 0x141b2229, 0x30373e45, 0x4c535a61, 0x686f767d, 0x848b9299,
         0xa0a7aeb5, 0xbcc3cad1, 0xd8dfe6ed, 0xf4fb0209, 0x10171e25, 0x2c333a41, 0x484f565d, 0x646b7279};
-    static constexpr uint64_t FK[4] = {0xa3b1bac6, 0x56aa3350, 0x677d9197, 0xb27022dc};
+    static constexpr u64 FK[4] = {0xa3b1bac6, 0x56aa3350, 0x677d9197, 0xb27022dc};
 };
 
 struct encrypt {};
@@ -43,37 +43,37 @@ struct sm4 : sm4_data {
     static inline constexpr auto block_size_bytes = 16;
     static inline constexpr auto key_size_bytes = 16;
 
-    static void tau(uint8_t b[4]) noexcept {
+    static void tau(u8 b[4]) noexcept {
         for (int i = 0; i < 4; ++i) {
             b[i] = S[b[i]];
         }
     }
-    static uint32_t T(uint32_t b) noexcept {
-        tau((uint8_t *)&b);
+    static u32 T(u32 b) noexcept {
+        tau((u8 *)&b);
         return b ^ std::rotl(b, 2) ^ std::rotl(b, 10) ^ std::rotl(b, 18) ^ std::rotl(b, 24);
     }
-    static uint32_t T1(uint32_t b) noexcept {
-        tau((uint8_t *)&b);
+    static u32 T1(u32 b) noexcept {
+        tau((u8 *)&b);
         return b ^ std::rotl(b, 13) ^ std::rotl(b, 23);
     }
 
-    uint32_t rk[rounds];
+    u32 rk[rounds];
 
     sm4() = default;
-    sm4(uint32_t key[4]) requires (encryption) {
+    sm4(u32 key[4]) requires (encryption) {
         key_expansion(key);
     }
-    sm4(uint32_t key[4]) requires (!encryption) {
+    sm4(u32 key[4]) requires (!encryption) {
         key_expansion(key);
         for (int i = 0; i < 16; ++i) {
             std::swap(rk[i], rk[31 - i]);
         }
     }
-    sm4(const void *key) : sm4{(uint32_t *)key} {}
-    sm4(bytes_concept key) : sm4{(uint32_t *)key.data()} {}
+    sm4(const void *key) : sm4{(u32 *)key} {}
+    sm4(bytes_concept key) : sm4{(u32 *)key.data()} {}
 
-    void key_expansion(uint32_t key[4]) {
-        uint32_t rk[4];
+    void key_expansion(u32 key[4]) {
+        u32 rk[4];
         for (int i = 0; i < 4; ++i) {
             rk[i] = std::byteswap(key[i]);
         }
@@ -89,8 +89,8 @@ struct sm4 : sm4_data {
         }
     }
 
-    auto crypt(uint32_t data[4]) noexcept {
-        uint32_t x[4];
+    auto crypt(u32 data[4]) noexcept {
+        u32 x[4];
         for (int i = 0; i < 4; ++i) {
             x[i] = std::byteswap(data[i]);
         }
@@ -102,15 +102,15 @@ struct sm4 : sm4_data {
         }
         array<block_size_bytes> r;
         for (int i = 0; i < 4; ++i) {
-            *(uint32_t*)(r.data() + i * sizeof(uint32_t)) = std::byteswap(x[4 - i - 1]);
+            *(u32*)(r.data() + i * sizeof(u32)) = std::byteswap(x[4 - i - 1]);
         }
         return r;
     }
     auto encrypt(bytes_concept in) noexcept requires (encryption) {
-        return crypt((uint32_t *)in.data());
+        return crypt((u32 *)in.data());
     }
     auto decrypt(bytes_concept in) noexcept requires (!encryption) {
-        return crypt((uint32_t *)in.data());
+        return crypt((u32 *)in.data());
     }
 };
 

@@ -13,7 +13,7 @@
 namespace crypto {
 
 struct sha2_data {
-    static inline constexpr uint32_t K256[] = {
+    static inline constexpr u32 K256[] = {
             0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,
             0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
             0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,
@@ -31,7 +31,7 @@ struct sha2_data {
             0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,
             0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2,
     };
-    static inline constexpr uint64_t K512[] = {
+    static inline constexpr u64 K512[] = {
             0x428a2f98d728ae22, 0x7137449123ef65cd, 0xb5c0fbcfec4d3b2f, 0xe9b5dba58189dbbc, 0x3956c25bf348b538,
             0x59f111f1b605d019, 0x923f82a4af194f9b, 0xab1c5ed5da6d8118, 0xd807aa98a3030242, 0x12835b0145706fbe,
             0x243185be4ee4b28c, 0x550c7dc3d5ffb4e2, 0x72be5d74f27b896f, 0x80deb1fe3b1696b1, 0x9bdc06a725c71235,
@@ -49,27 +49,27 @@ struct sha2_data {
             0x113f9804bef90dae, 0x1b710b35131c471b, 0x28db77f523047d84, 0x32caab7b40c72493, 0x3c9ebe0a15c9bebc,
             0x431d67c49c100d4c, 0x4cc5d4becb3e42b6, 0x597f299cfc657e2a, 0x5fcb6fab3ad6faec, 0x6c44198c4a475817,
     };
-    static inline constexpr std::array<uint32_t, 8> h224 = {
+    static inline constexpr std::array<u32, 8> h224 = {
             0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939,
             0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4,
     };
-    static inline constexpr std::array<uint32_t, 8> h256 = {
+    static inline constexpr std::array<u32, 8> h256 = {
             0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
             0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
     };
-    static inline constexpr std::array<uint64_t, 8> h384 = {
+    static inline constexpr std::array<u64, 8> h384 = {
             0xcbbb9d5dc1059ed8, 0x629a292a367cd507, 0x9159015a3070dd17, 0x152fecd8f70e5939,
             0x67332667ffc00b31, 0x8eb44a8768581511, 0xdb0c2e0d64f98fa7, 0x47b5481dbefa4fa4,
     };
-    static inline constexpr std::array<uint64_t, 8> h512 = {
+    static inline constexpr std::array<u64, 8> h512 = {
             0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1,
             0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179,
     };
-    static inline constexpr std::array<uint64_t, 8> h512_224 = {
+    static inline constexpr std::array<u64, 8> h512_224 = {
             0x8C3D37C819544DA2, 0x73E1996689DCD4D6, 0x1DFAB7AE32FF9C82, 0x679DD514582F9FCF,
             0x0F6D2B697BD44DA8, 0x77E36F7304C48942, 0x3F9D85A86A1D36C8, 0x1112E6AD91D692A1,
     };
-    static inline constexpr std::array<uint64_t, 8> h512_256 = {
+    static inline constexpr std::array<u64, 8> h512_256 = {
             0x22312194FC2BF72C, 0x9F555FA3C84C64C2, 0x2393B86B6F53B151, 0x963877195940EABD,
             0x96283EE2A88EFFE3, 0xBE5E1E2553863992, 0x2B0199FC2C85B8AA, 0x0EB72DDC81C52CA2,
     };
@@ -123,14 +123,14 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
     static inline constexpr auto chunk_size_bits = small_sha ? 512 : 1024;
     static inline constexpr auto chunk_size_bytes = chunk_size_bits / 8;
     static inline constexpr auto digest_size_bytes = DigestSizeBits / 8;
-    using state_type = std::conditional_t<small_sha, uint32_t, uint64_t>;
+    using state_type = std::conditional_t<small_sha, u32, u64>;
     static inline constexpr auto state_size = 8;
-    using message_length_type = std::conditional_t<small_sha, uint64_t, uint128_t>;
+    using message_length_type = std::conditional_t<small_sha, u64, uint128_t>;
     static inline constexpr auto K = sha2_data::K<small_sha>();
     static inline constexpr auto s = sha2_data::sigma<small_sha>();
     static inline constexpr auto S = sha2_data::sum<small_sha>();
 
-    void update(const uint8_t *data, size_t length) noexcept {
+    void update(const u8 *data, size_t length) noexcept {
         bitlen += length * 8;
         hash_traits::update_fast_post(data, length, m_data, sizeof(m_data), blockpos, [&]() {
             transform();
@@ -140,15 +140,15 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
         pad();
         if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
             decltype(h) swapped;
-            for (uint8_t i = 0; i < 8; i++) {
+            for (u8 i = 0; i < 8; i++) {
                 swapped[i] = std::byteswap(h[i]);
             }
-            std::array<uint8_t, DigestSizeBits / 8> hash;
+            std::array<u8, DigestSizeBits / 8> hash;
             memcpy(hash.data(), swapped.data(), DigestSizeBits / 8);
             return hash;
         } else {
-            std::array<uint8_t, DigestSizeBits / 8> hash;
-            for (uint8_t i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
+            std::array<u8, DigestSizeBits / 8> hash;
+            for (u8 i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
                 *(state_type *)(hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
             }
             return hash;
@@ -156,7 +156,7 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
     }
 
 private:
-    uint8_t m_data[chunk_size_bytes];
+    u8 m_data[chunk_size_bytes];
     std::array<state_type, state_size> h{sha2_data::h<ShaType, DigestSizeBits>()};
     message_length_type bitlen{};
     int blockpos{};
@@ -177,14 +177,14 @@ private:
     }
     constexpr void transform() noexcept {
         state_type w[rounds];
-        for (uint8_t i = 0; i < 16; ++i) {
+        for (u8 i = 0; i < 16; ++i) {
             w[i] = std::byteswap(*(state_type *)(m_data + i * sizeof(state_type)));
         }
-        for (uint8_t k = 16; k < rounds; ++k) {
+        for (u8 k = 16; k < rounds; ++k) {
             w[k] = sigma<s[1]>(w[k - 2]) + w[k - 7] + sigma<s[0]>(w[k - 15]) + w[k - 16];
         }
         auto state = h;
-        for (uint8_t i = 0; i < rounds; ++i) {
+        for (u8 i = 0; i < rounds; ++i) {
             auto maj = majority(state[0], state[1], state[2]);
             auto ch = choose(state[4], state[5], state[6]);
             auto s = w[i] + K[i] + state[7] + ch + sum<S[1]>(state[4]);
@@ -198,7 +198,7 @@ private:
             state[1] = state[0];
             state[0] = sum<S[0]>(state[0]) + maj + s;
         }
-        for (uint8_t i = 0; i < state_size; ++i) {
+        for (u8 i = 0; i < state_size; ++i) {
             h[i] += state[i];
         }
     }
@@ -206,7 +206,7 @@ private:
         constexpr auto padding_size = chunk_size_bytes;
         constexpr auto bigint_size = padding_size / 8;
         constexpr auto padding_minus_bigint = padding_size - bigint_size;
-        uint8_t end = blockpos < padding_minus_bigint ? padding_minus_bigint : padding_size;
+        u8 end = blockpos < padding_minus_bigint ? padding_minus_bigint : padding_size;
 
         auto i = blockpos;
         m_data[i++] = 0x80;
@@ -219,7 +219,7 @@ private:
         // Append to the padding the total message's length in bits and transform.
         for (int i = 0; i < bigint_size; ++i) {
             //                              vvvvvvv msvc
-            m_data[padding_size - i - 1] = (uint8_t)(bitlen >> (i * 8));
+            m_data[padding_size - i - 1] = (u8)(bitlen >> (i * 8));
         }
         transform();
     }

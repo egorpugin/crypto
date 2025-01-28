@@ -24,7 +24,7 @@ namespace crypto {
 namespace win32 = ::win32;
 #endif
 
-template <typename T = uint8_t>
+template <typename T = u8>
 struct mmap_file {
 #ifdef _WIN32
     struct ro {
@@ -52,7 +52,7 @@ struct mmap_file {
     };
 #endif
 
-    using size_type = uint64_t;
+    using size_type = u64;
 
     path fn;
 #ifdef _WIN32
@@ -242,7 +242,7 @@ struct mmap_file {
                 ok = false;
                 return s;
             };
-            uint64_t len;
+            u64 len;
             if (!has_room(sizeof(len))) {
                 return make_eof();
             }
@@ -257,7 +257,7 @@ struct mmap_file {
         }
         stream &operator<<(const path &p) {
             auto s = p.u8string();
-            uint64_t len = s.size();
+            u64 len = s.size();
             if (!has_room(len + sizeof(len))) {
                 m().alloc(len + sizeof(len));
             }
@@ -268,7 +268,7 @@ struct mmap_file {
         }
 
         template <typename U>
-        auto make_span(uint64_t n) {
+        auto make_span(u64 n) {
             return std::span<U>((U *)(m().p + offset), (U *)(m().p + offset) + n);
         }
     };

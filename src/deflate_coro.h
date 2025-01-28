@@ -19,8 +19,8 @@ struct deflater_coro {
             bool valid;
         };
         struct code_remainder {
-            uint8_t remainder;
-            uint8_t bits_left;
+            u8 remainder;
+            u8 bits_left;
             uint16_t index; // bit or with 0x8000 if it's the last one in sequence
         };
 
@@ -123,17 +123,17 @@ struct deflater_coro {
 
     static inline constexpr size_t outsz = 33000 * 2; // 32*1024*2+258;
     static inline constexpr auto reversed_bytes = []() {
-        std::array<uint8_t, 256> v;
+        std::array<u8, 256> v;
         for (int i = 0; i < 256; ++i) {
             v[i] = (i * 0x0202020202ULL & 0x010884422010ULL) % 0x3ff;
         }
         return v;
     }();
 
-    using extracted_type = uint32_t;
+    using extracted_type = u32;
 
     //extracted_type data;
-    const uint8_t *ptr;
+    const u8 *ptr;
     int bitpos;
     int bitsleft;
     std::string out;
@@ -142,7 +142,7 @@ struct deflater_coro {
     deflater_coro() {
         out.reserve(outsz);
     }
-    auto decode(const uint8_t *d, size_t len) {
+    auto decode(const u8 *d, size_t len) {
         if (!h) {
             ptr = d;
             bitpos = 0;
@@ -224,7 +224,7 @@ struct deflater_coro {
                 };
                 std::array<code_entry, 256> ci;
                 for (int i = 0; i < 256; ++i) {
-                    uint8_t reversed = reversed_bytes[i];
+                    u8 reversed = reversed_bytes[i];
                     if (reversed < 0b00000010) {
                         ci[i] = {7, 256};
                     } else if (reversed < 0b00110000) {
@@ -245,7 +245,7 @@ struct deflater_coro {
                 inc(c.length - 8);
                 auto word = c.code;
                 if (word < 256) {
-                    out += (uint8_t)(word < 144 ? word : (((word - 144)) << 1) + 144 + co_await getbits(1));
+                    out += (u8)(word < 144 ? word : (((word - 144)) << 1) + 144 + co_await getbits(1));
                 } else if (word == 256) [[unlikely]] {
                     break;
                 } else {
@@ -261,7 +261,7 @@ struct deflater_coro {
                         }
                     }
                     static constexpr auto length_dictionary = []() {
-                        std::array<uint8_t, 32> d;
+                        std::array<u8, 32> d;
                         for (int i = 0; i < 32; ++i) {
                             d[i] = (reversed_bytes[i] >> 3) + 1;
                         }
@@ -291,13 +291,13 @@ struct deflater_coro {
             if (hcode_length > 19) [[unlikely]] {
                 throw std::runtime_error{"Invalid distance code count"};
             }
-            static constexpr std::array<uint8_t, 19> codeCodingReorder{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-            std::array<uint8_t, codeCodingReorder.size()> codeCodingLengths{};
+            static constexpr std::array<u8, 19> codeCodingReorder{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+            std::array<u8, codeCodingReorder.size()> codeCodingLengths{};
             for (int i = 0; i < hcode_length; i++) {
                 codeCodingLengths[codeCodingReorder[i]] = co_await getbits(3);
             }
             // Generate Huffman codes for lengths
-            std::array<uint8_t, 256> codeCodingLookup{};
+            std::array<u8, 256> codeCodingLookup{};
             for (int size = 1, nextCodeCoding = 0; size <= 8; ++size) {
                 for (int i = 0; i < codeCodingReorder.size(); ++i) {
                     if (codeCodingLengths[i] == size) {
@@ -313,9 +313,9 @@ struct deflater_coro {
             dynamic_coding dc;
             auto read_table = [&](auto &t, int real_size) -> resumable<void> {
                 struct code_entry {
-                    uint8_t start;
-                    uint8_t ending;
-                    uint8_t length;
+                    u8 start;
+                    u8 ending;
+                    u8 length;
                 };
                 struct unindexed_entry {
                     int quantity;
@@ -363,7 +363,7 @@ struct deflater_coro {
                                 if (nextCode >= (1 << size)) [[unlikely]] {
                                     throw std::runtime_error{"Bad Huffman encoding, run out of Huffman codes"};
                                 }
-                                uint8_t firstPart = nextCode;
+                                u8 firstPart = nextCode;
                                 if (size <= 8) [[likely]] {
                                     codes[i].start = reversed_bytes[firstPart];
                                     for (int code = codes[i].start >> (8 - size); code < t.codes_index.size(); code += (1 << size)) {
@@ -372,11 +372,11 @@ struct deflater_coro {
                                         t.codes_index[code].valid = true;
                                     }
                                 } else {
-                                    auto start = reversed_bytes[(uint8_t)(nextCode >> (size - 8))];
+                                    auto start = reversed_bytes[(u8)(nextCode >> (size - 8))];
                                     codes[i].start = start;
                                     t.codes_index[start].valid = true;
                                     unindexed_entries[start].quantity++;
-                                    codes[i].ending = reversed_bytes[(uint8_t)nextCode] >> (16 - size);
+                                    codes[i].ending = reversed_bytes[(u8)nextCode] >> (16 - size);
                                 }
                                 nextCode++;
                             }
@@ -419,7 +419,7 @@ struct deflater_coro {
                 } else {
                     inc(entry.length - 8);
                 }
-                static constexpr std::array<uint8_t, 9> end_masks = {0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
+                static constexpr std::array<u8, 9> end_masks = {0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
                 if (word >= t.max_size) {
                     auto b = co_await getbits(8, true);
                     for (int i = word - t.max_size; i < t.max_size * 2; i++) {
@@ -439,7 +439,7 @@ struct deflater_coro {
             while (1) {
                 auto word = co_await read_word(dc.codes);
                 if (word < 256) {
-                    out += (uint8_t)word;
+                    out += (u8)word;
                 } else if (word == 256) [[unlikely]] {
                     break;
                 } else {

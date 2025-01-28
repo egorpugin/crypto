@@ -208,7 +208,7 @@ struct secp {
 
 #pragma pack(push, 1)
     struct key_type {
-        uint8_t legacy{4};
+        u8 legacy{4};
         array<point_size_bytes> x;
         array<point_size_bytes> y;
     };
@@ -229,7 +229,7 @@ struct secp {
     }
     auto public_key(auto &&out) {
         auto k = public_key();
-        memcpy(out.data(), (uint8_t *)&k, key_size);
+        memcpy(out.data(), (u8 *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         array<point_size_bytes> shared_secret;
@@ -241,7 +241,7 @@ struct secp {
         auto m = bytes_to_bigint(private_key_);
         auto p2 = m * p; // * cofactor? but it is always = 1 here?
         key_type k2{4, p2.x, p2.y};
-        memcpy(shared_secret.data(), (uint8_t *)&k2.x, point_size_bytes);
+        memcpy(shared_secret.data(), (u8 *)&k2.x, point_size_bytes);
         return shared_secret;
     }
 };
@@ -313,7 +313,7 @@ struct curve {
     }
     auto public_key(auto &&out) {
         auto k = public_key();
-        memcpy(out.data(), (uint8_t *)&k, key_size);
+        memcpy(out.data(), (u8 *)&k, key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         array_gost<point_size_bytes> shared_secret;
@@ -325,7 +325,7 @@ struct curve {
         auto m = bytes_to_bigint(private_key_);
         auto p2 = m * c.cofactor * p;
         key_type k2{.x = p2.x, .y = p2.y};
-        memcpy(shared_secret.data(), (uint8_t *)&k2.x, point_size_bytes);
+        memcpy(shared_secret.data(), (u8 *)&k2.x, point_size_bytes);
         return shared_secret;
     }
 };
@@ -378,7 +378,7 @@ struct twisted_edwards {
     }
     auto public_key(auto &&out) {
         auto k = public_key();
-        memcpy(out.data(), (uint8_t *)&k, this->key_size);
+        memcpy(out.data(), (u8 *)&k, this->key_size);
     }
     auto shared_secret(const public_key_type &peer_public_key) {
         array_gost<point_size_bytes> shared_secret;
@@ -394,7 +394,7 @@ struct twisted_edwards {
         p = m * c.cofactor * p;
 
         key_type k2{.x = p.x, .y = p.y};
-        memcpy(shared_secret.data(), (uint8_t *)&k2.x, this->point_size_bytes);
+        memcpy(shared_secret.data(), (u8 *)&k2.x, this->point_size_bytes);
         return shared_secret;
     }
 };

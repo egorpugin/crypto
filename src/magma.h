@@ -10,7 +10,7 @@ namespace crypto {
 struct magma_data {
     // "TC26_Z" "1.2.643.7.1.2.5.1.1"
     //static inline constexpr auto keymeshing = 1;
-    static inline constexpr uint8_t S[16 * 8] = {
+    static inline constexpr u8 S[16 * 8] = {
         0xc, 0x6, 0xb, 0xc, 0x7, 0x5, 0x8, 0x1,
         0x4, 0x8, 0x3, 0x8, 0xf, 0xd, 0xe, 0x7,
         0x6, 0x2, 0x5, 0x2, 0x5, 0xf, 0x2, 0xe,
@@ -32,13 +32,13 @@ struct magma_data {
         0x1, 0xf, 0x0, 0xb, 0xc, 0x0, 0x7, 0x2,
     };
 
-    static inline constexpr uint8_t seq_encrypt[] = {
+    static inline constexpr u8 seq_encrypt[] = {
         0, 1, 2, 3, 4, 5, 6, 7,
         0, 1, 2, 3, 4, 5, 6, 7,
         0, 1, 2, 3, 4, 5, 6, 7,
         7, 6, 5, 4, 3, 2, 1, 0,
     };
-    static inline constexpr uint8_t seq_decrypt[] = {
+    static inline constexpr u8 seq_decrypt[] = {
         0, 1, 2, 3, 4, 5, 6, 7,
         7, 6, 5, 4, 3, 2, 1, 0,
         7, 6, 5, 4, 3, 2, 1, 0,
@@ -53,19 +53,19 @@ struct magma : magma_data {
     using vect = array<block_size_bytes>;
     using key_type = array<key_size_bytes>;
 
-    uint32_t key[8];
+    u32 key[8];
 
     void expand_key(const key_type &key) noexcept {
         for (int i = 0; i < 8; ++i) {
-            this->key[i] = std::byteswap(*(uint32_t*)(key.data() + i * sizeof(uint32_t)));
+            this->key[i] = std::byteswap(*(u32*)(key.data() + i * sizeof(u32)));
         }
     }
     auto crypt(const vect &blk, auto &&seq) noexcept {
         auto out = blk;
 
-        *(uint64_t *)out.data() = std::byteswap(*(uint64_t *)out.data());
-        auto n1 = *(uint32_t *)out.data();
-        auto n2 = *(uint32_t *)(out.data() + 4);
+        *(u64 *)out.data() = std::byteswap(*(u64 *)out.data());
+        auto n1 = *(u32 *)out.data();
+        auto n2 = *(u32 *)(out.data() + 4);
 
         for (auto i : seq) {
             auto t = n1;
@@ -73,9 +73,9 @@ struct magma : magma_data {
             n2 = t;
         }
 
-        *(uint32_t *)out.data() = n2;
-        *(uint32_t *)(out.data() + 4) = n1;
-        *(uint64_t *)out.data() = std::byteswap(*(uint64_t *)out.data());
+        *(u32 *)out.data() = n2;
+        *(u32 *)(out.data() + 4) = n1;
+        *(u64 *)out.data() = std::byteswap(*(u64 *)out.data());
 
         return out;
     }
@@ -86,9 +86,9 @@ struct magma : magma_data {
         return crypt(blk, seq_decrypt);
     }
 
-    uint32_t gost_val(uint32_t subkey, uint32_t cm1) {
+    u32 gost_val(u32 subkey, u32 cm1) {
         cm1 += subkey;
-        uint32_t cm2{};
+        u32 cm2{};
         for (int i = 0; i < 8; ++i) {
             cm2 += S[((cm1 >> i * 4) & 0x0f) * 8 + i] << i * 4;
         }

@@ -51,7 +51,7 @@ struct gcm {
                 break;
         }
     }
-    auto encrypt1(std::span<uint8_t> input, std::span<uint8_t> output) noexcept {
+    auto encrypt1(std::span<u8> input, std::span<u8> output) noexcept {
         array<block_size_bytes> Ek;
         while (!input.empty()) {
             inc_counter();
@@ -67,7 +67,7 @@ struct gcm {
     auto encrypt_and_tag(auto &&nonce, auto &&data, auto &&auth_data) {
         set_iv(nonce);
         std::string out(data.size(), 0);
-        encrypt1(std::span<uint8_t>((uint8_t*)data.data(), data.size()), std::span<uint8_t>((uint8_t*)out.data(), out.size()));
+        encrypt1(std::span<u8>((u8*)data.data(), data.size()), std::span<u8>((u8*)out.data(), out.size()));
         auto auth_tag = make_tag(auth_data, out);
         out.resize(out.size() + tag_size_bytes);
         memcpy(out.data() + data.size(), auth_tag.data(), tag_size_bytes);
@@ -77,7 +77,7 @@ struct gcm {
         set_iv(nonce);
         auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
         std::string out(data.size() - tag_size_bytes, 0);
-        encrypt1(ciphered_data, std::span<uint8_t>((uint8_t*)out.data(), out.size()));
+        encrypt1(ciphered_data, std::span<u8>((u8*)out.data(), out.size()));
         auto check_tag = make_tag(auth_data, ciphered_data);
         auto auth_tag = data.subspan(data.size() - tag_size_bytes);
         if (memcmp(check_tag.data(), auth_tag.data(), tag_size_bytes) != 0) {
@@ -96,8 +96,8 @@ struct gcm {
     }
     // S = GHASH (A || 0v || C || 0u || [len(A)]64 || [len(C)]64)
     auto ghash(bytes_concept auth_data, bytes_concept ciphered_data) {
-        uint64_t ciphered_len = ciphered_data.size() * 8;
-        uint64_t auth_len = auth_data.size() * 8;
+        u64 ciphered_len = ciphered_data.size() * 8;
+        u64 auth_len = auth_data.size() * 8;
         array<block_size_bytes> buf{};
         while (!auth_data.empty()) {
             auto sz = std::min<int>(auth_data.size(), block_size_bytes);
@@ -117,8 +117,8 @@ struct gcm {
         }
         if (ciphered_len || auth_len) {
             array<block_size_bytes> work_buf;
-            *(uint64_t *)(work_buf.data() + 0) = std::byteswap(auth_len);
-            *(uint64_t *)(work_buf.data() + 8) = std::byteswap(ciphered_len);
+            *(u64 *)(work_buf.data() + 0) = std::byteswap(auth_len);
+            *(u64 *)(work_buf.data() + 8) = std::byteswap(ciphered_len);
             for (int i = 0; i < block_size_bytes; ++i) {
                 buf[i] ^= work_buf[i];
             }
@@ -128,28 +128,28 @@ struct gcm {
     }
     void gmult(auto &&buf) {
         // for now
-        *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
-        *(uint64_t *)(h.data() + 0) = std::byteswap(*(uint64_t *)(h.data() + 0));
-        *(uint64_t *)(h.data() + 8) = std::byteswap(*(uint64_t *)(h.data() + 8));
+        *(u64 *)(buf.data() + 0) = std::byteswap(*(u64 *)(buf.data() + 0));
+        *(u64 *)(buf.data() + 8) = std::byteswap(*(u64 *)(buf.data() + 8));
+        *(u64 *)(h.data() + 0) = std::byteswap(*(u64 *)(h.data() + 0));
+        *(u64 *)(h.data() + 8) = std::byteswap(*(u64 *)(h.data() + 8));
 
-        gmult2((uint64_t *)buf.data(), (uint64_t *)h.data());
+        gmult2((u64 *)buf.data(), (u64 *)h.data());
 
-        *(uint64_t *)(buf.data() + 0) = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        *(uint64_t *)(buf.data() + 8) = std::byteswap(*(uint64_t *)(buf.data() + 8));
-        *(uint64_t *)(h.data() + 0) = std::byteswap(*(uint64_t *)(h.data() + 0));
-        *(uint64_t *)(h.data() + 8) = std::byteswap(*(uint64_t *)(h.data() + 8));
+        *(u64 *)(buf.data() + 0) = std::byteswap(*(u64 *)(buf.data() + 0));
+        *(u64 *)(buf.data() + 8) = std::byteswap(*(u64 *)(buf.data() + 8));
+        *(u64 *)(h.data() + 0) = std::byteswap(*(u64 *)(h.data() + 0));
+        *(u64 *)(h.data() + 8) = std::byteswap(*(u64 *)(h.data() + 8));
     }
-    void gmult2(uint64_t *X, uint64_t *Y) {
-        uint64_t Z[2] = {0, 0};
-        uint64_t V[2];
+    void gmult2(u64 *X, u64 *Y) {
+        u64 Z[2] = {0, 0};
+        u64 V[2];
         int i, j;
         V[0] = X[0];
         V[1] = X[1];
         for (i = 0; i < 2; i++) {
             auto y = Y[i];
             for (j = 0; j < 64; j++) {
-                uint64_t mask = 0 - (y >> 63);
+                u64 mask = 0 - (y >> 63);
                 Z[0] ^= V[0] & mask;
                 Z[1] ^= V[1] & mask;
                 auto v1 = (0 - (V[1] & 1)) & 0xE100000000000000ULL;

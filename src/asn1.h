@@ -32,12 +32,12 @@ struct asn1_container {
     static auto get_next_data(bytes_concept data) {
         auto tag = get_tag(data);
         int pos = 1;
-        uint64_t len = 0;
+        u64 len = 0;
         if (tag == 0x05) { // null
             return std::tuple{pos + 1, len};
         }
         len = data[pos];
-        uint8_t lenbytes = 1;
+        u8 lenbytes = 1;
         if (len > 0x80) {
             lenbytes = len ^ 0x80;
             len = 0;
@@ -240,7 +240,7 @@ struct asn1_oid : asn1_base {
             if (*p < 0x80) {
                 s += format(".{}", *p++);
             } else {
-                uint64_t v{};
+                u64 v{};
                 while (*p > 0x80) {
                     v |= *p++ ^ 0x80;
                     v <<= 7;
@@ -290,7 +290,7 @@ struct asn1 : asn1_sequence {
 template <auto n1, auto n2, auto ... nodes>
 constexpr auto make_oid() {
     constexpr int nbytes = (1 + ... + asn1::count_bytes(nodes));
-    std::array<uint8_t, nbytes> data;
+    std::array<u8, nbytes> data;
     data[0] = n1 * 40 + n2;
     auto p = data.data() + 1;
     (asn1::write_bytes(p, nodes),...);

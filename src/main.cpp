@@ -1892,7 +1892,7 @@ int main() {
 #ifndef CI_TESTS
 int main() {
     //test_aes();
-    //test_sha1();
+    test_sha1();
     //test_sha2();
     //test_sha3();
     //test_blake2();
@@ -1912,7 +1912,7 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    test_tls();
+    //test_tls();
     //test_jwt();
 }
 #endif

@@ -20,8 +20,8 @@ struct blake2_base {
     static inline constexpr auto R = Width == 64 ? rot_constants64 : rot_constants32;
     static inline constexpr auto iv = sha2_data::h<Width * 8, Width * 8>();
     static inline constexpr auto block_bytes = Width * 2;
-    using message_length_type = std::conditional_t<Width == 64, uint128_t, uint64_t>;
-    using state_type = std::conditional_t<Width == 64, uint64_t, uint32_t>;
+    using message_length_type = std::conditional_t<Width == 64, uint128_t, u64>;
+    using state_type = std::conditional_t<Width == 64, u64, u32>;
     static inline constexpr int sigma[12][16] = {
         {  0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, },
         { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3, },
@@ -38,7 +38,7 @@ struct blake2_base {
         { 14, 10,  4,  8,  9, 15, 13,  6,  1, 12,  0,  2, 11,  7,  5,  3, },
     };
 
-    blake2_base(bytes_concept key = bytes_concept{}, uint8_t output_bytes = DigestSizeBits / 8) : output_bytes{output_bytes} {
+    blake2_base(bytes_concept key = bytes_concept{}, u8 output_bytes = DigestSizeBits / 8) : output_bytes{output_bytes} {
         if (output_bytes < 1 || output_bytes > Width) {
             throw std::runtime_error{"invalid output_bytes size"};
         }
@@ -56,12 +56,12 @@ struct blake2_base {
     void update(bytes_concept b) noexcept {
         update(b.data(), b.size());
     }
-    void update(const uint8_t *data, size_t length) noexcept {
+    void update(const u8 *data, size_t length) noexcept {
         return update_slow(data, length);
     }
     auto digest() noexcept {
         pad();
-        std::vector<uint8_t> hash(output_bytes);
+        std::vector<u8> hash(output_bytes);
         memcpy(hash.data(), h.data(), output_bytes);
         return hash;
     }
@@ -78,22 +78,22 @@ private:
     int blockpos{};
     // parameters
     // make templated?
-    uint8_t output_bytes;
+    u8 output_bytes;
 
     constexpr void pad() noexcept {
         auto padding_size = block_bytes - blockpos;
-        memset(((uint8_t*)m) + blockpos, 0, padding_size);
+        memset(((u8*)m) + blockpos, 0, padding_size);
         bytelen += blockpos;
         transform(true);
     }
-    void update_slow(const uint8_t *data, size_t length) noexcept {
+    void update_slow(const u8 *data, size_t length) noexcept {
         for (size_t i = 0; i < length; ++i) {
             if (blockpos == block_bytes) {
                 bytelen += block_bytes;
                 transform(false);
                 blockpos = 0;
             }
-            ((uint8_t*)m)[blockpos++] = data[i];
+            ((u8*)m)[blockpos++] = data[i];
         }
     }
 

@@ -34,18 +34,18 @@ struct chacha20_poly1305_aead {
         auto aad_pad = pad(auth_data.size());
         auto data_pad = pad(data.size());
         std::string out2(auth_data.size() + aad_pad + data.size() + data_pad + 8 + 8 + tag_size_bytes, 0);
-        auto p = (uint8_t*)out2.data();
+        auto p = (u8*)out2.data();
         memcpy(p, auth_data.data(), auth_data.size());
         p += auth_data.size();
         p += aad_pad;
-        c.cipher((uint8_t*)data.data(), p, data.size());
+        c.cipher((u8*)data.data(), p, data.size());
         p += data.size();
         p += data_pad;
-        *(uint64_t *)p = auth_data.size();
+        *(u64 *)p = auth_data.size();
         p += 8;
-        *(uint64_t *)p = data.size();
+        *(u64 *)p = data.size();
         p += 8;
-        poly1305_auth(p, (uint8_t *)out2.data(), out2.size() - tag_size_bytes, otk.data());
+        poly1305_auth(p, (u8 *)out2.data(), out2.size() - tag_size_bytes, otk.data());
 
         std::string out(data.size() + tag_size_bytes, 0);
         memcpy(out.data(), out2.data() + auth_data.size() + aad_pad, data.size());
@@ -63,27 +63,27 @@ struct chacha20_poly1305_aead {
         auto data_size = data.size() - tag_size_bytes;
         auto data_pad = pad(data_size);
         std::string out2(auth_data.size() + aad_pad + data_size + data_pad + 8 + 8, 0);
-        auto p = (uint8_t *)out2.data();
+        auto p = (u8 *)out2.data();
         memcpy(p, auth_data.data(), auth_data.size());
         p += auth_data.size();
         p += aad_pad;
         memcpy(p, data.data(), data_size);
         p += data_size;
         p += data_pad;
-        *(uint64_t *)p = auth_data.size();
+        *(u64 *)p = auth_data.size();
         p += 8;
-        *(uint64_t *)p = data_size;
+        *(u64 *)p = data_size;
         p += 8;
 
         array<tag_size_bytes> tag;
-        poly1305_auth((uint8_t *)tag.data(), (uint8_t *)out2.data(), out2.size(), otk.data());
+        poly1305_auth((u8 *)tag.data(), (u8 *)out2.data(), out2.size(), otk.data());
 
         if (memcmp(tag.data(), data.data() + data_size, tag_size_bytes) != 0) {
             throw std::runtime_error{"auth tag is incorrect"};
         }
 
         std::string out(data.size() - tag_size_bytes, 0);
-        c.cipher((uint8_t *)data.data(), (uint8_t *)out.data(), data_size);
+        c.cipher((u8 *)data.data(), (u8 *)out.data(), data_size);
         return out;
     }
     auto pad(auto sz) {

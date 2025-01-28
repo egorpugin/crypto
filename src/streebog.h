@@ -115,10 +115,10 @@ struct streebog_base : streebog_data {
     void update(bytes_concept b) noexcept {
         update(b.data(), b.size());
     }
-    void update(const uint8_t *data, size_t len) noexcept {
+    void update(const u8 *data, size_t len) noexcept {
         return update_slow(data, len);
     }
-    void update_slow(const uint8_t *data, size_t length) noexcept {
+    void update_slow(const u8 *data, size_t length) noexcept {
         for (size_t i = 0; i < length; ++i) {
             this->data[blockpos++] = data[i];
             if (blockpos == state_size) {
@@ -169,8 +169,8 @@ struct streebog_base : streebog_data {
         state = internal;
     }
     static void l(vect &state) noexcept {
-        uint64_t *internal_in = (uint64_t *)state.data();
-        uint64_t internal_out[8]{};
+        u64 *internal_in = (u64 *)state.data();
+        u64 internal_out[8]{};
         int i, j;
         for (i = 7; i >= 0; i--) {
             for (j = 63; j >= 0; j--)
@@ -216,7 +216,7 @@ struct streebog_base : streebog_data {
         return h.digest();
     }
     void stage3() noexcept {
-        uint64_t bitlen = blockpos * 8;
+        u64 bitlen = blockpos * 8;
         vect vlen{};
         memcpy(vlen.data(), &bitlen, sizeof(bitlen));
 

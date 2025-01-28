@@ -67,8 +67,8 @@ auto hmac(bytes_concept key, bytes_concept message) {
 }
 
 // https://datatracker.ietf.org/doc/html/rfc2898
-auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, uint32_t c, uint32_t i) {
-    uint32_t tail{i};
+auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, u32 c, u32 i) {
+    u32 tail{i};
     tail = std::byteswap(tail);
     salt.resize(salt.size() + sizeof(tail));
     memcpy(salt.data() + salt.size() - sizeof(tail), &tail, sizeof(tail));
@@ -83,23 +83,23 @@ auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, uint32_t c, uint32_t 
     }
     return r;
 }
-auto pbkdf2(auto &&prf, auto &&pass, bytes_concept salt, auto &&c, uint32_t derived_key_bytes) {
-    std::vector<uint8_t> res;
+auto pbkdf2(auto &&prf, auto &&pass, bytes_concept salt, auto &&c, u32 derived_key_bytes) {
+    std::vector<u8> res;
     res.resize(derived_key_bytes);
     int i = 0;
     auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
     auto iter_size = r.size();
-    memcpy(res.data() + iter_size * i, r.data(), std::min<uint32_t>(derived_key_bytes - i * iter_size, iter_size));
+    memcpy(res.data() + iter_size * i, r.data(), std::min<u32>(derived_key_bytes - i * iter_size, iter_size));
     ++i;
-    auto iters = std::max<uint32_t>(1, (derived_key_bytes + iter_size - 1) / iter_size);
+    auto iters = std::max<u32>(1, (derived_key_bytes + iter_size - 1) / iter_size);
     for (; i < iters; ++i) {
         auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
-        memcpy(res.data() + iter_size * i, r.data(), std::min<uint32_t>(derived_key_bytes - i * iter_size, iter_size));
+        memcpy(res.data() + iter_size * i, r.data(), std::min<u32>(derived_key_bytes - i * iter_size, iter_size));
     }
     return res;
 }
 template <typename Hash>
-auto pbkdf2(auto &&pass, auto &&salt, auto &&c, uint32_t derived_key_bytes = Hash::digest_size_bytes) {
+auto pbkdf2(auto &&pass, auto &&salt, auto &&c, u32 derived_key_bytes = Hash::digest_size_bytes) {
     return pbkdf2([](auto &&pass, auto &&u) { return hmac<Hash>(pass, u); }, pass, salt, c, derived_key_bytes);
 }
 
@@ -117,7 +117,7 @@ auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
     r.reserve(hash_bytes + info.size() + 1);
     r.append((const char *)info.data(), info.size());
     r.resize(r.size() + 1);
-    std::array<uint8_t, Len> r2;
+    std::array<u8, Len> r2;
     int pos = 0;
     for (int i = 0; i < n; ++i) {
         if (i == 1) {
@@ -167,18 +167,18 @@ auto kdf(auto &&key, auto &&label, auto &&seed) {
     return hmac<Hash>(key, message);
 }
 template <typename Suite>
-auto tlstree_needs_new_key(uint64_t seqnum) {
+auto tlstree_needs_new_key(u64 seqnum) {
     return !(seqnum > 0 && std::ranges::all_of(Suite::C, [&](auto C){return (seqnum & C) == ((seqnum - 1) & C);}));
 }
 template <typename Hash, typename Suite>
-auto tlstree(auto &&key, uint64_t seqnum) {
+auto tlstree(auto &&key, u64 seqnum) {
     auto label = "level0"s;
     auto k = key;
     for (int l = 1; auto &&C : Suite::C) {
         label[5] = l++ + '0';
         auto d = seqnum & C;
         d = std::byteswap(d);
-        k = kdf<Hash>(k, label, bytes_concept{(uint8_t *)&d, sizeof(d)});
+        k = kdf<Hash>(k, label, bytes_concept{(u8 *)&d, sizeof(d)});
     }
     return k;
 }

@@ -30,7 +30,7 @@
 
 namespace crypto::ec::curve25519 {
 
-typedef uint8_t u8;
+typedef u8 u8;
 typedef int32_t s32;
 typedef int64_t limb;
 
@@ -580,7 +580,7 @@ crecip(limb *out, const limb *z) {
 int
 curve25519_donna(u8 *mypublic, const u8 *secret, const u8 *basepoint) {
   limb bp[10], x[10], z[10], zmone[10];
-  uint8_t e[32];
+  u8 e[32];
   int i;
 
   for (i = 0; i < 32; ++i) e[i] = secret[i];

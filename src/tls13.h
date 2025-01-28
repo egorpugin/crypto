@@ -26,7 +26,7 @@ template <auto Bytes>
 using length_type = bigendian_unsigned<Bytes>;
 
 using ube16 = bigendian_unsigned<2>;
-using Random = std::array<uint8_t,32>;
+using Random = std::array<u8,32>;
 
 // selected ciphers:
 // aes+gcm, chacha20+poly1305, russian gost, chineese sm4
@@ -87,7 +87,7 @@ enum class tls_version : uint16_t {
 using ProtocolVersion = ube16;
 
 struct server_name {
-    enum NameType : uint8_t { host_name = 0 };
+    enum NameType : u8 { host_name = 0 };
 
     ube16 extension_type = ExtensionType::server_name;
     ube16 len = sizeof(server_name_list_length) + sizeof(name_type) + sizeof(server_name_length);
@@ -129,7 +129,7 @@ struct renegotiation_info {
 };
 
 struct alert {
-    enum class level_type : uint8_t { warning = 1, fatal = 2 };
+    enum class level_type : u8 { warning = 1, fatal = 2 };
 
     level_type level;
     parameters::alerts description;
@@ -138,10 +138,10 @@ struct alert {
 struct ServerHello {
     ProtocolVersion legacy_version = tls_version::tls12;
     Random random;
-    uint8_t legacy_session_id_len{32};
-    uint8_t legacy_session_id[32];
+    u8 legacy_session_id_len{32};
+    u8 legacy_session_id[32];
     ube16 cipher_suite;
-    uint8_t legacy_compression_method;
+    u8 legacy_compression_method;
 };
 
 struct TLSPlaintext {
@@ -171,17 +171,17 @@ struct Handshake {
 struct ClientHello {
     ProtocolVersion legacy_version = 0x0303; /* TLS v1.2 */
     Random random{};
-    uint8_t legacy_session_id_len{32};
-    uint8_t legacy_session_id[32];
+    u8 legacy_session_id_len{32};
+    u8 legacy_session_id[32];
 };
 
-enum class CertificateType : uint8_t {
+enum class CertificateType : u8 {
     X509 = 0,
     OpenPGP_RESERVED = 1,
     RawPublicKey = 2,
 };
 
-enum class KeyUpdateRequest : uint8_t {
+enum class KeyUpdateRequest : u8 {
     update_not_requested = 0,
     update_requested = 1,
 };

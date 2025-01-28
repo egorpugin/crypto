@@ -16,7 +16,7 @@ struct bigint {
     bigint() {
         mpz_init_set_ui(*this, 0);
     }
-    bigint(uint64_t v) {
+    bigint(u64 v) {
         mpz_init_set_ui(*this, v);
     }
     bigint(int64_t v) {
@@ -130,7 +130,7 @@ struct bigint {
         mpz_fdiv_q(b, b, p);
         return b;
     }*/
-    bigint operator*(uint64_t p) const {
+    bigint operator*(u64 p) const {
         auto b = *this;
         mpz_mul_ui(b, b, p);
         return b;
@@ -157,14 +157,14 @@ struct bigint {
         mpz_init_set(*this, p);
         return *this;
     }
-    bigint &operator=(uint64_t p) {
+    bigint &operator=(u64 p) {
         mpz_init_set_ui(*this, p);
         return *this;
     }
     bool operator==(const bigint &p) const {
         return mpz_cmp(*this, p) == 0;
     }
-    bool operator==(uint64_t p) const {
+    bool operator==(u64 p) const {
         return mpz_cmp_ui(*this, p) == 0;
     }
     bool operator==(int64_t p) const {
@@ -176,7 +176,7 @@ struct bigint {
     auto operator<=>(const bigint &p) const {
         return mpz_cmp(*this, p) <=> 0;
     }
-    auto operator<=>(uint64_t p) const {
+    auto operator<=>(u64 p) const {
         return mpz_cmp_ui(*this, p) <=> 0;
     }
     auto operator<=>(int64_t p) const {
@@ -192,7 +192,7 @@ auto operator""_bi(const char *p, size_t len) {
 }
 
 template <auto N>
-bigint bytes_to_bigint(uint8_t (&v)[N], int order = 1) {
+bigint bytes_to_bigint(u8 (&v)[N], int order = 1) {
     bigint b;
     mpz_import(b, N, order, sizeof(v[0]), 0, 0, v);
     return b;
@@ -216,7 +216,7 @@ bigint bytes_to_bigint(const auto &v, int order = 1) {
 auto bytes_to_string(auto &&bytes) {
     std::string s;
     s.reserve(bytes.size() * 2);
-    for (uint8_t b : bytes) {
+    for (u8 b : bytes) {
         constexpr auto alph = "0123456789abcdef";
         s += alph[b >> 4];
         s += alph[b & 0xF];

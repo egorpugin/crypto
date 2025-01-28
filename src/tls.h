@@ -53,7 +53,7 @@ struct tls13_ {
         template <auto Peer, auto Type>
         struct peer_data {
             // FIXME: gost uses 128 bits sequence number
-            using sequence_number = uint64_t;
+            using sequence_number = u64;
             array<hash::digest_size_bytes> secret;
             sequence_number record_id{};
             array<cipher::key_size_bytes> base_key, key;
@@ -64,7 +64,7 @@ struct tls13_ {
                 auto v = record_id++;
                 v = std::byteswap(v);
                 auto iv = this->iv;
-                (*(uint64_t *)&iv[cipher::iv_size_bytes - sizeof(sequence_number)]) ^= v;
+                (*(u64 *)&iv[cipher::iv_size_bytes - sizeof(sequence_number)]) ^= v;
                 return iv;
             }
             array<cipher::iv_size_bytes> next_nonce() {
@@ -134,7 +134,7 @@ struct tls13_ {
         peer_pair<"ap"_s> traffic;
 
         auto make_handshake_keys(auto &&shared) {
-            std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
+            std::array<u8, hash::digest_size_bytes> zero_bytes{};
             auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
             auto derived1 = derive_secret<hash>(early_secret, "derived"s);
             auto handshake_secret = hkdf_extract<hash>(derived1, shared);
@@ -142,7 +142,7 @@ struct tls13_ {
         }
         auto make_master_keys() {
             auto derived2 = derive_secret<hash>(handshake.secret, "derived"s);
-            std::array<uint8_t, hash::digest_size_bytes> zero_bytes{};
+            std::array<u8, hash::digest_size_bytes> zero_bytes{};
             auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
             traffic.make_keys(master_secret, h);
         }
@@ -168,29 +168,29 @@ struct tls13_ {
         : gost_suite<mgm<grasshopper>, streebog<256>,
                      parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
-        static inline constexpr uint64_t C[] = {0xffffffffe0000000ULL, 0xffffffffffff0000ULL, 0xfffffffffffffff8ULL};
-        // static inline constexpr uint64_t SNMAX = (1ULL << 42) - 1;
+        static inline constexpr u64 C[] = {0xffffffffe0000000ULL, 0xffffffffffff0000ULL, 0xfffffffffffffff8ULL};
+        // static inline constexpr u64 SNMAX = (1ULL << 42) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
         : gost_suite<mgm<grasshopper>, streebog<256>,
                      parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
-        static inline constexpr uint64_t C[] = {0xf800000000000000ULL, 0xfffffff000000000ULL, 0xffffffffffffe000ULL};
-        // static inline constexpr uint64_t SNMAX = std::numeric_limits<unsigned long long>::max();
+        static inline constexpr u64 C[] = {0xf800000000000000ULL, 0xfffffff000000000ULL, 0xffffffffffffe000ULL};
+        // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
     };
     struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_S
         : gost_suite<mgm<magma>, streebog<256>,
                      parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
                      TLS_GOSTR341112_256_WITH_MAGMA_MGM_S> {
-        static inline constexpr uint64_t C[] = {0xfffffffffc000000ULL, 0xffffffffffffe000ULL, 0xffffffffffffffffULL};
-        // static inline constexpr uint64_t SNMAX = (1ULL << 39) - 1;
+        static inline constexpr u64 C[] = {0xfffffffffc000000ULL, 0xffffffffffffe000ULL, 0xffffffffffffffffULL};
+        // static inline constexpr u64 SNMAX = (1ULL << 39) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
         : gost_suite<mgm<magma>, streebog<256>,
                      parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
                      TLS_GOSTR341112_256_WITH_MAGMA_MGM_L> {
-        static inline constexpr uint64_t C[] = {0xffe0000000000000ULL, 0xffffffffc0000000ULL, 0xffffffffffffff80ULL};
-        // static inline constexpr uint64_t SNMAX = std::numeric_limits<unsigned long long>::max();
+        static inline constexpr u64 C[] = {0xffe0000000000000ULL, 0xffffffffc0000000ULL, 0xffffffffffffff80ULL};
+        // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
     };
 
     template <typename T, auto Value>
@@ -289,7 +289,7 @@ struct tls13_ {
     bool hello_retry_request{};
     bytes_concept client_hello1;
     bool ignore_server_certificate_check{};
-    uint8_t legacy_session_id[32];
+    u8 legacy_session_id[32];
     tls13::Random random;
     std::string cookie;
 
@@ -302,7 +302,7 @@ struct tls13_ {
     struct buf_type {
         using header_type = tls13::TLSPlaintext;
 
-        std::vector<uint8_t> data;
+        std::vector<u8> data;
         bool crypted_exchange{};
 
         buf_type() {
@@ -345,15 +345,15 @@ struct tls13_ {
         header_type &header() {
             return *(header_type *)data.data();
         }
-        std::span<uint8_t> header_raw() {
-            return std::span<uint8_t>(data.data(), sizeof(header_type));
+        std::span<u8> header_raw() {
+            return std::span<u8>(data.data(), sizeof(header_type));
         }
         template <typename T>
         T &content() {
             return *(T *)(data.data() + sizeof(header_type));
         }
-        std::span<uint8_t> content_raw() {
-            return std::span<uint8_t>(data.data() + sizeof(header_type), header().size());
+        std::span<u8> content_raw() {
+            return std::span<u8>(data.data() + sizeof(header_type), header().size());
         }
         void handle_alert() {
             handle_alert(content<tls13::alert>());
@@ -371,8 +371,8 @@ struct tls13_ {
     buf_type buf;
 
     struct packet_writer {
-        uint8_t buf[2048]{};
-        uint8_t *p = buf;
+        u8 buf[2048]{};
+        u8 *p = buf;
 
         template <typename T, auto N>
         T *next() {
@@ -420,12 +420,12 @@ struct tls13_ {
         while (dec.back() == 0) {
             dec.resize(dec.size() - 1);
         }
-        if (dec.back() != (!auth_ok ? (uint8_t)parameters::content_type::handshake
-                                    : (uint8_t)parameters::content_type::application_data)) {
-            if (dec.back() == (uint8_t)parameters::content_type::alert) {
+        if (dec.back() != (!auth_ok ? (u8)parameters::content_type::handshake
+                                    : (u8)parameters::content_type::application_data)) {
+            if (dec.back() == (u8)parameters::content_type::alert) {
                 buf.handle_alert(*(tls13::alert *)dec.data());
             }
-            if (dec.back() == (uint8_t)parameters::content_type::handshake) {
+            if (dec.back() == (u8)parameters::content_type::handshake) {
                 dec.resize(dec.size() - 1);
                 read_handshake(dec);
                 co_return co_await receive_tls_message();
@@ -448,7 +448,7 @@ struct tls13_ {
         msg.type = parameters::content_type::application_data;
         msg.length = buf.size() + visit(suite, [](auto &&s){return std::decay_t<decltype(s)>::cipher::tag_size_bytes;});
 
-        auto out = visit(suite, [&](auto &&s){return encrypt(s.traffic, buf, std::span<uint8_t>((uint8_t *)&msg, sizeof(msg)));});
+        auto out = visit(suite, [&](auto &&s){return encrypt(s.traffic, buf, std::span<u8>((u8 *)&msg, sizeof(msg)));});
 
         std::vector<boost::asio::const_buffer> buffers;
         buffers.emplace_back(&msg, sizeof(msg));
@@ -489,9 +489,9 @@ struct tls13_ {
             });
             ciphers_len = sizeof(ube16) * n_suites;
 
-            uint8_t &legacy_compression_methods_len = w;
+            u8 &legacy_compression_methods_len = w;
             legacy_compression_methods_len = 1;
-            uint8_t &legacy_compression_methods = w;
+            u8 &legacy_compression_methods = w;
 
             ube16 &extensions_len = w;
             auto exts_start = w.p;
@@ -564,11 +564,11 @@ struct tls13_ {
 
             /*renegotiation_info &reneg = w;
             reneg.length += 1;
-            uint8_t &_ = w;*/
+            u8 &_ = w;*/
 
             padding &p = w;
             auto msg_size = (w.p - w.buf + 511) / 512 * 512;
-            auto plen = msg_size - (w.p - (uint8_t *)&client_hello);
+            auto plen = msg_size - (w.p - (u8 *)&client_hello);
             w.p += plen;
             p.length = plen;
             extensions_len = w.p - exts_start;
@@ -576,8 +576,8 @@ struct tls13_ {
             client_hello.length = msg_size - 4;
             msg.length = msg_size;
 
-            client_hello1 = bytes_concept{(uint8_t *)&client_hello, msg.length};
-            visit(suite, [&](auto &&s){s.h.update((uint8_t *)&client_hello, msg.length);});
+            client_hello1 = bytes_concept{(u8 *)&client_hello, msg.length};
+            visit(suite, [&](auto &&s){s.h.update((u8 *)&client_hello, msg.length);});
 
             co_await socket().async_send(boost::asio::buffer(w.buf, msg_size + sizeof(msg)), use_awaitable);
 
@@ -611,7 +611,7 @@ struct tls13_ {
 
             std::string hma;
             hma.resize(sizeof(Handshake) + hash_size + 1);
-            hma[sizeof(Handshake) + hash_size] = (uint8_t)parameters::content_type::handshake;
+            hma[sizeof(Handshake) + hash_size] = (u8)parameters::content_type::handshake;
             msg.length = hma.size() + visit(suite, [](auto &&s){return std::decay_t<decltype(s)>::cipher::tag_size_bytes;});
 
             Handshake &client_hello = *(Handshake *)hma.data();
@@ -623,7 +623,7 @@ struct tls13_ {
                 memcpy(hma.data() + sizeof(Handshake), hm.data(), hm.size());
             });
             auto out = visit(suite, [&](auto &&s){
-                return encrypt(s.handshake, hma, std::span<uint8_t>((uint8_t *)&msg, sizeof(msg)));
+                return encrypt(s.handshake, hma, std::span<u8>((u8 *)&msg, sizeof(msg)));
             });
             buffers.emplace_back(out.data(), out.size());
             co_await socket().async_send(buffers, use_awaitable);
@@ -718,7 +718,7 @@ struct tls13_ {
                                 s2.h.update(client_hello1);
                                 if (hello_retry_request) {
                                     std::string str(1 + 2 + 1 + std::decay_t<decltype(s2)>::hash::digest_size_bytes, 0);
-                                    str[0] = (uint8_t)tls13::ExtensionType::message_hash;
+                                    str[0] = (u8)tls13::ExtensionType::message_hash;
                                     str[3] = std::decay_t<decltype(s2)>::hash::digest_size_bytes;
                                     auto h = s2.h.digest();
                                     memcpy(str.data() + 4, h.data(), h.size());
@@ -736,7 +736,7 @@ struct tls13_ {
                         }
                     } else if (hello_retry_request) {
                         std::string str(1 + 2 + 1 + std::decay_t<decltype(s)>::hash::digest_size_bytes, 0);
-                        str[0] = (uint8_t)tls13::ExtensionType::message_hash;
+                        str[0] = (u8)tls13::ExtensionType::message_hash;
                         str[3] = std::decay_t<decltype(s)>::hash::digest_size_bytes;
                         auto h = s.h.digest();
                         memcpy(str.data() + 4, h.data(), h.size());
@@ -753,8 +753,8 @@ struct tls13_ {
                 break;
             }
             case parameters::handshake_type::certificate: {
-                auto s2 = s.substream((uint32_t)h.length);
-                uint8_t certificate_request_context = s2.read();
+                auto s2 = s.substream((u32)h.length);
+                u8 certificate_request_context = s2.read();
                 s2.step(certificate_request_context);
                 length_type<3> len = s2.read();
                 static int d = -1;
@@ -770,7 +770,7 @@ struct tls13_ {
                     CertificateType type = tls13::CertificateType::X509; // s2.read();
                     switch (type) {
                     case tls13::CertificateType::X509: {
-                        uint32_t len2 = len;
+                        u32 len2 = len;
 
                         auto data = s2.span(len2);
                         asn1 a{data};
@@ -925,9 +925,9 @@ struct tls13_ {
                 break;
             }
             case parameters::handshake_type::new_session_ticket: {
-                uint32_t ticket_lifetime = s.read();
-                uint32_t ticket_age_add = s.read();
-                uint8_t len = s.read();
+                u32 ticket_lifetime = s.read();
+                u32 ticket_age_add = s.read();
+                u8 len = s.read();
                 auto ticket_nonce = s.span(len);
                 uint16_t len2 = s.read();
                 auto ticket = s.span(len2);
@@ -952,7 +952,7 @@ struct tls13_ {
                 throw std::logic_error{format("msg_type is not implemented: {}", std::to_string((int)h.msg_type))};
             }
             visit(suite, [&](auto &&s) {
-                s.h.update((uint8_t *)&h, (uint32_t)h.length + sizeof(h));
+                s.h.update((u8 *)&h, (u32)h.length + sizeof(h));
             });
         }
     }
@@ -962,7 +962,7 @@ struct tls13_ {
             while (dec.back() == 0) {
                 dec.resize(dec.size() - 1);
             }
-            if (dec.back() != (uint8_t)parameters::content_type::handshake) {
+            if (dec.back() != (u8)parameters::content_type::handshake) {
                 throw std::runtime_error{"bad content type"};
             }
             dec.resize(dec.size() - 1);

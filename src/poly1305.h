@@ -3,7 +3,7 @@
  * poly1305-donna-unrolled.c from https://github.com/floodyberry/poly1305-donna
  */
 
-#include <stdint.h>
+#include <helpers.h>
 
 #define mul32x32_64(a, b) ((uint64_t)(a) * (b))
 

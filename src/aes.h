@@ -13,7 +13,7 @@
 namespace crypto {
 
 struct aes_data {
-    static inline constexpr unsigned char sbox[16][16] = {
+    static inline constexpr u8 sbox[16][16] = {
             {0x63, 0x7c, 0x77, 0x7b, 0xf2, 0x6b, 0x6f, 0xc5, 0x30, 0x01, 0x67, 0x2b,
                     0xfe, 0xd7, 0xab, 0x76},
             {0xca, 0x82, 0xc9, 0x7d, 0xfa, 0x59, 0x47, 0xf0, 0xad, 0xd4, 0xa2, 0xaf,
@@ -46,7 +46,7 @@ struct aes_data {
                     0xce, 0x55, 0x28, 0xdf},
             {0x8c, 0xa1, 0x89, 0x0d, 0xbf, 0xe6, 0x42, 0x68, 0x41, 0x99, 0x2d, 0x0f,
                     0xb0, 0x54, 0xbb, 0x16}};
-    static inline constexpr unsigned char inv_sbox[16][16] = {
+    static inline constexpr u8 inv_sbox[16][16] = {
             {0x52, 0x09, 0x6a, 0xd5, 0x30, 0x36, 0xa5, 0x38, 0xbf, 0x40, 0xa3, 0x9e,
                     0x81, 0xf3, 0xd7, 0xfb},
             {0x7c, 0xe3, 0x39, 0x82, 0x9b, 0x2f, 0xff, 0x87, 0x34, 0x8e, 0x43, 0x44,
@@ -80,7 +80,7 @@ struct aes_data {
             {0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63,
                     0x55, 0x21, 0x0c, 0x7d}};
     /// Galois Multiplication lookup tables
-    static inline constexpr unsigned char GF_MUL_TABLE[15][256] = {
+    static inline constexpr u8 GF_MUL_TABLE[15][256] = {
             {},
             {},
             // mul 2
@@ -229,13 +229,13 @@ struct aes_data {
                     0xd7, 0xd9, 0xcb, 0xc5, 0xef, 0xe1, 0xf3, 0xfd, 0xa7, 0xa9, 0xbb, 0xb5,
                     0x9f, 0x91, 0x83, 0x8d}};
     /// circulant MDS matrix
-    static inline constexpr unsigned char CMDS[4][4] = {
+    static inline constexpr u8 CMDS[4][4] = {
             {2, 3, 1, 1},
             {1, 2, 3, 1},
             {1, 1, 2, 3},
             {3, 1, 1, 2}};
     /// Inverse circulant MDS matrix
-    static inline constexpr unsigned char INV_CMDS[4][4] = {
+    static inline constexpr u8 INV_CMDS[4][4] = {
             {14, 11, 13, 9},
             {9,  14, 11, 13},
             {13, 9,  14, 11},
@@ -264,10 +264,10 @@ struct aes_base : aes_data {
     static inline constexpr unsigned int Nk = Parameters.Nk;
     static inline constexpr unsigned int Nr = Parameters.Nr;
     static inline constexpr unsigned int Nb = 4;
-    static inline constexpr auto block_size_bytes = 4 * Nb * sizeof(unsigned char);
+    static inline constexpr auto block_size_bytes = 4 * Nb * sizeof(u8);
     static inline constexpr auto key_size_bytes = Parameters.key_size_bytes;
 
-    using state_type = unsigned char[4][Nb];
+    using state_type = u8[4][Nb];
 
     static void SubBytes(state_type state, auto &&box) noexcept {
         for (int i = 0; i < 4; ++i) {
@@ -285,11 +285,11 @@ struct aes_base : aes_data {
     }
     // shift row i on n positions
     static void ShiftRow(state_type state, unsigned int i, unsigned int n) noexcept {
-        unsigned char tmp[Nb];
+        u8 tmp[Nb];
         for (int j = 0; j < Nb; ++j) {
             tmp[j] = state[i][(j + n) % Nb];
         }
-        memcpy(state[i], tmp, Nb * sizeof(unsigned char));
+        memcpy(state[i], tmp, Nb * sizeof(u8));
     }
     static void ShiftRows(state_type state) noexcept {
         ShiftRow(state, 1, 1);
@@ -330,44 +330,44 @@ struct aes_base : aes_data {
             memcpy(state[i], temp_state[i], 4);
         }
     }
-    static void AddRoundKey(state_type state, unsigned char *key) noexcept {
+    static void AddRoundKey(state_type state, u8 *key) noexcept {
         for (int i = 0; i < 4; ++i) {
             for (int j = 0; j < Nb; ++j) {
                 state[i][j] = state[i][j] ^ key[i + 4 * j];
             }
         }
     }
-    void SubWord(unsigned char *a) noexcept {
+    void SubWord(u8 *a) noexcept {
         for (int i = 0; i < 4; ++i) {
             a[i] = sbox[a[i] / 16][a[i] % 16];
         }
     }
-    static void RotWord(unsigned char *a) noexcept {
+    static void RotWord(u8 *a) noexcept {
         auto c = a[0];
         a[0] = a[1];
         a[1] = a[2];
         a[2] = a[3];
         a[3] = c;
     }
-    static void XorWords(unsigned char *a, unsigned char *b, unsigned char *c) noexcept {
+    static void XorWords(u8 *a, u8 *b, u8 *c) noexcept {
         for (int i = 0; i < 4; ++i) {
             c[i] = a[i] ^ b[i];
         }
     }
-    static auto xtime(unsigned char b) noexcept {
+    static auto xtime(u8 b) noexcept {
         return (b << 1) ^ (((b >> 7) & 1) * 0x1b);
     }
-    static void Rcon(unsigned char *a, unsigned int n) noexcept {
-        unsigned char c = 1;
+    static void Rcon(u8 *a, unsigned int n) noexcept {
+        u8 c = 1;
         for (unsigned i = 0; i < n - 1; ++i) {
             c = xtime(c);
         }
         a[0] = c;
         a[1] = a[2] = a[3] = 0;
     }
-    void KeyExpansion(auto &&key, unsigned char w[]) noexcept {
-        unsigned char temp[4];
-        unsigned char rcon[4];
+    void KeyExpansion(auto &&key, u8 w[]) noexcept {
+        u8 temp[4];
+        u8 rcon[4];
 
         for (int i = 0; i < 4 * Nk; ++i) {
             w[i] = key[i];
@@ -394,7 +394,7 @@ struct aes_base : aes_data {
             w[i + 3] = w[i + 3 - 4 * Nk] ^ temp[3];
         }
     }
-    void EncryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) noexcept {
+    void EncryptBlock(const u8 in[], u8 out[], u8 *round_keys) noexcept {
         state_type state;
 
         for (int i = 0; i < 4; ++i) {
@@ -422,7 +422,7 @@ struct aes_base : aes_data {
             }
         }
     }
-    void DecryptBlock(const unsigned char in[], unsigned char out[], unsigned char *round_keys) noexcept {
+    void DecryptBlock(const u8 in[], u8 out[], u8 *round_keys) noexcept {
         state_type state;
 
         for (int i = 0; i < 4; ++i) {
@@ -450,7 +450,7 @@ struct aes_base : aes_data {
             }
         }
     }
-    static void XorBlocks(const unsigned char *a, const unsigned char *b, unsigned char *c) noexcept {
+    static void XorBlocks(const u8 *a, const u8 *b, u8 *c) noexcept {
         for (int i = 0; i < block_size_bytes; ++i) {
             c[i] = a[i] ^ b[i];
         }
@@ -461,34 +461,34 @@ template <auto KeyLength>
 struct aes_ecb : aes_base<aes_parameters(KeyLength)> {
     using base = aes_base<aes_parameters(KeyLength)>;
 
-    unsigned char round_keys[4 * base::Nb * (base::Nr + 1)];
+    u8 round_keys[4 * base::Nb * (base::Nr + 1)];
     aes_ecb() = default;
     explicit aes_ecb(auto &&k) {
         this->KeyExpansion(k, round_keys);
     }
     void encrypt(auto &&in, auto &&out) noexcept {
-        this->EncryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
+        this->EncryptBlock((const u8*)&in, (u8*)&out, round_keys);
     }
     auto encrypt(auto &&in) noexcept {
         array<base::block_size_bytes> out;
-        this->EncryptBlock((const unsigned char *)&in, (unsigned char *)out.data(), round_keys);
+        this->EncryptBlock((const u8 *)&in, (u8 *)out.data(), round_keys);
         return out;
     }
     void decrypt(auto &&in, auto &&out) noexcept {
-        this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, round_keys);
+        this->DecryptBlock((const u8*)&in, (u8*)&out, round_keys);
     }
 };
 template <auto KeyLength>
 struct aes_cbc : aes_ecb<KeyLength> {
     using aes_ecb<KeyLength>::aes_ecb;
     void encrypt(auto &&in, auto &&iv, auto &&out) noexcept {
-        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&in, (unsigned char*)&iv);
-        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
+        this->XorBlocks((const u8*)&iv, (const u8*)&in, (u8*)&iv);
+        this->EncryptBlock((const u8*)&iv, (u8*)&out, this->round_keys);
         iv = out;
     }
     void decrypt(auto &&in, auto &&iv, auto &&out) noexcept {
-        this->DecryptBlock((const unsigned char*)&in, (unsigned char*)&out, this->round_keys);
-        this->XorBlocks((const unsigned char*)&iv, (const unsigned char*)&out, (unsigned char*)&out);
+        this->DecryptBlock((const u8*)&in, (u8*)&out, this->round_keys);
+        this->XorBlocks((const u8*)&iv, (const u8*)&out, (u8*)&out);
         iv = in;
     }
 };
@@ -496,13 +496,13 @@ template <auto KeyLength>
 struct aes_cfb : aes_ecb<KeyLength> {
     using aes_ecb<KeyLength>::aes_ecb;
     void encrypt(auto &&in, auto &&iv, auto &&out) noexcept {
-        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
-        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
+        this->EncryptBlock((const u8*)&iv, (u8*)&out, this->round_keys);
+        this->XorBlocks((const u8*)&in, (const u8*)&out, (u8*)&out);
         iv = out;
     }
     void decrypt(auto &&in, auto &&iv, auto &&out) noexcept {
-        this->EncryptBlock((const unsigned char*)&iv, (unsigned char*)&out, this->round_keys);
-        this->XorBlocks((const unsigned char*)&in, (const unsigned char*)&out, (unsigned char*)&out);
+        this->EncryptBlock((const u8*)&iv, (u8*)&out, this->round_keys);
+        this->XorBlocks((const u8*)&in, (const u8*)&out, (u8*)&out);
         iv = in;
     }
 };

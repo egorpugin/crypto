@@ -11,21 +11,21 @@ struct sm3 {
     static inline constexpr auto digest_size_bytes = 256 / 8;
     static inline constexpr auto chunk_size_bytes = 64;
 
-    uint32_t h[8] = {
+    u32 h[8] = {
         0x7380166f, 0x4914b2b9, 0x172442d7, 0xda8a0600, 0xa96f30bc, 0x163138aa, 0xe38dee4d, 0xb0fb0e4e,
     };
-    uint8_t m_data[chunk_size_bytes];
-    uint64_t bitlen{};
+    u8 m_data[chunk_size_bytes];
+    u64 bitlen{};
     int blockpos{};
 
     void update(bytes_concept b) noexcept {
         update(b.data(), b.size());
     }
-    void update(const uint8_t *data, size_t length) noexcept {
+    void update(const u8 *data, size_t length) noexcept {
         bitlen += length * 8;
         return update_slow(data, length);
     }
-    void update_slow(const uint8_t *data, size_t length) noexcept {
+    void update_slow(const u8 *data, size_t length) noexcept {
         for (size_t i = 0; i < length; ++i) {
             m_data[blockpos++] = data[i];
             if (blockpos == chunk_size_bytes) {
@@ -38,7 +38,7 @@ struct sm3 {
         pad();
         array<digest_size_bytes> r;
         for (int i = 0; i < 8; ++i) {
-            *(uint32_t *)(r.data() + i * 4) = std::byteswap(h[i]);
+            *(u32 *)(r.data() + i * 4) = std::byteswap(h[i]);
         }
         return r;
     }
@@ -75,14 +75,14 @@ struct sm3 {
 /* Message expansion */
 #define P0(x) ((x) ^ rol((x), 9) ^ rol((x), 17))
 #define P1(x) ((x) ^ rol((x), 15) ^ rol((x), 23))
-#define I(i) (w[i] = std::byteswap(*(uint32_t *)(m_data + i * 4)))
+#define I(i) (w[i] = std::byteswap(*(u32 *)(m_data + i * 4)))
 #define W1(i) (w[i & 0x0f])
 #define W2(i)                                                                                                          \
     (w[i & 0x0f] = P1(w[i & 0x0f] ^ w[(i - 9) & 0x0f] ^ rol(w[(i - 3) & 0x0f], 15)) ^ rol(w[(i - 13) & 0x0f], 7) ^     \
                    w[(i - 6) & 0x0f])
 
     void transform() {
-        static const uint32_t K[64] = {
+        static const u32 K[64] = {
             0x79cc4519, 0xf3988a32, 0xe7311465, 0xce6228cb, 0x9cc45197, 0x3988a32f, 0x7311465e, 0xe6228cbc,
             0xcc451979, 0x988a32f3, 0x311465e7, 0x6228cbce, 0xc451979c, 0x88a32f39, 0x11465e73, 0x228cbce6,
             0x9d8a7a87, 0x3b14f50f, 0x7629ea1e, 0xec53d43c, 0xd8a7a879, 0xb14f50f3, 0x629ea1e7, 0xc53d43ce,
@@ -92,8 +92,8 @@ struct sm3 {
             0x9d8a7a87, 0x3b14f50f, 0x7629ea1e, 0xec53d43c, 0xd8a7a879, 0xb14f50f3, 0x629ea1e7, 0xc53d43ce,
             0x8a7a879d, 0x14f50f3b, 0x29ea1e76, 0x53d43cec, 0xa7a879d8, 0x4f50f3b1, 0x9ea1e762, 0x3d43cec5};
 
-        uint32_t a, b, c, d, e, f, g, h, ss1, ss2;
-        uint32_t w[16];
+        u32 a, b, c, d, e, f, g, h, ss1, ss2;
+        u32 w[16];
 
         a = this->h[0];
         b = this->h[1];
@@ -204,7 +204,7 @@ struct sm3 {
             transform();
             memset(m_data, 0, blockpos = 56);
       }
-      *(uint64_t *)(m_data + blockpos) = std::byteswap(bitlen);
+      *(u64 *)(m_data + blockpos) = std::byteswap(bitlen);
       transform();
     }
 };

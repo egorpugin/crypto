@@ -83,11 +83,11 @@ struct jwt {
             return std::format("PS{}", Bits);
         }
         static auto pkcs1_mgf1(auto &&p, auto &&sz, auto &&seed) {
-            for (uint32_t i = 0, outlen = 0; outlen < sz; ++i) {
+            for (u32 i = 0, outlen = 0; outlen < sz; ++i) {
                 sha2<Bits> h;
                 h.update(seed);
                 auto counter = std::byteswap(i);
-                h.update((const uint8_t *)&counter, 4);
+                h.update((const u8 *)&counter, 4);
                 auto r = h.digest();
                 auto to_copy = std::min<int>(sz - outlen, r.size());
                 memcpy(p + outlen, r.data(), to_copy);
@@ -157,7 +157,7 @@ struct jwt {
             if (emlen < hlen + slen + 2) {
                 return false; // inconsistent
             }
-            if ((uint8_t)EM[emlen - 1] != 0xbc) {
+            if ((u8)EM[emlen - 1] != 0xbc) {
                 return false; // inconsistent
             }
             auto masked_db_len = emlen - hlen - 1;
@@ -180,7 +180,7 @@ struct jwt {
             sha2<Bits> hh;
             hh.update(zeroes);
             hh.update(mhash);
-            hh.update((const uint8_t *)db.data() + i, masked_db_len - i);
+            hh.update((const u8 *)db.data() + i, masked_db_len - i);
             return bytes_concept{mseed} == bytes_concept{hh.digest()};
         }
     };

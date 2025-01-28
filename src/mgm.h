@@ -48,7 +48,7 @@ struct mgm {
         for (int i = 0; i < h; ++i) {
             auto H = c.encrypt(Z);
             inc_counter(Z, block_size_bytes / 2);
-            mul(H, (uint8_t *)(auth.data() + i * block_size_bytes));
+            mul(H, (u8 *)(auth.data() + i * block_size_bytes));
             for (int j = 0; j < block_size_bytes; ++j) {
                 T[j] ^= H[j];
             }
@@ -69,7 +69,7 @@ struct mgm {
             for (int i = 0; i < q; ++i) {
                 auto H = c.encrypt(Z);
                 inc_counter(Z, block_size_bytes / 2);
-                mul(H, (uint8_t *)(out.data() + i * block_size_bytes));
+                mul(H, (u8 *)(out.data() + i * block_size_bytes));
                 for (int j = 0; j < block_size_bytes; ++j) {
                     T[j] ^= H[j];
                 }
@@ -94,12 +94,12 @@ struct mgm {
         }
 
         auto H = c.encrypt(Z);
-        using lentype = std::conditional_t<block_size_bytes == 8, uint32_t, uint64_t>;
+        using lentype = std::conditional_t<block_size_bytes == 8, u32, u64>;
         lentype sz = auth.size() * 8;
         *(lentype*)L.data() = std::byteswap(sz);
         sz = out.size() * 8;
         *(((lentype *)L.data()) + 1) = std::byteswap(sz);
-        mul(H, (uint8_t *)L.data());
+        mul(H, (u8 *)L.data());
         for (int j = 0; j < block_size_bytes; ++j) {
             T[j] ^= H[j];
         }
@@ -134,7 +134,7 @@ struct mgm {
         return out;
     }
 
-    void mul(array<block_size_bytes> &buf, uint8_t *buf2) {
+    void mul(array<block_size_bytes> &buf, u8 *buf2) {
         if constexpr (block_size_bytes == 8) {
             mul64(buf, buf2);
         } else {
@@ -142,10 +142,10 @@ struct mgm {
         }
     }
     // [gogost.git] / mgm / mul64.go
-    void mul64(array<block_size_bytes> &buf, uint8_t *buf2) {
-        auto x = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        auto y = std::byteswap(*(uint64_t *)(buf2 + 0));
-        uint64_t z = 0;
+    void mul64(array<block_size_bytes> &buf, u8 *buf2) {
+        auto x = std::byteswap(*(u64 *)(buf.data() + 0));
+        auto y = std::byteswap(*(u64 *)(buf2 + 0));
+        u64 z = 0;
         while (y) {
             if (y & 1) {
                 z ^= x;
@@ -158,7 +158,7 @@ struct mgm {
             }
             y >>= 1;
         }
-        auto len = [](uint8_t *buf) {
+        auto len = [](u8 *buf) {
             int xlen = 0;
             int i = 0;
             for (int i = 0; i < 8; ++i) {
@@ -169,16 +169,16 @@ struct mgm {
             }
             return xlen;
         };
-        *(uint64_t *)(buf.data() + 0) = std::byteswap(z);
+        *(u64 *)(buf.data() + 0) = std::byteswap(z);
     }
     // [gogost.git] / mgm / mul128.go
-    void gf128(array<block_size_bytes> &buf, uint8_t *buf2) {
-        auto x0 = std::byteswap(*(uint64_t *)(buf.data() + 8));
-        auto x1 = std::byteswap(*(uint64_t *)(buf.data() + 0));
-        auto y0 = std::byteswap(*(uint64_t *)(buf2 + 8));
-        auto y1 = std::byteswap(*(uint64_t *)(buf2 + 0));
+    void gf128(array<block_size_bytes> &buf, u8 *buf2) {
+        auto x0 = std::byteswap(*(u64 *)(buf.data() + 8));
+        auto x1 = std::byteswap(*(u64 *)(buf.data() + 0));
+        auto y0 = std::byteswap(*(u64 *)(buf2 + 8));
+        auto y1 = std::byteswap(*(u64 *)(buf2 + 0));
 
-        uint64_t t,z0{},z1{};
+        u64 t,z0{},z1{};
         std::tie(t,x0,x1,z0,z1) = gf128half(64,y0,x0,x1,0,0);
         std::tie(t,x0,x1,z0,z1) = gf128half(63,y1,x0,x1,z0,z1);
         if (t & 1) {
@@ -186,10 +186,10 @@ struct mgm {
             z1 ^= x1;
         }
 
-        *(uint64_t *)(buf.data() + 8) = std::byteswap(z0);
-        *(uint64_t *)(buf.data() + 0) = std::byteswap(z1);
+        *(u64 *)(buf.data() + 8) = std::byteswap(z0);
+        *(u64 *)(buf.data() + 0) = std::byteswap(z1);
     }
-    auto gf128half(int n, auto t, uint64_t x0, uint64_t x1, uint64_t z0, uint64_t z1) {
+    auto gf128half(int n, auto t, u64 x0, u64 x1, u64 z0, u64 z1) {
         for (int i = 0; i < n; ++i) {
             if (t & 1) {
                 z0 ^= x0;

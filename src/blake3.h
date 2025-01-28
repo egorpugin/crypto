@@ -12,7 +12,7 @@ struct blake3 : hash_traits<blake3> {
     using hash_traits::digest;
     using hash_traits::update;
 
-    enum flag_type : uint32_t {
+    enum flag_type : u32 {
         CHUNK_START         = 0x01,
         CHUNK_END           = 0x02,
         PARENT              = 0x04,
@@ -26,7 +26,7 @@ struct blake3 : hash_traits<blake3> {
     static inline constexpr auto block_size_bytes = 64;
     static inline constexpr auto max_block = chunk_size_bytes / block_size_bytes;
     static inline constexpr auto iv = sha2_data::h<digest_size_bytes * 8, digest_size_bytes * 8>();
-    static inline constexpr uint8_t P[7][16] = {
+    static inline constexpr u8 P[7][16] = {
         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15},
         {2, 6, 3, 10, 7, 0, 4, 13, 1, 11, 12, 5, 9, 14, 15, 8},
         {3, 4, 10, 12, 13, 2, 7, 14, 6, 5, 9, 0, 11, 15, 8, 1},
@@ -36,13 +36,13 @@ struct blake3 : hash_traits<blake3> {
         {11, 15, 5, 0, 1, 9, 8, 6, 14, 10, 2, 12, 3, 4, 7, 13},
     };
 
-    uint32_t h0[8];
-    uint32_t h[16];
-    uint8_t m[block_size_bytes];
-    uint64_t n_chunks{};
-    uint8_t n_blocks{};
-    uint8_t blockpos{};
-    uint32_t flags{};
+    u32 h0[8];
+    u32 h[16];
+    u8 m[block_size_bytes];
+    u64 n_chunks{};
+    u8 n_blocks{};
+    u8 blockpos{};
+    u32 flags{};
     std::vector<array<block_size_bytes / 2>> tree;
 
     blake3() {
@@ -59,13 +59,13 @@ struct blake3 : hash_traits<blake3> {
     }
     void reset_h() {
         memcpy(h, h0, sizeof(h0));
-        memset((uint8_t*)h + sizeof(h) / 2, 0, sizeof(h) / 2);
+        memset((u8*)h + sizeof(h) / 2, 0, sizeof(h) / 2);
     }
-    void add_to_tree(uint8_t *h0_and_final_flag = nullptr) {
+    void add_to_tree(u8 *h0_and_final_flag = nullptr) {
         auto &v = tree.emplace_back();
         memcpy(v.data(), h, block_size_bytes / 2);
 
-        uint32_t fl{PARENT | flags & ~(CHUNK_START | CHUNK_END)};
+        u32 fl{PARENT | flags & ~(CHUNK_START | CHUNK_END)};
         auto must_left = std::popcount(n_chunks);
         while (tree.size() > must_left || (h0_and_final_flag && tree.size() > 1)) {
             reset_h();
@@ -84,9 +84,9 @@ struct blake3 : hash_traits<blake3> {
             memcpy(tree.back().data(), h, block_size_bytes / 2);
         }
     }
-    void update(const uint8_t *data, size_t length) noexcept {
+    void update(const u8 *data, size_t length) noexcept {
         update_fast_pre(data, length, m, sizeof(m), blockpos, [&]() {
-            uint32_t fl{flags};
+            u32 fl{flags};
             if (n_blocks++ == 0) {
                 fl |= CHUNK_START;
             }
@@ -115,9 +115,9 @@ struct blake3 : hash_traits<blake3> {
         }
         compress(h, m, blockpos, n_chunks++, flags);
         if (!tree.empty()) {
-            add_to_tree((uint8_t*)h0);
+            add_to_tree((u8*)h0);
         }
-        std::vector<uint8_t> hash(outlen);
+        std::vector<u8> hash(outlen);
         auto p = hash.data();
         auto to_copy = std::min<size_t>(outlen, sizeof(h));
         memcpy(p, h, to_copy);
@@ -140,16 +140,16 @@ struct blake3 : hash_traits<blake3> {
         bk.update(key);
         return bk.digest(outlen);
     }
-    static void compress(auto &&h, auto &&m, int sz, uint64_t counter, uint32_t flags) {
-        uint32_t v[16];
+    static void compress(auto &&h, auto &&m, int sz, u64 counter, u32 flags) {
+        u32 v[16];
         memcpy(v, h, sizeof(h) / 2);
-        memcpy(v+8, iv.data(), sizeof(uint32_t) * 4);
+        memcpy(v+8, iv.data(), sizeof(u32) * 4);
         v[12] = counter;
         v[13] = counter >> 32;
         v[14] = sz;
         v[15] = flags;
         for (int i = 0; i < 7; ++i) {
-            round(v, (uint32_t*)m, P[i]);
+            round(v, (u32*)m, P[i]);
         }
         for (int i = 0; i < 8; ++i) {
             v[i] ^= v[i + 8];
@@ -157,7 +157,7 @@ struct blake3 : hash_traits<blake3> {
         }
         memcpy(h, v, sizeof(h));
     }
-    static void G(uint32_t *v, uint32_t a, uint32_t b, uint32_t c, uint32_t d, uint32_t x, uint32_t y) {
+    static void G(u32 *v, u32 a, u32 b, u32 c, u32 d, u32 x, u32 y) {
         v[a] = v[a] + v[b] + x;
         v[d] = std::rotr(v[d] ^ v[a], 16);
         v[c] = v[c] + v[d];
@@ -168,7 +168,7 @@ struct blake3 : hash_traits<blake3> {
         v[c] = v[c] + v[d];
         v[b] = std::rotr(v[b] ^ v[c], 7);
     }
-    static void round(uint32_t *v, const uint32_t *m, const uint8_t *s) {
+    static void round(u32 *v, const u32 *m, const u8 *s) {
         G(v, 0, 4,  8, 12, m[s[ 0]], m[s[ 1]]);
         G(v, 1, 5,  9, 13, m[s[ 2]], m[s[ 3]]);
         G(v, 2, 6, 10, 14, m[s[ 4]], m[s[ 5]]);

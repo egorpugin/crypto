@@ -17,7 +17,7 @@
 
 namespace crypto {
 
-auto get_random_secure_bytes(uint8_t *p, size_t len) {
+auto get_random_secure_bytes(u8 *p, size_t len) {
 #ifdef _WIN32
     BCryptGenRandom(0, p, len, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
 #else
@@ -27,17 +27,17 @@ auto get_random_secure_bytes(uint8_t *p, size_t len) {
 #endif
 }
 auto get_random_secure_bytes(unsigned n) {
-    std::vector<uint8_t> v;
+    std::vector<u8> v;
     v.resize(n);
     get_random_secure_bytes(v.data(), n);
     return v;
 }
 template <auto N>
-void get_random_secure_bytes(uint8_t (&v)[N]) {
+void get_random_secure_bytes(u8 (&v)[N]) {
     get_random_secure_bytes(v, N);
 }
 void get_random_secure_bytes(auto &v) {
-    get_random_secure_bytes((uint8_t*)v.data(), v.size());
+    get_random_secure_bytes((u8*)v.data(), v.size());
 }
 
 } // namespace crypto
