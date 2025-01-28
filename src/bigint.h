@@ -203,12 +203,11 @@ bigint bytes_to_bigint(const array<N> &v, int order = 1) {
     mpz_import(b, N, order, sizeof(v[0]), 0, 0, v.data());
     return b;
 }
-// this does not work as const & for some reason. compiler issue?
 template <auto N>
-bigint bytes_to_bigint(array_gost<N> v) {
+bigint bytes_to_bigint(const array_gost<N> &v) {
     return bytes_to_bigint(v, -1);
 }
-bigint bytes_to_bigint(auto &&v, int order = 1) {
+bigint bytes_to_bigint(const auto &v, int order = 1) {
     bigint b;
     mpz_import(b, v.size(), order, 1, 0, 0, v.data());
     return b;
