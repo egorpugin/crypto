@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
-
 /* mini-gmp, a minimalistic implementation of a GNU GMP subset.
 
 Copyright 2011-2015, 2017, 2019-2020 Free Software Foundation, Inc.
