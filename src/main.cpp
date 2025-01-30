@@ -834,6 +834,100 @@ void test_ec() {
             check_shared(c,pubs);
         }
     }
+
+    // sign & verify
+    // rfc6979
+    {
+        auto message = "sample"s;
+
+        ec::secp256r1 c{bytes_concept{"C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb}};
+        auto pubkey = c.public_key();
+        cmp_bytes(pubkey.x, "60FED4BA255A9D31C961EB74C6356D68C049B8923B61FA6CE669622E60F29FB6"_sb);
+        cmp_bytes(pubkey.y, "7903FE1008B8BC99A41AE9E95628BC64F2F1B20C2D7E9F5177A3C294D4462299"_sb);
+
+        auto q = bigint{c.parameters.order};
+        auto h = sha256::digest(message);
+
+        auto hmac_k = [&](auto &&make_r) {
+            std::string v0(h.size(), 1);
+            std::string k0(h.size(), 0);
+            hmac2<sha256> hm{k0};
+            hm.update(v0);
+            u8 zero{};
+            hm.update(&zero, 1);
+            hm.update(c.private_key_);
+            hm.update(h);
+            auto k = hm.digest();
+            auto v = hmac<sha256>(k,v0);
+            hmac2<sha256> hm2{k};
+            hm2.update(v);
+            u8 one{1};
+            hm2.update(&one, 1);
+            hm2.update(c.private_key_);
+            hm2.update(h);
+            k = hm2.digest();
+            v = hmac<sha256>(k,v);
+            // make T
+            // rfc6979#section3.2
+            auto tlen = q.size();
+            auto hlen = h.size();
+            if (tlen != hlen) {
+                throw std::runtime_error{"not implemented"};
+            }
+            while (1) {
+                v = hmac<sha256>(k,v); // T
+                auto b = bytes_to_bigint(v);
+                auto r = make_r(b);
+                if (0 < b && b < q && r != 0) {
+                    return std::tuple{v,r.to_string()};
+                }
+                hmac2<sha256> h{k};
+                h.update(v);
+                h.update(&zero, 1);
+                k = h.digest();
+                v = hmac<sha256>(k,v);
+            }
+        };
+
+        auto ec = c.parameters.curve();
+        auto [k,r] = hmac_k([&](auto &&k){return (k * ec.G).x % q;});
+        cmp_bytes(k, "A6E3C57DD01ABE90086538398355DD4C3B17AA873382B0F24D6129493D8AAD60"_sb);
+        auto r_string = "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb;
+        cmp_bytes(r, r_string);
+
+        auto [r2,s2] = c.template sign<sha256>(message);
+        cmp_bytes(r2, r_string);
+        cmp_bytes(s2, "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb);
+
+        auto hb = bytes_to_bigint(h) % q;
+        auto d = bytes_to_bigint(c.private_key_);
+        auto bk = bytes_to_bigint(k);
+        mpz_invert(bk, bk, q);
+        auto s = bk * (hb + d * bytes_to_bigint(r));
+        s %= q;
+
+        cmp_bytes(s.to_string(), "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb);
+
+        auto verify = [&]() {
+            bigint w;
+            mpz_invert(w, s, q);
+            auto u1 = (hb * w) % q;
+            auto u2 = (bytes_to_bigint(r) * w) % q;
+            auto ug = u1 * ec.G;
+            decltype(ec.G) Q{ec.G.ec};
+            Q.x = bytes_to_bigint(pubkey.x);
+            Q.y = bytes_to_bigint(pubkey.y);
+            auto uq = u2 * Q;
+            auto r2 = ug + uq;
+            if (r2.x == 0) {
+                return false;
+            }
+            auto v = r2.x % q;
+            cmp_bytes(v.to_string(), r_string);
+            return v == bytes_to_bigint(r);
+        };
+        cmp_base(verify(), true);
+    }
 }
 
 void test_hmac() {
@@ -1688,6 +1782,8 @@ void test_tls() {
         run0(t, url);
     };
 
+    run("github.com");
+
     for (auto s : {
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
@@ -1892,15 +1988,15 @@ int main() {
 #ifndef CI_TESTS
 int main() {
     //test_aes();
-    test_sha1();
+    //test_sha1();
     //test_sha2();
     //test_sha3();
     //test_blake2();
     //test_blake3();
     //test_sm3();
     //test_sm4();
-    //test_ec();
-    //test_hmac();
+    test_ec();
+    test_hmac();
     //test_pbkdf2();
     //test_chacha20();
     //test_chacha20_aead();
