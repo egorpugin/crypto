@@ -94,8 +94,13 @@ struct bigint {
             throw std::runtime_error{"bigint error"};
         }
 
-        A<N> d;
-        mpz_export(d.data(), 0, Order, 1, 0, 0, *this);
+        auto count = N;
+        A<N> d{};
+        auto p = d.data();
+        if (count > count1) {
+            p += count - count1;
+        }
+        mpz_export(p, 0, Order, 1, 0, 0, *this);
         return d;
     }
     auto to_string(int count) {
