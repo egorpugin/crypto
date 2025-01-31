@@ -5,6 +5,8 @@
 
 #include "bigint.h"
 
+#include <print>
+
 // https://neuromancer.sk/std/
 
 namespace crypto::ec {
@@ -15,9 +17,14 @@ struct point {
 };
 
 // y^2 = x^3 + ax + b
+// prime field only
 struct weierstrass {
     bigint a, b, p;
 };
+
+// y^2 + xy = x^3 + ax + b
+//struct weierstrass_binary_field {
+//};
 
 // a * x^2 + y^2 = 1 + d * x^2 * y^2
 struct twisted_edwards {
@@ -47,7 +54,7 @@ struct ec_field_point : point<bigint> {
         return *this;
     }
 
-    //
+    // prime field, but not binary
     ec_field_point double_() const
         requires std::same_as<Curve, weierstrass>
     {
@@ -190,7 +197,7 @@ struct parameters<T, twisted_edwards> {
     }
 };
 
-template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
+template <auto PointSizeBits, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct secp {
     static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
                                                                                    .a = A,
@@ -204,7 +211,7 @@ struct secp {
                                                                                    .cofactor = Cofactor};
 
     static inline constexpr auto point_size_bytes =
-        ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
+        ((PointSizeBits / 8) * 8 == PointSizeBits) ? PointSizeBits / 8 : (PointSizeBits / 8 + 1);
 
 #pragma pack(push, 1)
     struct key_type {
@@ -215,7 +222,7 @@ struct secp {
 #pragma pack(pop)
 
     static inline constexpr auto key_size = sizeof(key_type);
-    using private_key_type = array<key_size>;
+    using private_key_type = array<point_size_bytes>;
     using public_key_type = private_key_type;
 
     private_key_type private_key_;
@@ -244,6 +251,112 @@ struct secp {
         memcpy(shared_secret.data(), (u8 *)&k2.x, point_size_bytes);
         return shared_secret;
     }
+
+    // rfc6979
+    // it can be weak?
+    // see https://github.com/openssl/openssl/issues/2078#issuecomment-309278772
+    // see scheme for more secure gen https://github.com/openssl/openssl/commit/190c615d4398cc6c8b61eb7881d7409314529a75#diff-a17f5d7191d322b0645cdf359f2a3f9b38ca43d09a85ee6255600c46dd772b51L107
+    // this impl is not well tested and have bugs
+    // https://github.com/openssl/openssl/pull/18809
+    // verify works as expected
+    template <typename Hash>
+    auto sign_deterministic(auto &&message) {
+        auto pubkey = public_key();
+
+        std::println();
+
+        auto ec = parameters.curve();
+        auto q = bigint{parameters.order};
+        auto qlen = point_size_bytes;
+        auto h = Hash::digest(message);
+
+        auto print = [](auto &&v) {
+            std::println("{}", bytes_to_string(v));
+        };
+
+        auto hmac_k = [&]() {
+            std::string v0(h.size(), 1);
+            std::string k0(h.size(), 0);
+            print(k0);
+            print(v0);
+            print(private_key_);
+            print(h);
+            hmac2<Hash> hm{k0};
+            hm.update(v0);
+            u8 zero{};
+            hm.update(&zero, 1);
+            hm.update(private_key_);
+            hm.update(h);
+            auto k = hm.digest();
+            print(k);
+            auto v = hmac<Hash>(k,v0);
+            hmac2<Hash> hm2{k};
+            hm2.update(v);
+            u8 one{1};
+            hm2.update(&one, 1);
+            hm2.update(private_key_);
+            hm2.update(h);
+            k = hm2.digest();
+            v = hmac<Hash>(k,v);
+            //
+            while (1) {
+                std::string t(qlen, 0);
+                for (size_t tlen = 0; tlen < qlen;) {
+                    v = hmac<Hash>(k,v);
+                    auto to_copy = std::min(qlen-tlen, v.size());
+                    memcpy(t.data() + tlen, v.data(), to_copy);
+                    tlen += to_copy;
+                }
+                {
+                    auto k = bytes_to_bigint(t);
+                    auto r = (k * ec.G).x % q;
+                    if (0 < k && k < q && r != 0) {
+                        return std::tuple{k,r};
+                    }
+                }
+                hmac2<Hash> h{v};
+                h.update(v);
+                h.update(&zero, 1);
+                k = h.digest();
+                v = hmac<Hash>(k,v);
+            }
+        };
+
+        auto [k,r] = hmac_k();
+
+        auto hb = bytes_to_bigint(h) % q;
+        auto d = bytes_to_bigint(private_key_);
+        mpz_invert(k, k, q);
+        auto s = (k * (hb + d * r)) % q;
+
+        return std::tuple{r.to_string(),s.to_string()};
+    }
+    template <typename Hash>
+    auto verify(auto &&message, auto &&pubkey, auto &&r, auto &&s) {
+        auto ec = parameters.curve();
+        auto q = bigint{parameters.order};
+
+        auto h = Hash::digest(message);
+        auto hb = bytes_to_bigint(h) % q;
+        auto rb = bytes_to_bigint(r);
+
+        decltype(ec.G) Q{ec.G.ec};
+        Q.x = bytes_to_bigint(pubkey.x);
+        Q.y = bytes_to_bigint(pubkey.y);
+
+        bigint w;
+        mpz_invert(w, bytes_to_bigint(s), q);
+        auto u1 = (hb * w) % q;
+        auto u2 = (rb * w) % q;
+        auto ug = u1 * ec.G;
+        auto uq = u2 * Q;
+        auto r2 = ug + uq;
+        if (r2.x == 0) {
+            return false;
+        }
+        auto v = r2.x % q;
+        return v == rb;
+    }
 };
 
 // https://neuromancer.sk/std/secg/secp256r1
@@ -266,7 +379,7 @@ using secp384r1 =
 
 namespace gost::r34102012 {
 
-template <auto PointSizeBytes, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
+template <auto PointSizeBits, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct curve {
     static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
                                                                                    .a = A,
@@ -280,7 +393,7 @@ struct curve {
                                                                                    .cofactor = Cofactor};
 
     static inline constexpr auto point_size_bytes =
-        ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
+        ((PointSizeBits / 8) * 8 == PointSizeBits) ? PointSizeBits / 8 : (PointSizeBits / 8 + 1);
 
 #pragma pack(push, 1)
     struct key_type {
@@ -330,7 +443,7 @@ struct curve {
     }
 };
 
-template <auto PointSizeBytes, auto P, auto A, auto D, auto Gx, auto Gy, auto Order, auto Cofactor, typename Wcurve>
+template <auto PointSizeBits, auto P, auto A, auto D, auto Gx, auto Gy, auto Order, auto Cofactor, typename Wcurve>
 struct twisted_edwards {
     static inline const auto parameters = ec::parameters<string_view, ec::twisted_edwards>{.p = P,
                                                                                            .a = A,
@@ -344,7 +457,7 @@ struct twisted_edwards {
                                                                                            .cofactor = Cofactor};
 
     static inline constexpr auto point_size_bytes =
-        ((PointSizeBytes / 8) * 8 == PointSizeBytes) ? PointSizeBytes / 8 : (PointSizeBytes / 8 + 1);
+        ((PointSizeBits / 8) * 8 == PointSizeBits) ? PointSizeBits / 8 : (PointSizeBits / 8 + 1);
 
 #pragma pack(push, 1)
     struct key_type {
@@ -370,7 +483,6 @@ struct twisted_edwards {
         }
     }
     auto public_key() {
-        auto c = parameters.curve();
         auto m = bytes_to_bigint(this->private_key_);
         auto wc = Wcurve::parameters.curve();
         auto wp = m * wc.G;

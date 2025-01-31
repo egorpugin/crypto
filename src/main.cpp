@@ -95,7 +95,7 @@ auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
         crypto::print_buffer("result:", res);
     }
 };
-auto cmp_base = [](auto &&left, auto &&right) {
+auto cmp_bool = [](auto &&left, auto &&right) {
     auto r = left == right;
     ++total;
     success += !!r;
@@ -103,6 +103,9 @@ auto cmp_base = [](auto &&left, auto &&right) {
         std::cerr << "false" << "\n";
     }
     return r;
+};
+auto cmp_base = [](auto &&left, auto &&right) {
+    return cmp_bool(left == right, true);
 };
 auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right) {
     auto r = cmp_base(left,right);
@@ -292,6 +295,18 @@ void test_sha2() {
                    "11111111111111111111111111111111111111111111111111111111111111111"
                 , "32063579e2f475efdea66d4384f75a96df64247e363c7ad8eb640a25");
     }
+    {
+        sha2<224> sha;
+        to_string2(sha,
+                   "message"
+                , "ff51ddfabb180148583ba6ac23483acd2d049e7c4fdba6a891419320");
+    }
+    {
+        sha2<512> sha;
+        to_string2(sha,
+                   "message"
+                , "f8daf57a3347cc4d6b9d575b31fe6077e2cb487f60a96233c08cb479dbf31538cc915ec6d48bdbaa96ddc1a16db4f4f96f37276cfcb3510b8246241770d5952c");
+    }
 }
 
 void test_sha3() {
@@ -399,6 +414,18 @@ void test_sha3() {
         to_string2(sha,
                    "11111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111",
                    "8bcb6461eaaa339930d73868863c40861f18598560160ce1d69709a0");
+    }
+    {
+        sha3<512> sha;
+        to_string2(sha,
+                   std::string(0x48, '1'),
+                   "631ce1bbf408fa13586f949526b77e8d529a6b89782bf7e156ef7749b66ba5080ac565b15f54e1c01ed65e10cb110aa2622df5d801837630fd2661970632abf5");
+    }
+    {
+        sha3<512> sha;
+        to_string2(sha,
+                   std::string(0x49, '1'),
+                   "cd45f9f16c23b3330fffbaefae37d072b34a5fc05954fda6419fedea03da27393ca7056ef2e25c78e3e787cd95b92d63c2389109553025d15935478fd773ba09");
     }
 }
 
@@ -835,98 +862,84 @@ void test_ec() {
         }
     }
 
-    // sign & verify
-    // rfc6979
     {
-        auto message = "sample"s;
-
         ec::secp256r1 c{bytes_concept{"C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb}};
         auto pubkey = c.public_key();
         cmp_bytes(pubkey.x, "60FED4BA255A9D31C961EB74C6356D68C049B8923B61FA6CE669622E60F29FB6"_sb);
         cmp_bytes(pubkey.y, "7903FE1008B8BC99A41AE9E95628BC64F2F1B20C2D7E9F5177A3C294D4462299"_sb);
+    }
+}
 
-        auto q = bigint{c.parameters.order};
-        auto h = sha256::digest(message);
+void test_ecdsa() {
+    LOG_TEST();
 
-        auto hmac_k = [&](auto &&make_r) {
-            std::string v0(h.size(), 1);
-            std::string k0(h.size(), 0);
-            hmac2<sha256> hm{k0};
-            hm.update(v0);
-            u8 zero{};
-            hm.update(&zero, 1);
-            hm.update(c.private_key_);
-            hm.update(h);
-            auto k = hm.digest();
-            auto v = hmac<sha256>(k,v0);
-            hmac2<sha256> hm2{k};
-            hm2.update(v);
-            u8 one{1};
-            hm2.update(&one, 1);
-            hm2.update(c.private_key_);
-            hm2.update(h);
-            k = hm2.digest();
-            v = hmac<sha256>(k,v);
-            // make T
-            // rfc6979#section3.2
-            auto tlen = q.size();
-            auto hlen = h.size();
-            if (tlen != hlen) {
-                throw std::runtime_error{"not implemented"};
-            }
-            while (1) {
-                v = hmac<sha256>(k,v); // T
-                auto b = bytes_to_bigint(v);
-                auto r = make_r(b);
-                if (0 < b && b < q && r != 0) {
-                    return std::tuple{v,r.to_string()};
-                }
-                hmac2<sha256> h{k};
-                h.update(v);
-                h.update(&zero, 1);
-                k = h.digest();
-                v = hmac<sha256>(k,v);
-            }
+    using namespace crypto;
+
+    // sign & verify
+    // rfc6979
+    {
+        auto message1 = "sample"s;
+        auto message2 = "test"s;
+
+        auto check = [](auto c_in, auto h, auto &&msg, auto &&pk, auto &&r_in, auto &&s_in) {
+            decltype(c_in) c{bytes_concept{pk}};
+            auto pubkey = c.public_key();
+
+            auto [r,s] = c.sign_deterministic<decltype(h)>(msg);
+            cmp_bytes(r, r_in);
+            cmp_bytes(s, s_in);
+
+            cmp_base(c.verify<decltype(h)>(msg, pubkey, r, s), true);
         };
 
-        auto ec = c.parameters.curve();
-        auto [k,r] = hmac_k([&](auto &&k){return (k * ec.G).x % q;});
-        cmp_bytes(k, "A6E3C57DD01ABE90086538398355DD4C3B17AA873382B0F24D6129493D8AAD60"_sb);
-        auto r_string = "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb;
-        cmp_bytes(r, r_string);
+        /*using ansit163k1 = ec::sect<163, "???"_s, // x^163 + x^7 + x^6 + x^3 + 1
+                               "0x000000000000000000000000000000000000000001"_s,
+                               "0x000000000000000000000000000000000000000001"_s,
 
-        auto [r2,s2] = c.template sign<sha256>(message);
-        cmp_bytes(r2, r_string);
-        cmp_bytes(s2, "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb);
+                               "0x02fe13c0537bbc11acaa07d793de4e6d5e5c94eee8"_s,
+                               "0x0289070fb05d38ff58321f2e800536d538ccdaa3d9"_s,
+                               "0x04000000000000000000020108a2e0cc0d99f8a5ef"_s, "2"_s>;
+        check(ec::ansit163k1{}, sha256{}, message1,
+            "0x09A4D6792295A7F730FC3F2B49CBC0F62E862272F"_sb,
+            "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb,
+            "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb
+        );*/
 
-        auto hb = bytes_to_bigint(h) % q;
-        auto d = bytes_to_bigint(c.private_key_);
-        auto bk = bytes_to_bigint(k);
-        mpz_invert(bk, bk, q);
-        auto s = bk * (hb + d * bytes_to_bigint(r));
-        s %= q;
-
-        cmp_bytes(s.to_string(), "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb);
-
-        auto verify = [&]() {
-            bigint w;
-            mpz_invert(w, s, q);
-            auto u1 = (hb * w) % q;
-            auto u2 = (bytes_to_bigint(r) * w) % q;
-            auto ug = u1 * ec.G;
-            decltype(ec.G) Q{ec.G.ec};
-            Q.x = bytes_to_bigint(pubkey.x);
-            Q.y = bytes_to_bigint(pubkey.y);
-            auto uq = u2 * Q;
-            auto r2 = ug + uq;
-            if (r2.x == 0) {
-                return false;
+        {
+            // curve K-163
+            auto h = sha256::digest(message1);
+            bigint q{"0x4000000000000000000020108A2E0CC0D99F8A5EF"};
+            bigint hb = bytes_to_bigint(h);
+            if (hb > q) {
+                hb = hb - q;
             }
-            auto v = r2.x % q;
-            cmp_bytes(v.to_string(), r_string);
-            return v == bytes_to_bigint(r);
-        };
-        cmp_base(verify(), true);
+            auto hh = hb.to_string();
+            hmac_drbg<sha256> d{"00 9A 4D 67 92 29 5A 7F 73 0F C3 F2 B4 9C BC 0F 62 E8 62 27 2F"_sb, hh, {}};
+            d.digest();
+        }
+
+
+        check(ec::secp256r1{}, sha2<512>{}, message1,
+            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
+            "8496A60B5E9B47C825488827E0495B0E3FA109EC4568FD3F8D1097678EB97F00"_sb,
+            "2362AB1ADBE2B8ADF9CB9EDAB740EA6049C028114F2460F96554F61FAE3302FE"_sb
+        );
+
+        check(ec::secp256r1{}, sha256{}, message1,
+            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
+            "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb,
+            "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb
+        );
+        check(ec::secp256r1{}, sha2<224>{}, message1,
+            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
+            "53B2FFF5D1752B2C689DF257C04C40A587FABABB3F6FC2702F1343AF7CA9AA3F"_sb,
+            "B9AFB64FDC03DC1A131C7D2386D11E349F070AA432A4ACC918BEA988BF75C74C"_sb
+        );
+        check(ec::secp256r1{}, sha2<512>{}, message1,
+            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
+            "8496A60B5E9B47C825488827E0495B0E3FA109EC4568FD3F8D1097678EB97F00"_sb,
+            "2362AB1ADBE2B8ADF9CB9EDAB740EA6049C028114F2460F96554F61FAE3302FE"_sb
+        );
     }
 }
 
@@ -1962,6 +1975,7 @@ auto test_all() {
     test_sm3();
     test_sm4();
     test_ec();
+    test_ecdsa();
     test_hmac();
     test_pbkdf2();
     test_chacha20();
@@ -1996,7 +2010,8 @@ int main() {
     //test_sm3();
     //test_sm4();
     test_ec();
-    test_hmac();
+    test_ecdsa();
+    //test_hmac();
     //test_pbkdf2();
     //test_chacha20();
     //test_chacha20_aead();
