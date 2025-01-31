@@ -21,7 +21,6 @@
 #include "chacha20_poly1305.h"
 
 #include <boost/asio.hpp>
-#include <nameof.hpp>
 
 #include <fstream>
 #include <iostream>
@@ -339,20 +338,20 @@ struct tls13_ {
             case parameters::content_type::application_data:
                 break;
             default:
-                throw std::logic_error{format("content is not implemented: {}", (string)NAMEOF_ENUM(h.type))};
+                throw std::logic_error{format("content is not implemented: {}", (int)h.type)};
             }
         }
         header_type &header() {
             return *(header_type *)data.data();
         }
-        std::span<u8> header_raw() {
+        auto header_raw() {
             return std::span<u8>(data.data(), sizeof(header_type));
         }
         template <typename T>
         T &content() {
             return *(T *)(data.data() + sizeof(header_type));
         }
-        std::span<u8> content_raw() {
+        auto content_raw() {
             return std::span<u8>(data.data() + sizeof(header_type), header().size());
         }
         void handle_alert() {
@@ -360,10 +359,10 @@ struct tls13_ {
         }
         void handle_alert(tls13::alert &a) {
             if (a.level == tls13::alert::level_type::fatal) {
-                throw std::runtime_error{format("fatal tls error: {} ({})", (string)NAMEOF_ENUM(a.description),
+                throw std::runtime_error{format("fatal tls error: {}",
                                                 std::to_underlying(a.description))};
             } else if (a.level == tls13::alert::level_type::warning) {
-                throw std::runtime_error{format("tls warning: {} ({})", (string)NAMEOF_ENUM(a.description),
+                throw std::runtime_error{format("tls warning: {}",
                                                 std::to_underlying(a.description))};
             }
         }
@@ -643,7 +642,7 @@ struct tls13_ {
                 auto n = len2 / sizeof(tls13::ExtensionType);
                 while (n--) {
                     parameters::supported_groups g = s.read();
-                    std::cout << "group: " << std::hex << (string)NAMEOF_ENUM(g) << "\n";
+                    std::println("group: {:X}", (int)g);
                 }
                 break;
             }
@@ -802,9 +801,9 @@ struct tls13_ {
                         if (pka == ecPublicKey) {
                             auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
                                                             x509::public_key_algorithm, 1);
-                            constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
+                            constexpr auto secp256r1 = make_oid<1,2,840,10045,3,1,7>();
                             constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
-                            if (curve == prime256v1) {
+                            if (curve == secp256r1) {
                             } else if (curve == secp384r1) {
                             } else {
                                 string s = curve;
@@ -900,7 +899,7 @@ struct tls13_ {
                         break;
                     }
                     default:
-                        throw std::logic_error{format("cert type is not implemented: {}", (string)NAMEOF_ENUM(type))};
+                        throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
                 break;
