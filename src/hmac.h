@@ -42,29 +42,98 @@ constexpr auto hmac_bytes(sha3<Settings...>) {
 
 // https://en.wikipedia.org/wiki/HMAC
 template <typename Hash>
-auto hmac(bytes_concept key, bytes_concept message) {
-    constexpr int b = detail::hmac_bytes(Hash{});
-    constexpr int hash_bytes = Hash::digest_size_bytes;
-
-    array<b> k0{};
-    if (key.size() <= b) {
-        memcpy(k0.data(), key.data(), key.size());
-    } else {
-        memcpy(k0.data(), Hash::digest(key).data(), hash_bytes);
-    }
-    auto So = k0, Si = k0;
-    for (auto &&c : So) c ^= 0x5C;
-    for (auto &&c : Si) c ^= 0x36;
-
+struct hmac2 {
     Hash inner;
-    inner.update(Si);
-    inner.update(message);
-
     Hash outer;
-    outer.update(So);
-    outer.update(inner.digest());
-    return outer.digest();
+
+    hmac2(bytes_concept key) {
+        constexpr int b = detail::hmac_bytes(Hash{});
+        constexpr int hash_bytes = Hash::digest_size_bytes;
+
+        array<b> k0{};
+        if (key.size() <= b) {
+            memcpy(k0.data(), key.data(), key.size());
+        } else {
+            memcpy(k0.data(), Hash::digest(key).data(), hash_bytes);
+        }
+        auto So = k0, Si = k0;
+        for (auto &&c : So) c ^= 0x5C;
+        for (auto &&c : Si) c ^= 0x36;
+
+        inner.update(Si);
+        outer.update(So);
+    }
+    void update(auto &&...args) {
+        inner.update(args...);
+    }
+    auto digest() {
+        outer.update(inner.digest());
+        return outer.digest();
+    }
+};
+template <typename Hash>
+auto hmac(bytes_concept key, bytes_concept message) {
+    hmac2<Hash> h{key};
+    h.update(message);
+    return h.digest();
 }
+
+// https://en.wikipedia.org/wiki/HMAC
+template <typename Hash>
+struct hmac_drbg {
+    using arr = array<Hash::digest_size_bytes>;
+
+    arr k, v;
+    int reseed_counter{};
+
+    hmac_drbg(bytes_concept entropy_input, bytes_concept nonce, bytes_concept personalization_string) {
+        for (auto &b : k) b = 1;
+        update(entropy_input, nonce, personalization_string);
+        reseed_counter = 1;
+    }
+    void update(auto &&...provided_data) {
+        size_t len{};
+        auto update1 = [&](u8 byte) {
+            hmac2<Hash> hmk{k};
+            hmk.update(v);
+            hmk.update(&byte, 1);
+            ((hmk.update(provided_data),len+=provided_data.size()),...);
+            k = hmk.digest();
+
+            hmac2<Hash> hmv{k};
+            hmv.update(v);
+            v = hmv.digest();
+        };
+        update1(0);
+        if (len) {
+            update1(1);
+        }
+    }
+    void reseed(bytes_concept entropy_input, bytes_concept additional_input) {
+        update(entropy_input, additional_input);
+        reseed_counter = 1;
+    }
+    auto digest(bytes_concept additional_input = {}, size_t len = Hash::digest_size_bytes) {
+        //if (reseed_counter > reseed_interval) {
+        //  reseed();
+        //}
+        // just call update
+        if (!additional_input.empty()) {
+            update(additional_input);
+        }
+        std::string t(len, 0);
+        size_t tlen = 0;
+        while (tlen < len) {
+            v = hmac<Hash>(k, v);
+            auto to_copy = std::min(len - tlen, v.size());
+            memcpy(t.data(), v.data(), to_copy);
+            tlen += to_copy;
+        }
+        update(additional_input);
+        ++reseed_counter;
+        return t;
+    }
+};
 
 // https://datatracker.ietf.org/doc/html/rfc2898
 auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, u32 c, u32 i) {
