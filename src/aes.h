@@ -462,6 +462,7 @@ struct aes_ecb : aes_base<aes_parameters(KeyLength)> {
     using base = aes_base<aes_parameters(KeyLength)>;
 
     u8 round_keys[4 * base::Nb * (base::Nr + 1)];
+
     aes_ecb() = default;
     explicit aes_ecb(auto &&k) {
         this->KeyExpansion(k, round_keys);
