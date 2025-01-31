@@ -8,7 +8,7 @@
 
 struct deflate {
     static inline constexpr auto reversed_bytes = []() {
-        std::array<u8, 256> v;
+        std::array<uint8_t, 256> v;
         for (int i = 0; i < 256; ++i) {
             v[i] = (i * 0x0202020202ULL & 0x010884422010ULL) % 0x3ff;
         }
@@ -23,7 +23,7 @@ struct deflate {
         };
         std::array<code_entry, 256> ci;
         for (int i = 0; i < 256; ++i) {
-            u8 reversed = reversed_bytes[i];
+            uint8_t reversed = reversed_bytes[i];
             if (reversed < 0b00000010) {
                 ci[i] = {7, 256};
             } else if (reversed < 0b00110000) {
@@ -49,8 +49,8 @@ struct deflate {
             bool valid;
         };
         struct code_remainder {
-            u8 remainder;
-            u8 bits_left;
+            uint8_t remainder;
+            uint8_t bits_left;
             uint16_t index; // bit or with 0x8000 if it's the last one in sequence
         };
 
@@ -63,9 +63,9 @@ struct deflate {
         encoded_table<31> distance_code;
     };
 
-    using extracted_type = u32;
+    using extracted_type = uint32_t;
 
-    const u8 *ptr;
+    const uint8_t *ptr;
     int64_t bitpos{};
     int64_t bitsleft;
     std::string out;
@@ -74,19 +74,19 @@ struct deflate {
         static constexpr size_t outsz = 33000 * 2; // 32*1024*2+258;
         out.reserve(outsz);
     }
-    auto decode(const u8 *d, size_t len) {
+    auto decode(const uint8_t *d, size_t len) {
         ptr = d;
         bitsleft = len * 8;
         process();
         //return std::move(out);
     }
-    static auto inflate(const u8 *d, size_t len) {
+    static auto inflate(const uint8_t *d, size_t len) {
         deflate r;
         r.decode(d, len);
         return std::move(r.out);
     }
     static auto inflate(auto &&d) {
-        return inflate((const u8 *)d.data(), d.size());
+        return inflate((const uint8_t *)d.data(), d.size());
     }
     auto getbits(int n, bool peek = false) {
         if (n > 16) [[unlikely]] {
@@ -112,7 +112,7 @@ struct deflate {
             while (1) {
                 auto word = read_word1();
                 if (word < 256) {
-                    out += (u8)word_lt_256(word);
+                    out += (uint8_t)word_lt_256(word);
                 } else if (word == 256) [[unlikely]] {
                     break;
                 } else {
@@ -166,13 +166,13 @@ struct deflate {
             if (hcode_length > 19) [[unlikely]] {
                 throw std::runtime_error{"Invalid distance code count"};
             }
-            static constexpr std::array<u8, 19> codeCodingReorder{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
-            std::array<u8, codeCodingReorder.size()> codeCodingLengths{};
+            static constexpr std::array<uint8_t, 19> codeCodingReorder{16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15};
+            std::array<uint8_t, codeCodingReorder.size()> codeCodingLengths{};
             for (int i = 0; i < hcode_length; i++) {
                 codeCodingLengths[codeCodingReorder[i]] = getbits(3);
             }
             // Generate Huffman codes for lengths
-            std::array<u8, 256> codeCodingLookup{};
+            std::array<uint8_t, 256> codeCodingLookup{};
             for (int size = 1, nextCodeCoding = 0; size <= 8; ++size) {
                 for (int i = 0; i < codeCodingReorder.size(); ++i) {
                     if (codeCodingLengths[i] == size) {
@@ -188,9 +188,9 @@ struct deflate {
             dynamic_coding dc;
             auto read_table = [&](auto &t, int real_size) {
                 struct code_entry {
-                    u8 start;
-                    u8 ending;
-                    u8 length;
+                    uint8_t start;
+                    uint8_t ending;
+                    uint8_t length;
                 };
                 struct unindexed_entry {
                     int quantity;
@@ -237,7 +237,7 @@ struct deflate {
                                 if (nextCode >= (1 << size)) [[unlikely]] {
                                     throw std::runtime_error{"Bad Huffman encoding, run out of Huffman codes"};
                                 }
-                                u8 firstPart = nextCode;
+                                uint8_t firstPart = nextCode;
                                 if (size <= 8) [[likely]] {
                                     codes[i].start = reversed_bytes[firstPart];
                                     for (int code = codes[i].start >> (8 - size); code < t.codes_index.size(); code += (1 << size)) {
@@ -246,11 +246,11 @@ struct deflate {
                                         t.codes_index[code].valid = true;
                                     }
                                 } else {
-                                    auto start = reversed_bytes[(u8)(nextCode >> (size - 8))];
+                                    auto start = reversed_bytes[(uint8_t)(nextCode >> (size - 8))];
                                     codes[i].start = start;
                                     t.codes_index[start].valid = true;
                                     unindexed_entries[start].quantity++;
-                                    codes[i].ending = reversed_bytes[(u8)nextCode] >> (16 - size);
+                                    codes[i].ending = reversed_bytes[(uint8_t)nextCode] >> (16 - size);
                                 }
                                 nextCode++;
                             }
@@ -292,7 +292,7 @@ struct deflate {
                 } else {
                     inc(entry.length - 8);
                 }
-                static constexpr std::array<u8, 9> end_masks = {0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
+                static constexpr std::array<uint8_t, 9> end_masks = {0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
                 if (word >= t.max_size) {
                     auto b = getbits(8, true);
                     for (int i = word - t.max_size; i < t.max_size * 2; i++) {
