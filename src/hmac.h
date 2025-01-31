@@ -78,18 +78,17 @@ auto hmac(bytes_concept key, bytes_concept message) {
     return h.digest();
 }
 
-// https://en.wikipedia.org/wiki/HMAC
+// NIST SP 800-90A Rev. 1
 template <typename Hash>
 struct hmac_drbg {
     using arr = array<Hash::digest_size_bytes>;
 
-    arr k, v;
-    int reseed_counter{};
+    arr k{}, v;
+    int reseed_counter{1};
 
     hmac_drbg(bytes_concept entropy_input, bytes_concept nonce, bytes_concept personalization_string) {
-        for (auto &b : k) b = 1;
+        for (auto &b : v) b = 1;
         update(entropy_input, nonce, personalization_string);
-        reseed_counter = 1;
     }
     void update(auto &&...provided_data) {
         size_t len{};
@@ -113,11 +112,11 @@ struct hmac_drbg {
         update(entropy_input, additional_input);
         reseed_counter = 1;
     }
-    auto digest(bytes_concept additional_input = {}, size_t len = Hash::digest_size_bytes) {
+    auto digest(bytes_concept additional_input = {}, bitlen len = Hash::digest_size_bytes * 8) {
         //if (reseed_counter > reseed_interval) {
         //  reseed();
         //}
-        // just call update
+        // happens after reseed
         if (!additional_input.empty()) {
             update(additional_input);
         }
@@ -126,11 +125,12 @@ struct hmac_drbg {
         while (tlen < len) {
             v = hmac<Hash>(k, v);
             auto to_copy = std::min(len - tlen, v.size());
-            memcpy(t.data(), v.data(), to_copy);
+            memcpy(t.data() + tlen, v.data(), to_copy);
             tlen += to_copy;
         }
         update(additional_input);
         ++reseed_counter;
+        take_left_bits(t, len);
         return t;
     }
 };
