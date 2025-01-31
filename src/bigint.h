@@ -75,6 +75,15 @@ struct bigint {
         b %= m;
         return b;
     }
+    /*auto &operator/=(const bigint &m) {
+        mpz_divexact(*this, *this, m);
+        return *this;
+    }
+    auto operator/(const bigint &m) {
+        auto b = *this;
+        b /= m;
+        return b;
+    }*/
     template <template <auto> typename A, auto N, int Order = 1>
     A<N> to_array() const {
         auto size = 1;
