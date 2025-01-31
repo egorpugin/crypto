@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
-
 // Copyright (c) 2013 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
