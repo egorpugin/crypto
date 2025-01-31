@@ -4,8 +4,7 @@
 #pragma once
 
 #include "bigint.h"
-
-#include <print>
+#include "hmac.h"
 
 // https://neuromancer.sk/std/
 
@@ -18,13 +17,14 @@ struct point {
 
 // y^2 = x^3 + ax + b
 // prime field only
-struct weierstrass {
+struct weierstrass_prime_field {
     bigint a, b, p;
 };
 
 // y^2 + xy = x^3 + ax + b
-//struct weierstrass_binary_field {
-//};
+struct weierstrass_binary_field {
+    bigint a, b, p;
+};
 
 // a * x^2 + y^2 = 1 + d * x^2 * y^2
 struct twisted_edwards {
@@ -54,9 +54,8 @@ struct ec_field_point : point<bigint> {
         return *this;
     }
 
-    // prime field, but not binary
     ec_field_point double_() const
-        requires std::same_as<Curve, weierstrass>
+        requires std::same_as<Curve, weierstrass_prime_field>
     {
         if (y == 0) {
             return ec_field_point{ec};
@@ -73,7 +72,7 @@ struct ec_field_point : point<bigint> {
         return r;
     }
     ec_field_point operator+(const ec_field_point &q)
-        requires std::same_as<Curve, weierstrass>
+        requires std::same_as<Curve, weierstrass_prime_field>
     {
         if (*this == 0) {
             return q;
@@ -101,6 +100,60 @@ struct ec_field_point : point<bigint> {
         r.x = slope * slope - x - q.x;
         r.x %= ec.p;
         r.y = slope * (x - r.x) - y;
+        r.y %= ec.p;
+        return r;
+    }
+    ec_field_point double_() const
+        requires std::same_as<Curve, weierstrass_binary_field>
+    {
+        /*
+        * TODO: binary field checks for doubling
+        if (y == 0) {
+            return ec_field_point{ec};
+        }
+        */
+        bigint temp = x;
+        mpz_invert(temp, temp, ec.p);
+        bigint slope = x + y * temp;
+        slope %= ec.p;
+        ec_field_point r{ec};
+        r.x = slope * slope + ec.a;
+        r.x %= ec.p;
+        r.y = x * x + (slope + 1) * r.x;
+        r.y %= ec.p;
+        return r;
+    }
+    ec_field_point operator+(const ec_field_point &q)
+        requires std::same_as<Curve, weierstrass_binary_field>
+    {
+        /*
+        * TODO: binary field checks for addition
+        if (*this == 0) {
+            return q;
+        }
+        if (q == 0) {
+            return *this;
+        }
+        bigint temp1;
+        if (q.y != 0) {
+            temp1 = (q.y - ec.p);
+            temp1 %= ec.p;
+        }
+        if (y == temp1 && x == q.x) {
+            return {ec};
+        }
+        if (*this == q) {
+            return double_();
+        }*/
+        bigint temp = x + q.x;
+        temp %= ec.p;
+        mpz_invert(temp, temp, ec.p);
+        bigint slope = (y + q.y) * temp;
+        slope %= ec.p;
+        ec_field_point r{ec};
+        r.x = slope * slope + slope + x + q.x + ec.a;
+        r.x %= ec.p;
+        r.y = slope * (x + r.x) + r.x + y;
         r.y %= ec.p;
         return r;
     }
@@ -134,12 +187,26 @@ ec_field_point<Curve> operator*(const bigint &m, const ec_field_point<Curve> &p)
     return r0;
 }
 
+auto prepare_hash_for_signature(auto &&h, auto &&q, bitlen qlen) {
+    std::string hs(h.begin(), h.end());
+    take_left_bits(hs, qlen);
+    auto hsz = hs.size();
+    if (hsz < qlen) {
+        hs = expand_bytes(hs, qlen);
+    }
+    if (auto hb = bytes_to_bigint(hs); hb >= q) {
+        hb = hb - q;
+        hs = hb.to_string(qlen);
+    }
+    return hs;
+}
+
 template <typename T, typename CurveForm>
 struct parameters;
 
 template <typename T>
-struct parameters<T, weierstrass> {
-    using CurveForm = weierstrass;
+struct parameters<T, weierstrass_prime_field> {
+    using CurveForm = weierstrass_prime_field;
 
     T p;
     T a, b;
@@ -199,7 +266,7 @@ struct parameters<T, twisted_edwards> {
 
 template <auto PointSizeBits, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct secp {
-    static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
+    static inline const auto parameters = ec::parameters<string_view, weierstrass_prime_field>{.p = P,
                                                                                    .a = A,
                                                                                    .b = B,
                                                                                    .G =
@@ -230,6 +297,7 @@ struct secp {
     void private_key() { get_random_secure_bytes(private_key_); }
     auto public_key() {
         auto c = parameters.curve();
+        auto q = bigint{parameters.order};
         auto m = bytes_to_bigint(private_key_);
         auto p = m * c.G;
         return key_type{4, p.x, p.y};
@@ -252,6 +320,11 @@ struct secp {
         return shared_secret;
     }
 
+    static auto prepare_hash_for_signature(auto &&h) {
+        auto q = bigint{parameters.order};
+        bitlen qlen{PointSizeBits};
+        return ec::prepare_hash_for_signature(h, q, qlen);
+    }
     // rfc6979
     // it can be weak?
     // see https://github.com/openssl/openssl/issues/2078#issuecomment-309278772
@@ -260,84 +333,40 @@ struct secp {
     // https://github.com/openssl/openssl/pull/18809
     // verify works as expected
     template <typename Hash>
-    auto sign_deterministic(auto &&message) {
+    auto sign_deterministic(auto &&hash) {
         auto pubkey = public_key();
 
-        std::println();
-
         auto ec = parameters.curve();
         auto q = bigint{parameters.order};
-        auto qlen = point_size_bytes;
-        auto h = Hash::digest(message);
+        auto hs = prepare_hash_for_signature(hash);
 
-        auto print = [](auto &&v) {
-            std::println("{}", bytes_to_string(v));
-        };
-
-        auto hmac_k = [&]() {
-            std::string v0(h.size(), 1);
-            std::string k0(h.size(), 0);
-            print(k0);
-            print(v0);
-            print(private_key_);
-            print(h);
-            hmac2<Hash> hm{k0};
-            hm.update(v0);
-            u8 zero{};
-            hm.update(&zero, 1);
-            hm.update(private_key_);
-            hm.update(h);
-            auto k = hm.digest();
-            print(k);
-            auto v = hmac<Hash>(k,v0);
-            hmac2<Hash> hm2{k};
-            hm2.update(v);
-            u8 one{1};
-            hm2.update(&one, 1);
-            hm2.update(private_key_);
-            hm2.update(h);
-            k = hm2.digest();
-            v = hmac<Hash>(k,v);
-            //
-            while (1) {
-                std::string t(qlen, 0);
-                for (size_t tlen = 0; tlen < qlen;) {
-                    v = hmac<Hash>(k,v);
-                    auto to_copy = std::min(qlen-tlen, v.size());
-                    memcpy(t.data() + tlen, v.data(), to_copy);
-                    tlen += to_copy;
+        bigint k,r;
+        hmac_drbg<Hash> d{private_key_, hs, {}};
+        while (1) {
+            auto t = d.digest({}, PointSizeBits);
+            k = bytes_to_bigint(t);
+            if (0 < k && k < q) {
+                r = (k * ec.G).x % q;
+                if (r != 0) {
+                    break;
                 }
-                {
-                    auto k = bytes_to_bigint(t);
-                    auto r = (k * ec.G).x % q;
-                    if (0 < k && k < q && r != 0) {
-                        return std::tuple{k,r};
-                    }
-                }
-                hmac2<Hash> h{v};
-                h.update(v);
-                h.update(&zero, 1);
-                k = h.digest();
-                v = hmac<Hash>(k,v);
             }
-        };
+        }
 
-        auto [k,r] = hmac_k();
-
-        auto hb = bytes_to_bigint(h) % q;
-        auto d = bytes_to_bigint(private_key_);
+        auto hb = bytes_to_bigint(hs) % q;
+        auto pk = bytes_to_bigint(private_key_);
         mpz_invert(k, k, q);
-        auto s = (k * (hb + d * r)) % q;
+        auto s = (k * (hb + pk * r)) % q;
 
-        return std::tuple{r.to_string(),s.to_string()};
+        return std::tuple{r.to_string(bitlen{PointSizeBits}),s.to_string(bitlen{PointSizeBits})};
     }
     template <typename Hash>
-    auto verify(auto &&message, auto &&pubkey, auto &&r, auto &&s) {
+    auto verify(auto &&hash, auto &&pubkey, auto &&r, auto &&s) {
         auto ec = parameters.curve();
         auto q = bigint{parameters.order};
+        auto hs = prepare_hash_for_signature(hash);
 
-        auto h = Hash::digest(message);
-        auto hb = bytes_to_bigint(h) % q;
+        auto hb = bytes_to_bigint(hs) % q;
         auto rb = bytes_to_bigint(r);
 
         decltype(ec.G) Q{ec.G.ec};
@@ -360,6 +389,7 @@ struct secp {
 };
 
 // https://neuromancer.sk/std/secg/secp256r1
+
 using secp256r1 = secp<256, "0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff"_s,
                        "0xffffffff00000001000000000000000000000000fffffffffffffffffffffffc"_s,
                        "0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b"_s,
@@ -377,11 +407,20 @@ using secp384r1 =
          "0x3617de4a96262c6f5d9e98bf9292dc29f8f41dbd289a147ce9da3113b5f0b8c00a60b1ce1d7e819d7a431d7c90ea0e5f"_s,
          "0xffffffffffffffffffffffffffffffffffffffffffffffffc7634d81f4372ddf581a0db248b0a77aecec196accc52973"_s, "1"_s>;
 
+using secp521r1 =
+    secp<521, "0x01ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"_s,
+         "0x01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc"_s,
+         "0x0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00"_s,
+
+         "0x00c6858e06b70404e9cd9e3ecb662395b4429c648139053fb521f828af606b4d3dbaa14b5e77efe75928fe1dc127a2ffa8de3348b3c1856a429bf97e7e31c2e5bd66"_s,
+         "0x011839296a789a3bc0045c8a5fb42c7d1bd998f54449579b446817afbd17273e662c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650"_s,
+         "0x01fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffa51868783bf2f966b7fcc0148f709a5d03bb5c9b8899c47aebb6fb71e91386409"_s, "1"_s>;
+
 namespace gost::r34102012 {
 
 template <auto PointSizeBits, auto P, auto A, auto B, auto Gx, auto Gy, auto Order, auto Cofactor>
 struct curve {
-    static inline const auto parameters = ec::parameters<string_view, weierstrass>{.p = P,
+    static inline const auto parameters = ec::parameters<string_view, weierstrass_prime_field>{.p = P,
                                                                                    .a = A,
                                                                                    .b = B,
                                                                                    .G =
@@ -499,7 +538,7 @@ struct twisted_edwards {
         auto m = bytes_to_bigint(this->private_key_);
 
         auto wc = Wcurve::parameters.curve();
-        ec_field_point<weierstrass> p{wc.ec};
+        ec_field_point<typename decltype(Wcurve::parameters)::CurveForm> p{wc.ec};
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
 
