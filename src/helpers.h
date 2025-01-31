@@ -16,6 +16,8 @@
 #include <format>
 using std::format;
 #include <iostream>
+#include <print>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -138,20 +140,20 @@ struct bytes_concept {
 
     template <auto N>
     operator array<N>() const {
-        if (N != sz) {
+        if (N < sz) {
             throw std::runtime_error{"bad array conversion"};
         }
-        array<N> a;
-        std::memcpy(a.data(), p, sz);
+        array<N> a{};
+        std::memcpy(a.data() + sz - N, p, sz);
         return a;
     }
     template <auto N>
     operator array_gost<N>() const {
-        if (N != sz) {
+        if (N < sz) {
             throw std::runtime_error{"bad array conversion"};
         }
-        array_gost<N> a;
-        std::memcpy(a.data(), p, sz);
+        array_gost<N> a{};
+        std::memcpy(a.data() + sz - N, p, sz);
         return a;
     }
     /*template <typename T, auto N>
@@ -373,19 +375,21 @@ auto byteswap(auto &&in) {
 auto str2bytes(auto &&in) {
     std::vector<u8> s;
     bool first = true;
-    for (auto &&c : in) {
-        if (isspace(c)) {
+    for (auto &&c : in | std::views::reverse) {
+        auto isdigit = c >= '0' && c <= '9';
+        if (!(isdigit || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F')) {
             continue;
         }
         c = toupper(c);
-        auto d = c - (isdigit(c) ? '0' : ('A' - 10));
+        auto d = c - (isdigit ? '0' : ('A' - 10));
         if (first) {
-            s.push_back(d << 4);
+            s.push_back(d);
         } else {
-            s.back() |= d;
+            s.back() |= d << 4;
         }
         first = !first;
     }
+    std::reverse(s.begin(), s.end());
     return s;
 }
 auto operator""_sb(const char *in, size_t len) {
@@ -468,6 +472,40 @@ void replace_all(auto &&s, std::string_view from, std::string_view to) {
         s.replace(p, oldlen, to);
         p += newlen;
     }
+}
+
+struct bitlen {
+    size_t value;
+    bitlen(size_t v) : value{v} {}
+    operator auto() const {return (value + 8 - 1) / 8;}
+};
+
+void take_left_bits(auto &&v, bitlen len) {
+    if (v.size() * 8 <= len.value) {
+        return;
+    }
+    v.resize(len);
+    int rshift = len.value % 8, lshift = 8 - rshift;
+    if (rshift == 0) {
+        return;
+    }
+    u8 rem{};
+    for (auto &c : v) {
+        auto &b = (u8&)c;
+        u8 newrem = b << rshift;
+        b >>= lshift;
+        b |= rem;
+        rem = newrem;
+    }
+}
+auto expand_bytes(auto &&v, auto len) {
+    auto vsz = v.size();
+    auto diff = len - vsz;
+    std::string vs(v.begin(), v.end());
+    vs.resize(vsz + diff);
+    memmove(vs.data() + diff, vs.data(), vsz);
+    memset(vs.data(), 0, diff);
+    return vs;
 }
 
 } // namespace crypto
