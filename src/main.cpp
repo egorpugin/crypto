@@ -719,7 +719,7 @@ void test_ec() {
     // simple
     {
         {
-            ec::parameters<string_view, ec::weierstrass> p{.p = "751"sv,
+            ec::parameters<string_view, ec::weierstrass_prime_field> p{.p = "751"sv,
                                           .a = "-1"sv,
                                           .b = "188"sv,
                                           .G{
@@ -733,7 +733,7 @@ void test_ec() {
             cmp_base(r.y, "558"_bi);
         }
         {
-            ec::parameters<string_view, ec::weierstrass> p{.p = "211"sv,
+            ec::parameters<string_view, ec::weierstrass_prime_field> p{.p = "211"sv,
                                           .a = "0"sv,
                                           .b = "-4"sv,
                                           .G{
@@ -766,7 +766,7 @@ void test_ec() {
     {
         auto m = "0x00542d46e7b3daac8aeb81e533873aabd6d74bb710"_bi;
         {
-            ec::parameters<string_view, ec::weierstrass> p{
+            ec::parameters<string_view, ec::weierstrass_prime_field> p{
                 .p = "0xc1c627e1638fdc8e24299bb041e4e23af4bb5427"sv,
                 .a = "0xc1c627e1638fdc8e24299bb041e4e23af4bb5424"sv,
                 .b = "0x877a6d84155a1de374b72d9f9d93b36bb563b2ab"sv,
@@ -781,7 +781,7 @@ void test_ec() {
             cmp_base(r.y, "0x73ca143c9badedf2d9d3c7573307115ccfe04f13"_bi);
         }
         {
-            ec::weierstrass c{
+            ec::weierstrass_prime_field c{
                 "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9a",
                 "0x01914dc5f39d6da3b1fa841fdc891674fa439bd4",
                 "0xdfd7e09d5092e7a5d24fd2fec423f7012430ae9d"
@@ -801,7 +801,7 @@ void test_ec() {
     {
         // example 1
         {
-            ec::weierstrass c{
+            ec::weierstrass_prime_field c{
                 "0x7",
                 "0x5fbff498aa938ce739b8e022fbafef40563f6e6a3472fc2a514c0ce9dae23b7e",
                 "0x8000000000000000000000000000000000000000000000000000000000000431"
@@ -819,7 +819,7 @@ void test_ec() {
         }
         // gost 34.10 example 2
         {
-            ec::weierstrass c{
+            ec::weierstrass_prime_field c{
                 "0x7",
                 "0x1cff0806a31116da29d8cfa54e57eb748bc5f377e49400fdd788b649eca1ac4361834013b2ad7322480a89ca58e0cf74bc9e540c2add6897fad0a3084f302adc",
                 "0x4531acd1fe0023c7550d267b6b2fee80922b14b2ffb90f04d4eb7c09b5d2d15df1d852741af4704a0458047e80e4546d35b8336fac224dd81664bbf528be6373"
@@ -878,67 +878,170 @@ void test_ecdsa() {
     // sign & verify
     // rfc6979
     {
-        auto message1 = "sample"s;
-        auto message2 = "test"s;
+        const auto message1 = "sample"s;
+        const auto message2 = "test"s;
 
-        auto check = [](auto c_in, auto h, auto &&msg, auto &&pk, auto &&r_in, auto &&s_in) {
+        auto check = [](auto c_in, auto hash, auto &&msg, auto &&pk, auto &&r_in, auto &&s_in) {
+            auto h = decltype(hash)::digest(msg);
+
             decltype(c_in) c{bytes_concept{pk}};
             auto pubkey = c.public_key();
 
-            auto [r,s] = c.sign_deterministic<decltype(h)>(msg);
+            auto [r,s] = c.sign_deterministic<decltype(hash)>(h);
             cmp_bytes(r, r_in);
             cmp_bytes(s, s_in);
 
-            cmp_base(c.verify<decltype(h)>(msg, pubkey, r, s), true);
+            cmp_base(c.verify<decltype(h)>(h, pubkey, r, s), true);
         };
 
-        /*using ansit163k1 = ec::sect<163, "???"_s, // x^163 + x^7 + x^6 + x^3 + 1
+        {
+            // curve K-163 ansit163k1
+            bitlen qlen{163};
+            bigint q{"0x4000000000000000000020108A2E0CC0D99F8A5EF"};
+            auto h1 = sha256::digest(message1);
+            auto hs = ec::prepare_hash_for_signature(h1, q, qlen);
+            hmac_drbg<sha256> d{
+                expand_bytes("9A 4D 67 92 29 5A 7F 73 0F C3 F2 B4 9C BC 0F 62 E8 62 27 2F"_sb, qlen),
+                hs, {}};
+            auto res = d.digest({}, qlen);
+            cmp_bytes(res, "4982D236F3FFC758838CA6F5E9FEA455106AF3B2B"_sb);
+            cmp_bool(bytes_to_bigint(res) > q, true);
+            res = d.digest({}, qlen);
+            cmp_bytes(res, "63863C30451DADF4944DF4877B740D4F160A8B6AB"_sb);
+            cmp_bool(bytes_to_bigint(res) > q, true);
+            res = d.digest({}, qlen);
+            cmp_bytes(res, "23AF4074C90A02B3FE61D286D5C87F425E6BDD81B"_sb);
+            cmp_bool(bytes_to_bigint(res) < q, true);
+        }
+
+        /*
+        *
+        using ansit163k1 = sect<163, "0x800000000000000000000000000000000000000c9"_s, // x^163 + x^7 + x^6 + x^3 + 1
                                "0x000000000000000000000000000000000000000001"_s,
                                "0x000000000000000000000000000000000000000001"_s,
 
                                "0x02fe13c0537bbc11acaa07d793de4e6d5e5c94eee8"_s,
                                "0x0289070fb05d38ff58321f2e800536d538ccdaa3d9"_s,
                                "0x04000000000000000000020108a2e0cc0d99f8a5ef"_s, "2"_s>;
+
         check(ec::ansit163k1{}, sha256{}, message1,
-            "0x09A4D6792295A7F730FC3F2B49CBC0F62E862272F"_sb,
+            "09A4D6792295A7F730FC3F2B49CBC0F62E862272F"_sb,
+            //"9A4D6792295A7F730FC3F2B49CBC0F62E862272F"_sb,
             "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb,
             "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb
         );*/
 
         {
-            // curve K-163
-            auto h = sha256::digest(message1);
-            bigint q{"0x4000000000000000000020108A2E0CC0D99F8A5EF"};
-            bigint hb = bytes_to_bigint(h);
-            if (hb > q) {
-                hb = hb - q;
-            }
-            auto hh = hb.to_string();
-            hmac_drbg<sha256> d{"00 9A 4D 67 92 29 5A 7F 73 0F C3 F2 B4 9C BC 0F 62 E8 62 27 2F"_sb, hh, {}};
-            d.digest();
+            //auto h = sha256::digest(message1);
+            //bigint hb = bytes_to_bigint(h);
+            //if (hb > q) {
+            //    hb = hb - q;
+            //}
+            //auto hh = hb.to_string();
+            //hmac_drbg<sha256> d{"00 9A 4D 67 92 29 5A 7F 73 0F C3 F2 B4 9C BC 0F 62 E8 62 27 2F"_sb, hh, {}};
+            //d.digest();
+            //auto h = sha256::digest(message1);
+            //std::string hs(h.begin(), h.end());
+            //take_left_bits(hs, qlen);
+            //cmp_bytes(hs,
+            //    "00 9A 4D 67 92 29 5A 7F 73 0F C3 F2 B4 9C BC 0F 62 E8 62 27 2F"_sb
+            //);
         }
 
+        auto check_big = [&](auto c, auto &&msg, auto &&pk, auto &&rs) {
+            int i{};
+            auto f = [&](auto h) {
+                if (rs.size() <= i) {
+                    return;
+                }
+                check(c, h, msg,
+                    pk,
+                    rs[i+0],
+                    rs[i+1]
+                );
+                i += 2;
+            };
+            f(sha1{});
+            f(sha2<224>{});
+            f(sha2<256>{});
+            f(sha2<384>{});
+            f(sha2<512>{});
+        };
 
-        check(ec::secp256r1{}, sha2<512>{}, message1,
-            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
-            "8496A60B5E9B47C825488827E0495B0E3FA109EC4568FD3F8D1097678EB97F00"_sb,
-            "2362AB1ADBE2B8ADF9CB9EDAB740EA6049C028114F2460F96554F61FAE3302FE"_sb
+        check_big(ec::secp256r1{}, message1, "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
+            std::vector{
+                "61340C88C3AAEBEB4F6D667F672CA9759A6CCAA9FA8811313039EE4A35471D32"_sb,"6D7F147DAC089441BB2E2FE8F7A3FA264B9C475098FDCF6E00D7C996E1B8B7EB"_sb,
+                "53B2FFF5D1752B2C689DF257C04C40A587FABABB3F6FC2702F1343AF7CA9AA3F"_sb,"B9AFB64FDC03DC1A131C7D2386D11E349F070AA432A4ACC918BEA988BF75C74C"_sb,
+                "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb,"F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb,
+                "0EAFEA039B20E9B42309FB1D89E213057CBF973DC0CFC8F129EDDDC800EF7719"_sb,"4861F0491E6998B9455193E34E7B0D284DDD7149A74B95B9261F13ABDE940954"_sb,
+                "8496A60B5E9B47C825488827E0495B0E3FA109EC4568FD3F8D1097678EB97F00"_sb,"2362AB1ADBE2B8ADF9CB9EDAB740EA6049C028114F2460F96554F61FAE3302FE"_sb,
+            }
+        );
+        check_big(ec::secp384r1{}, message1, "6B9D3DAD2E1B8C1C05B19875B6659F4DE23C3B667BF297BA9AA47740787137D896D5724E4C70A825F872C9EA60D2EDF5"_sb,
+            std::vector{
+                "EC748D839243D6FBEF4FC5C4859A7DFFD7F3ABDDF72014540C16D73309834FA37B9BA002899F6FDA3A4A9386790D4EB2"_sb,"A3BCFA947BEEF4732BF247AC17F71676CB31A847B9FF0CBC9C9ED4C1A5B3FACF26F49CA031D4857570CCB5CA4424A443"_sb,
+                "42356E76B55A6D9B4631C865445DBE54E056D3B3431766D0509244793C3F9366450F76EE3DE43F5A125333A6BE060122"_sb,"9DA0C81787064021E78DF658F2FBB0B042BF304665DB721F077A4298B095E4834C082C03D83028EFBF93A3C23940CA8D"_sb,
+                "21B13D1E013C7FA1392D03C5F99AF8B30C570C6F98D4EA8E354B63A21D3DAA33BDE1E888E63355D92FA2B3C36D8FB2CD"_sb,"F3AA443FB107745BF4BD77CB3891674632068A10CA67E3D45DB2266FA7D1FEEBEFDC63ECCD1AC42EC0CB8668A4FA0AB0"_sb,
+                "94EDBB92A5ECB8AAD4736E56C691916B3F88140666CE9FA73D64C4EA95AD133C81A648152E44ACF96E36DD1E80FABE46"_sb,"99EF4AEB15F178CEA1FE40DB2603138F130E740A19624526203B6351D0A3A94FA329C145786E679E7B82C71A38628AC8"_sb,
+                "ED0959D5880AB2D869AE7F6C2915C6D60F96507F9CB3E047C0046861DA4A799CFE30F35CC900056D7C99CD7882433709"_sb,"512C8CCEEE3890A84058CE1E22DBC2198F42323CE8ACA9135329F03C068E5112DC7CC3EF3446DEFCEB01A45C2667FDD5"_sb,
+            }
+        );
+        check_big(ec::secp521r1{}, message1, "0FAD06DAA62BA3B25D2FB40133DA757205DE67F5BB0018FEE8C86E1B68C7E75CAA896EB32F1F47C70855836A6D16FCC1466F6D8FBEC67DB89EC0C08B0E996B83538"_sb,
+            std::vector{
+                "0343B6EC45728975EA5CBA6659BBB6062A5FF89EEA58BE3C80B619F322C87910FE092F7D45BB0F8EEE01ED3F20BABEC079D202AE677B243AB40B5431D497C55D75D"_sb,
+                "0E7B0E675A9B24413D448B8CC119D2BF7B2D2DF032741C096634D6D65D0DBE3D5694625FB9E8104D3B842C1B0E2D0B98BEA19341E8676AEF66AE4EBA3D5475D5D16"_sb,
+                "1776331CFCDF927D666E032E00CF776187BC9FDD8E69D0DABB4109FFE1B5E2A30715F4CC923A4A5E94D2503E9ACFED92857B7F31D7152E0F8C00C15FF3D87E2ED2E"_sb,
+                "050CB5265417FE2320BBB5A122B8E1A32BD699089851128E360E620A30C7E17BA41A666AF126CE100E5799B153B60528D5300D08489CA9178FB610A2006C254B41F"_sb,
+                "1511BB4D675114FE266FC4372B87682BAECC01D3CC62CF2303C92B3526012659D16876E25C7C1E57648F23B73564D67F61C6F14D527D54972810421E7D87589E1A7"_sb,
+                "04A171143A83163D6DF460AAF61522695F207A58B95C0644D87E52AA1A347916E4F7A72930B1BC06DBE22CE3F58264AFD23704CBB63B29B931F7DE6C9D949A7ECFC"_sb,
+                "1EA842A0E17D2DE4F92C15315C63DDF72685C18195C2BB95E572B9C5136CA4B4B576AD712A52BE9730627D16054BA40CC0B8D3FF035B12AE75168397F5D50C67451"_sb,
+                "1F21A3CEE066E1961025FB048BD5FE2B7924D0CD797BABE0A83B66F1E35EEAF5FDE143FA85DC394A7DEE766523393784484BDF3E00114A1C857CDE1AA203DB65D61"_sb,
+                "0C328FAFCBD79DD77850370C46325D987CB525569FB63C5D3BC53950E6D4C5F174E25A1EE9017B5D450606ADD152B534931D7D4E8455CC91F9B15BF05EC36E377FA"_sb,
+                "0617CCE7CF5064806C467F678D3B4080D6F1CC50AF26CA209417308281B68AF282623EAA63E5B5C0723D8B8C37FF0777B1A20F8CCB1DCCC43997F1EE0E44DA4A67A"_sb,
+            }
         );
 
-        check(ec::secp256r1{}, sha256{}, message1,
-            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
-            "EFD48B2AACB6A8FD1140DD9CD45E81D69D2C877B56AAF991C34D0EA84EAF3716"_sb,
-            "F7CB1C942D657C41D436C7A1B6E29F65F3E900DBB9AFF4064DC4AB2F843ACDA8"_sb
+        check_big(ec::secp256r1{}, message2, "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
+            std::vector{
+                "0CBCC86FD6ABD1D99E703E1EC50069EE5C0B4BA4B9AC60E409E8EC5910D81A89"_sb,
+                "01B9D7B73DFAA60D5651EC4591A0136F87653E0FD780C3B1BC872FFDEAE479B1"_sb,
+                "C37EDB6F0AE79D47C3C27E962FA269BB4F441770357E114EE511F662EC34A692"_sb,
+                "C820053A05791E521FCAAD6042D40AEA1D6B1A540138558F47D0719800E18F2D"_sb,
+                "F1ABB023518351CD71D881567B1EA663ED3EFCF6C5132B354F28D3B0B7D38367"_sb,
+                "019F4113742A2B14BD25926B49C649155F267E60D3814B4C0CC84250E46F0083"_sb,
+                "83910E8B48BB0C74244EBDF7F07A1C5413D61472BD941EF3920E623FBCCEBEB6"_sb,
+                "8DDBEC54CF8CD5874883841D712142A56A8D0F218F5003CB0296B6B509619F2C"_sb,
+                "461D93F31B6540894788FD206C07CFA0CC35F46FA3C91816FFF1040AD1581A04"_sb,
+                "39AF9F15DE0DB8D97E72719C74820D304CE5226E32DEDAE67519E840D1194E55"_sb,
+            }
         );
-        check(ec::secp256r1{}, sha2<224>{}, message1,
-            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
-            "53B2FFF5D1752B2C689DF257C04C40A587FABABB3F6FC2702F1343AF7CA9AA3F"_sb,
-            "B9AFB64FDC03DC1A131C7D2386D11E349F070AA432A4ACC918BEA988BF75C74C"_sb
+        check_big(ec::secp384r1{}, message2, "6B9D3DAD2E1B8C1C05B19875B6659F4DE23C3B667BF297BA9AA47740787137D896D5724E4C70A825F872C9EA60D2EDF5"_sb,
+            std::vector{
+                "4BC35D3A50EF4E30576F58CD96CE6BF638025EE624004A1F7789A8B8E43D0678ACD9D29876DAF46638645F7F404B11C7"_sb,
+                "D5A6326C494ED3FF614703878961C0FDE7B2C278F9A65FD8C4B7186201A2991695BA1C84541327E966FA7B50F7382282"_sb,
+                "E8C9D0B6EA72A0E7837FEA1D14A1A9557F29FAA45D3E7EE888FC5BF954B5E62464A9A817C47FF78B8C11066B24080E72"_sb,
+                "07041D4A7A0379AC7232FF72E6F77B6DDB8F09B16CCE0EC3286B2BD43FA8C6141C53EA5ABEF0D8231077A04540A96B66"_sb,
+                "6D6DEFAC9AB64DABAFE36C6BF510352A4CC27001263638E5B16D9BB51D451559F918EEDAF2293BE5B475CC8F0188636B"_sb,
+                "2D46F3BECBCC523D5F1A1256BF0C9B024D879BA9E838144C8BA6BAEB4B53B47D51AB373F9845C0514EEFB14024787265"_sb,
+                "8203B63D3C853E8D77227FB377BCF7B7B772E97892A80F36AB775D509D7A5FEB0542A7F0812998DA8F1DD3CA3CF023DB"_sb,
+                "DDD0760448D42D8A43AF45AF836FCE4DE8BE06B485E9B61B827C2F13173923E06A739F040649A667BF3B828246BAA5A5"_sb,
+                "A0D5D090C9980FAF3C2CE57B7AE951D31977DD11C775D314AF55F76C676447D06FB6495CD21B4B6E340FC236584FB277"_sb,
+                "976984E59B4C77B0E8E4460DCA3D9F20E07B9BB1F63BEEFAF576F6B2E8B224634A2092CD3792E0159AD9CEE37659C736"_sb,
+            }
         );
-        check(ec::secp256r1{}, sha2<512>{}, message1,
-            "C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb,
-            "8496A60B5E9B47C825488827E0495B0E3FA109EC4568FD3F8D1097678EB97F00"_sb,
-            "2362AB1ADBE2B8ADF9CB9EDAB740EA6049C028114F2460F96554F61FAE3302FE"_sb
+        check_big(ec::secp521r1{}, message2, "0FAD06DAA62BA3B25D2FB40133DA757205DE67F5BB0018FEE8C86E1B68C7E75CAA896EB32F1F47C70855836A6D16FCC1466F6D8FBEC67DB89EC0C08B0E996B83538"_sb,
+            std::vector{
+                "13BAD9F29ABE20DE37EBEB823C252CA0F63361284015A3BF430A46AAA80B87B0693F0694BD88AFE4E661FC33B094CD3B7963BED5A727ED8BD6A3A202ABE009D0367"_sb,
+                "1E9BB81FF7944CA409AD138DBBEE228E1AFCC0C890FC78EC8604639CB0DBDC90F717A99EAD9D272855D00162EE9527567DD6A92CBD629805C0445282BBC916797FF"_sb,
+                "1C7ED902E123E6815546065A2C4AF977B22AA8EADDB68B2C1110E7EA44D42086BFE4A34B67DDC0E17E96536E358219B23A706C6A6E16BA77B65E1C595D43CAE17FB"_sb,
+                "177336676304FCB343CE028B38E7B4FBA76C1C1B277DA18CAD2A8478B2A9A9F5BEC0F3BA04F35DB3E4263569EC6AADE8C92746E4C82F8299AE1B8F1739F8FD519A4"_sb,
+                "00E871C4A14F993C6C7369501900C4BC1E9C7B0B4BA44E04868B30B41D8071042EB28C4C250411D0CE08CD197E4188EA4876F279F90B3D8D74A3C76E6F1E4656AA8"_sb,
+                "0CD52DBAA33B063C3A6CD8058A1FB0A46A4754B034FCC644766CA14DA8CA5CA9FDE00E88C1AD60CCBA759025299079D7A427EC3CC5B619BFBC828E7769BCD694E86"_sb,
+                "14BEE21A18B6D8B3C93FAB08D43E739707953244FDBE924FA926D76669E7AC8C89DF62ED8975C2D8397A65A49DCC09F6B0AC62272741924D479354D74FF6075578C"_sb,
+                "133330865C067A0EAF72362A65E2D7BC4E461E8C8995C3B6226A21BD1AA78F0ED94FE536A0DCA35534F0CD1510C41525D163FE9D74D134881E35141ED5E8E95B979"_sb,
+                "13E99020ABF5CEE7525D16B69B229652AB6BDF2AFFCAEF38773B4B7D08725F10CDB93482FDCC54EDCEE91ECA4166B2A7C6265EF0CE2BD7051B7CEF945BABD47EE6D"_sb,
+                "1FBD0013C674AA79CB39849527916CE301C66EA7CE8B80682786AD60F98F7E78A19CA69EFF5C57400E3B3A0AD66CE0978214D13BAF4E9AC60752F7B155E2DE4DCE3"_sb,
+            }
         );
     }
 }
@@ -1795,7 +1898,10 @@ void test_tls() {
         run0(t, url);
     };
 
-    run("github.com");
+    int n = 50;
+    while (n--)
+        run_with_params("91.244.183.22:15082", 0, parameters::supported_groups::GC512B);
+    //run("github.com");
 
     for (auto s : {
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
@@ -1835,13 +1941,13 @@ void test_tls() {
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
     }) {
-        run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
-        run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
-        run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C);
-        run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D);
+        //run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
+        //run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
+        //run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C);
+        //run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D);
         run_with_params("91.244.183.22:15072", s, parameters::supported_groups::GC512A);
         run_with_params("91.244.183.22:15082", s, parameters::supported_groups::GC512B);
-        run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C);
+        //run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C);
 
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
@@ -2009,8 +2115,8 @@ int main() {
     //test_blake3();
     //test_sm3();
     //test_sm4();
-    test_ec();
-    test_ecdsa();
+    //test_ec();
+    //test_ecdsa();
     //test_hmac();
     //test_pbkdf2();
     //test_chacha20();
@@ -2023,7 +2129,7 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    //test_tls();
+    test_tls();
     //test_jwt();
 }
 #endif
