@@ -3,22 +3,23 @@
 
 #pragma once
 
-#include "helpers.h"
-#include "tls13.h"
-#include "random.h"
-#include "ec25519.h"
 #include "aes.h"
-#include "hmac.h"
-#include "ec.h"
-#include "gcm.h"
 #include "asn1.h"
-#include "grasshopper.h"
-#include "magma.h"
-#include "streebog.h"
-#include "mgm.h"
-#include "sm4.h"
-#include "sm3.h"
 #include "chacha20_poly1305.h"
+#include "ec.h"
+#include "ec25519.h"
+#include "gcm.h"
+#include "grasshopper.h"
+#include "helpers.h"
+#include "hmac.h"
+#include "magma.h"
+#include "mgm.h"
+#include "random.h"
+#include "sm3.h"
+#include "sm4.h"
+#include "streebog.h"
+#include "tls13.h"
+
 
 #include <boost/asio.hpp>
 
@@ -28,11 +29,11 @@
 #include <print>
 
 /*
-* security notes
-* - we must check incoming keys for special values, etc.
-* - check that points lie on the curves
-* - timing attacks? use sleep for?
-*/
+ * security notes
+ * - we must check incoming keys for special values, etc.
+ * - check that points lie on the curves
+ * - timing attacks? use sleep for?
+ */
 
 namespace crypto {
 
@@ -153,30 +154,24 @@ struct tls13_ {
         }
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
-        : gost_suite<mgm<grasshopper>, streebog<256>,
-                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+        : gost_suite<mgm<grasshopper>, streebog<256>, tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
         static inline constexpr u64 C[] = {0xffffffffe0000000ULL, 0xffffffffffff0000ULL, 0xfffffffffffffff8ULL};
         // static inline constexpr u64 SNMAX = (1ULL << 42) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
-        : gost_suite<mgm<grasshopper>, streebog<256>,
-                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+        : gost_suite<mgm<grasshopper>, streebog<256>, tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
         static inline constexpr u64 C[] = {0xf800000000000000ULL, 0xfffffff000000000ULL, 0xffffffffffffe000ULL};
         // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
     };
     struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_S
-        : gost_suite<mgm<magma>, streebog<256>,
-                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
-                     TLS_GOSTR341112_256_WITH_MAGMA_MGM_S> {
+        : gost_suite<mgm<magma>, streebog<256>, tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S, TLS_GOSTR341112_256_WITH_MAGMA_MGM_S> {
         static inline constexpr u64 C[] = {0xfffffffffc000000ULL, 0xffffffffffffe000ULL, 0xffffffffffffffffULL};
         // static inline constexpr u64 SNMAX = (1ULL << 39) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
-        : gost_suite<mgm<magma>, streebog<256>,
-                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
-                     TLS_GOSTR341112_256_WITH_MAGMA_MGM_L> {
+        : gost_suite<mgm<magma>, streebog<256>, tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L, TLS_GOSTR341112_256_WITH_MAGMA_MGM_L> {
         static inline constexpr u64 C[] = {0xffe0000000000000ULL, 0xffffffffc0000000ULL, 0xffffffffffffff80ULL};
         // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
     };
@@ -213,33 +208,27 @@ struct tls13_ {
             (f(Suites{}), ...);
         }
     };
-    using all_suites = suites<
-        suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256>, // mandatory
-        suite_<gcm<aes_ecb<256>>, sha2<384>, tls13::CipherSuite::TLS_AES_256_GCM_SHA384>, // nice to have
-        suite_<chacha20_poly1305_aead, sha2<256>, tls13::CipherSuite::TLS_CHACHA20_POLY1305_SHA256>, // nice to have
-        // ru
-        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
-        TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
-        TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
-        TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
-        // cn
-        suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>
-        >;
-    using all_key_exchanges = key_exchanges<
-        key_exchange<curve25519, parameters::supported_groups::x25519>,
-        key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
-        key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
-        // ru
-        key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,
-        key_exchange<ec::gost::r34102012::ec256b, parameters::supported_groups::GC256B>,
-        key_exchange<ec::gost::r34102012::ec256c, parameters::supported_groups::GC256C>,
-        key_exchange<ec::gost::r34102012::ec256d, parameters::supported_groups::GC256D>,
-        key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>,
-        key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>,
-        key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
-        // cn
-        key_exchange<ec::sm2, parameters::supported_groups::curveSM2>
-    >;
+    using all_suites = suites<suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256>,            // mandatory
+                              suite_<gcm<aes_ecb<256>>, sha2<384>, tls13::CipherSuite::TLS_AES_256_GCM_SHA384>,            // nice to have
+                              suite_<chacha20_poly1305_aead, sha2<256>, tls13::CipherSuite::TLS_CHACHA20_POLY1305_SHA256>, // nice to have
+                              // ru
+                              TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S, TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L, TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+                              TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+                              // cn
+                              suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>>;
+    using all_key_exchanges =
+        key_exchanges<key_exchange<curve25519, parameters::supported_groups::x25519>, key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
+                      key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
+                      // ru
+                      key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,
+                      key_exchange<ec::gost::r34102012::ec256b, parameters::supported_groups::GC256B>,
+                      key_exchange<ec::gost::r34102012::ec256c, parameters::supported_groups::GC256C>,
+                      key_exchange<ec::gost::r34102012::ec256d, parameters::supported_groups::GC256D>,
+                      key_exchange<ec::gost::r34102012::ec512a, parameters::supported_groups::GC512A>,
+                      key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>,
+                      key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
+                      // cn
+                      key_exchange<ec::sm2, parameters::supported_groups::curveSM2>>;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory
         parameters::signature_scheme::rsa_pkcs1_sha256,       // mandatory
@@ -297,8 +286,7 @@ struct tls13_ {
                 throw std::runtime_error{"too big tls packet"};
             }
             data.resize(sizeof(header_type) + header().size());
-            auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), header().size()),
-                                         use_awaitable);
+            auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), header().size()), use_awaitable);
 
             // after we get stable memory
             auto &h = header();
@@ -341,11 +329,9 @@ struct tls13_ {
         }
         void handle_alert(tls13::alert &a) {
             if (a.level == tls13::alert::level_type::fatal) {
-                throw std::runtime_error{format("fatal tls error: {}",
-                                                std::to_underlying(a.description))};
+                throw std::runtime_error{format("fatal tls error: {}", std::to_underlying(a.description))};
             } else if (a.level == tls13::alert::level_type::warning) {
-                throw std::runtime_error{format("tls warning: {}",
-                                                std::to_underlying(a.description))};
+                throw std::runtime_error{format("tls warning: {}", std::to_underlying(a.description))};
             }
         }
     };
@@ -372,7 +358,7 @@ struct tls13_ {
             return r;
         }
         template <typename T>
-        operator T&() {
+        operator T &() {
             return next<T>();
         }
         void operator+=(auto &&v) {
@@ -393,16 +379,19 @@ struct tls13_ {
         return dec;
     }
 
-    RawSocket &socket() { return *s; }
+    RawSocket &socket() {
+        return *s;
+    }
 
     Awaitable<std::string> receive_tls_message() {
         co_await buf.receive(socket());
-        auto dec = visit(suite, [&](auto &&s){return decrypt(s.traffic);});
+        auto dec = visit(suite, [&](auto &&s) {
+            return decrypt(s.traffic);
+        });
         while (dec.back() == 0) {
             dec.resize(dec.size() - 1);
         }
-        if (dec.back() != (!auth_ok ? (u8)parameters::content_type::handshake
-                                    : (u8)parameters::content_type::application_data)) {
+        if (dec.back() != (!auth_ok ? (u8)parameters::content_type::handshake : (u8)parameters::content_type::application_data)) {
             if (dec.back() == (u8)parameters::content_type::alert) {
                 buf.handle_alert(*(tls13::alert *)dec.data());
             }
@@ -427,9 +416,13 @@ struct tls13_ {
 
         TLSPlaintext msg;
         msg.type = parameters::content_type::application_data;
-        msg.length = buf.size() + visit(suite, [](auto &&s){return std::decay_t<decltype(s)>::cipher::tag_size_bytes;});
+        msg.length = buf.size() + visit(suite, [](auto &&s) {
+                         return std::decay_t<decltype(s)>::cipher::tag_size_bytes;
+                     });
 
-        auto out = visit(suite, [&](auto &&s){return encrypt(s.traffic, buf, std::span<u8>((u8 *)&msg, sizeof(msg)));});
+        auto out = visit(suite, [&](auto &&s) {
+            return encrypt(s.traffic, buf, std::span<u8>((u8 *)&msg, sizeof(msg)));
+        });
 
         std::vector<boost::asio::const_buffer> buffers;
         buffers.emplace_back(&msg, sizeof(msg));
@@ -466,7 +459,9 @@ struct tls13_ {
                     ube16 &su = w;
                     su = s.suite();
                     ++n_suites;
-                    if (visit(suite, [&](auto &&s){return s.suite();}) != force_suite) {
+                    if (visit(suite, [&](auto &&s) {
+                            return s.suite();
+                        }) != force_suite) {
                         suite = s;
                     }
                 }
@@ -561,7 +556,9 @@ struct tls13_ {
             msg.length = msg_size;
 
             client_hello1 = bytes_concept{(u8 *)&client_hello, msg.length};
-            visit(suite, [&](auto &&s){s.h.update((u8 *)&client_hello, msg.length);});
+            visit(suite, [&](auto &&s) {
+                s.h.update((u8 *)&client_hello, msg.length);
+            });
 
             co_await socket().async_send(boost::asio::buffer(w.buf, msg_size + sizeof(msg)), use_awaitable);
 
@@ -577,9 +574,15 @@ struct tls13_ {
             }
 
             co_await buf.receive(socket());
-            std::visit([&](auto &&s, auto &&k) { s.make_handshake_keys(k.shared_secret()); }, suite, kex);
+            std::visit(
+                [&](auto &&s, auto &&k) {
+                    s.make_handshake_keys(k.shared_secret());
+                },
+                suite, kex);
             co_await handle_handshake_application_data();
-            visit(suite, [&](auto &&s) { s.make_master_keys(); });
+            visit(suite, [&](auto &&s) {
+                s.make_master_keys();
+            });
         }
 
         // send client Finished
@@ -591,22 +594,26 @@ struct tls13_ {
             msg.type = parameters::content_type::application_data;
             buffers.emplace_back(&msg, sizeof(msg));
 
-            auto hash_size = visit(suite, [&](auto &&s){return std::decay_t<decltype(s)>::hash::digest_size_bytes;});
+            auto hash_size = visit(suite, [&](auto &&s) {
+                return std::decay_t<decltype(s)>::hash::digest_size_bytes;
+            });
 
             std::string hma;
             hma.resize(sizeof(Handshake) + hash_size + 1);
             hma[sizeof(Handshake) + hash_size] = (u8)parameters::content_type::handshake;
-            msg.length = hma.size() + visit(suite, [](auto &&s){return std::decay_t<decltype(s)>::cipher::tag_size_bytes;});
+            msg.length = hma.size() + visit(suite, [](auto &&s) {
+                             return std::decay_t<decltype(s)>::cipher::tag_size_bytes;
+                         });
 
             Handshake &client_hello = *(Handshake *)hma.data();
             client_hello.msg_type = parameters::handshake_type::finished;
             client_hello.length = hash_size;
-            visit(suite, [&](auto &&s){
+            visit(suite, [&](auto &&s) {
                 using hash = std::decay_t<decltype(s)>::hash;
                 auto hm = hmac<hash>(hkdf_expand_label<hash>(s.handshake.client.secret, "finished"), hash{s.h}.digest());
                 memcpy(hma.data() + sizeof(Handshake), hm.data(), hm.size());
             });
-            auto out = visit(suite, [&](auto &&s){
+            auto out = visit(suite, [&](auto &&s) {
                 return encrypt(s.handshake, hma, std::span<u8>((u8 *)&msg, sizeof(msg)));
             });
             buffers.emplace_back(out.data(), out.size());
@@ -649,16 +656,16 @@ struct tls13_ {
                     }
                 });
                 if (len2)
-                visit(kex, [&](auto &&k) {
-                    uint16_t len = s.read();
-                    if (len != 0 && !hello_retry_request) {
-                        if (len != k.peer_public_key.size()) {
-                            throw std::runtime_error{"key size mismatch"};
+                    visit(kex, [&](auto &&k) {
+                        uint16_t len = s.read();
+                        if (len != 0 && !hello_retry_request) {
+                            if (len != k.peer_public_key.size()) {
+                                throw std::runtime_error{"key size mismatch"};
+                            }
+                            memcpy(k.peer_public_key.data(), s.p, len);
                         }
-                        memcpy(k.peer_public_key.data(), s.p, len);
-                    }
-                    s.step(len);
-                });
+                        s.step(len);
+                    });
                 break;
             }
             case tls13::ExtensionType::supported_versions: {
@@ -687,7 +694,8 @@ struct tls13_ {
             switch (h.msg_type) {
             case parameters::handshake_type::server_hello: {
                 ServerHello &sh = s.read();
-                static array<32> hello_retry_request_data = bytes_concept{"CF 21 AD 74 E5 9A 61 11 BE 1D 8C 02 1E 65 B8 91 C2 A2 11 16 7A BB 8C 5E 07 9E 09 E2 C8 A8 33 9C"_sb};
+                static array<32> hello_retry_request_data =
+                    bytes_concept{"CF 21 AD 74 E5 9A 61 11 BE 1D 8C 02 1E 65 B8 91 C2 A2 11 16 7A BB 8C 5E 07 9E 09 E2 C8 A8 33 9C"_sb};
                 if (sh.random == hello_retry_request_data) {
                     hello_retry_request = true;
                 }
@@ -767,14 +775,13 @@ struct tls13_ {
 
                         // rsaEncryption (PKCS #1)
                         constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
-                        constexpr auto ecPublicKey = make_oid<1,2,840,10045,2,1>();
-                        constexpr auto Ed25519 = make_oid<1,3,101,112>();
-                        constexpr auto GOST_R3410_12_256 = make_oid<1,2,643,7,1,1,1,1>();
-                        constexpr auto GOST_R3410_12_512 = make_oid<1,2,643,7,1,1,1,2>();
-                        constexpr auto sm2 = make_oid<1,2,156,10197,1,301>();
+                        constexpr auto ecPublicKey = make_oid<1, 2, 840, 10045, 2, 1>();
+                        constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
+                        constexpr auto GOST_R3410_12_256 = make_oid<1, 2, 643, 7, 1, 1, 1, 1>();
+                        constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
+                        constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
 
-                        auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
-                                                    x509::public_key_algorithm, 0);
+                        auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info, x509::public_key_algorithm, 0);
 
                         int i = 0;
                         path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, i++);
@@ -785,10 +792,9 @@ struct tls13_ {
                         };
 
                         if (pka == ecPublicKey) {
-                            auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
-                                                            x509::public_key_algorithm, 1);
-                            constexpr auto secp256r1 = make_oid<1,2,840,10045,3,1,7>();
-                            constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
+                            auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info, x509::public_key_algorithm, 1);
+                            constexpr auto secp256r1 = make_oid<1, 2, 840, 10045, 3, 1, 7>();
+                            constexpr auto secp384r1 = make_oid<1, 3, 132, 0, 34>();
                             if (curve == secp256r1) {
                             } else if (curve == secp384r1) {
                             } else {
@@ -821,10 +827,7 @@ struct tls13_ {
                                     return false;
                                 }
                                 int npoints{};
-                                for (int
-                                    i = certname.size() - 1,
-                                    j = servername.size() - 1; i >= 0 && j >= 0;
-                                        --i, --j) {
+                                for (int i = certname.size() - 1, j = servername.size() - 1; i >= 0 && j >= 0; --i, --j) {
                                     if (certname[i] == '*' && npoints >= 2) {
                                         return true;
                                     }
@@ -860,11 +863,11 @@ struct tls13_ {
                                     for (auto &&seq2 : seq.get<asn1_bit_string>().get<asn1_sequence>(0)) {
                                         auto s = seq2.get<asn1_sequence>();
                                         auto string_name = s.get<asn1_oid>(0);
-                                        constexpr auto subjectAltName = make_oid<2,5,29,17>();
+                                        constexpr auto subjectAltName = make_oid<2, 5, 29, 17>();
                                         if (string_name != subjectAltName) {
                                             continue;
                                         }
-                                        auto names = s.get<asn1_sequence>(1,0);
+                                        auto names = s.get<asn1_sequence>(1, 0);
                                         for (auto &&name : names.data_as_strings()) {
                                             servername_ok |= compare_servername(name);
                                         }
@@ -944,7 +947,9 @@ struct tls13_ {
     }
     Awaitable<void> handle_handshake_application_data() {
         auto d = [&]() {
-            auto dec = visit(suite, [&](auto &&s) { return decrypt(s.handshake); });
+            auto dec = visit(suite, [&](auto &&s) {
+                return decrypt(s.handshake);
+            });
             while (dec.back() == 0) {
                 dec.resize(dec.size() - 1);
             }
@@ -1130,13 +1135,13 @@ struct http_client {
             throw std::runtime_error{"bad host"};
         }
         if (auto p = host.rfind('.', host.rfind('.') - 1); p != -1) {
-            //host = host.substr(p + 1);
+            // host = host.substr(p + 1);
         }
 
         string port = "443";
         if (auto p = host.rfind(':'); p != -1) {
-            port = host.substr(p+1);
-            host = host.substr(0,p);
+            port = host.substr(p + 1);
+            host = host.substr(0, p);
         }
 
         boost::asio::ip::tcp::resolver r{ex};
@@ -1166,21 +1171,16 @@ struct http_client {
             host = "test-gost.infotecs.ru";
         }
         if (host == "127.0.0.1") {
-            //host = "localhost";
-            //host = "www.wolfssl.com";
+            // host = "localhost";
+            // host = "www.wolfssl.com";
         }
-        tls_layer = decltype(tls_layer){
-            .s = &s,
-            .servername = host,
-            .force_suite = tls_layer.force_suite,
-            .force_kex = tls_layer.force_kex
-        };
+        tls_layer = decltype(tls_layer){.s = &s, .servername = host, .force_suite = tls_layer.force_suite, .force_kex = tls_layer.force_kex};
         if (host == "127.0.0.1") {
             tls_layer.ignore_server_certificate_check = true;
         }
 
         // http layer
-        //string req = "GET /image.jpg HTTP/1.1\r\n";
+        // string req = "GET /image.jpg HTTP/1.1\r\n";
         string req = "GET / HTTP/1.1\r\n";
         req += "Host: "s + url + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
