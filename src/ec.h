@@ -7,6 +7,7 @@
 #include "hmac.h"
 
 // https://neuromancer.sk/std/
+// https://safecurves.cr.yp.to/index.html
 
 namespace crypto::ec {
 
@@ -290,7 +291,7 @@ struct secp {
 
     static inline constexpr auto key_size = sizeof(key_type);
     using private_key_type = array<point_size_bytes>;
-    using public_key_type = private_key_type;
+    using public_key_type = array<key_size>;
 
     private_key_type private_key_;
 
@@ -314,7 +315,7 @@ struct secp {
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
         auto m = bytes_to_bigint(private_key_);
-        auto p2 = m * p; // * cofactor? but it is always = 1 here?
+        auto p2 = m * c.cofactor * p;
         key_type k2{4, p2.x, p2.y};
         memcpy(shared_secret.data(), (u8 *)&k2.x, point_size_bytes);
         return shared_secret;
