@@ -43,7 +43,7 @@ enum class CipherSuite : uint16_t {
 
     TLS_SM4_GCM_SM3 = 0x00C6,
 
-    // helper mechanism
+    // helper mechanism (tls12 and older?)
     TLS_FALLBACK_SCSV = 0x5600,
 };
 

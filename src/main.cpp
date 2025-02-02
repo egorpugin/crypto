@@ -1894,16 +1894,25 @@ void test_tls() {
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex) {
         http_client t{url};
-        t.tls_layer.force_suite = (parameters::cipher_suites)suite;
-        t.tls_layer.force_kex = (parameters::supported_groups)kex;
+        t.tls_layer.force_suite = (decltype(t.tls_layer.force_suite))suite;
+        t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
         run0(t, url);
     };
 
     int n = 50;
-    while (n--)
-        run_with_params("91.244.183.22:15082", 0, parameters::supported_groups::GC512B);
+    //while (n--)
+        //run_with_params("91.244.183.22:15082", 0, parameters::supported_groups::GC512B);
     //run("github.com");
+
+    // aliexpress.ru
+    //run_with_params("https://aliexpress.ru/", parameters::cipher_suites::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+
+
+    //run_with_params("127.0.0.1:11111", parameters::cipher_suites::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+    //return;
+
+    run_with_params("aliexpress.ru", parameters::cipher_suites::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
 
     for (auto s : {
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
@@ -1943,13 +1952,13 @@ void test_tls() {
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
         parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
     }) {
-        //run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
-        //run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
-        //run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C);
-        //run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D);
+        run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
+        run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
+        run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C);
+        run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D);
         run_with_params("91.244.183.22:15072", s, parameters::supported_groups::GC512A);
         run_with_params("91.244.183.22:15082", s, parameters::supported_groups::GC512B);
-        //run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C);
+        run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C);
 
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
@@ -1973,6 +1982,8 @@ void test_tls() {
     run("youtube.com");
     run("twitch.tv");
     run("tls13.akamai.io");
+    // this one sends some cryptic headers and expect something from us
+    // X-TLS-ClientRandom-Challenge: try="0xDEADDEADDEADC0DE0[0...]-in-Random"
     run("tls13.1d.pw");
     //run("127.0.0.1:11111");
 
@@ -2115,7 +2126,7 @@ int main() {
     //test_sha3();
     //test_blake2();
     //test_blake3();
-    //test_sm3();
+    test_sm3();
     //test_sm4();
     //test_ec();
     //test_ecdsa();
