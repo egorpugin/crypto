@@ -42,9 +42,6 @@ enum class CipherSuite : uint16_t {
     TLS_GOSTR341112_256_WITH_MAGMA_MGM_S = 0xC106,
 
     TLS_SM4_GCM_SM3 = 0x00C6,
-
-    // helper mechanism (tls12 and older?)
-    TLS_FALLBACK_SCSV = 0x5600,
 };
 
 enum class ExtensionType : uint16_t {
