@@ -992,6 +992,8 @@ struct http_client {
     boost::asio::io_context ctx;
     socket_type s{ctx};
     tls13_<socket_type, awaitable> tls_layer{&s};
+    bool follow_location{true}; // for now
+    bool redirect{};
 
     struct http_message {
         static inline constexpr auto line_delim = "\r\n"sv;
@@ -1113,7 +1115,8 @@ struct http_client {
         std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt", std::ios::binary} << m.response;
         std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg", std::ios::binary} << m.body;
         int i = 0;
-        while (!m.headers["Location"].empty()) {
+        while (!m.headers["Location"].empty() && follow_location) {
+            redirect = true;
             string url{m.headers["Location"].begin(), m.headers["Location"].end()};
             m = co_await open_url(url);
             std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt", std::ios::binary} << m.response;
