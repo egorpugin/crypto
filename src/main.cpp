@@ -1876,6 +1876,7 @@ void test_tls() {
     auto run0 = [](auto &&t, auto &&url) {
         //std::cout << "connecting to " << url << "\n";
         try {
+            t.follow_location = false;
             t.run();
 #ifndef CI_TESTS
             std::cout << "connecting to " << url << "\n";
@@ -1894,7 +1895,7 @@ void test_tls() {
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex) {
         http_client t{url};
-        t.tls_layer.force_suite = (decltype(t.tls_layer.force_suite))suite;
+        t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
         run0(t, url);
@@ -1906,19 +1907,20 @@ void test_tls() {
     //run("github.com");
 
     // aliexpress.ru
-    //run_with_params("https://aliexpress.ru/", parameters::cipher_suites::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+    //run_with_params("https://aliexpress.ru/", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
 
+    run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
 
-    //run_with_params("127.0.0.1:11111", parameters::cipher_suites::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+    run("software-network.org");
+
+    //run_with_params("127.0.0.1:11111", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
     //return;
 
-    run_with_params("aliexpress.ru", parameters::cipher_suites::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
-
     for (auto s : {
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
     }) {
         for (auto k : {
             parameters::supported_groups::GC256A,
@@ -1947,10 +1949,10 @@ void test_tls() {
     ////// https://infotecs.ru/stand_tls/
     //
     for (auto s : {
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
-        parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
     }) {
         run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
         run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
@@ -1963,13 +1965,9 @@ void test_tls() {
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
     }
-    //
-    //
-    //run("91.244.183.22:15001"); // ignore client cert
-    //return;
-    ////
-    //
-    //run("infotecs.ru"); // uses tls12
+
+    run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+
     run("software-network.org");
     run("letsencrypt.org");
     run("example.com");
@@ -1979,12 +1977,14 @@ void test_tls() {
     run("nalog.gov.ru");
     run("github.com");
     run("gmail.com");
+#ifdef CI_TESTS
     run("youtube.com");
     run("twitch.tv");
+#endif
     run("tls13.akamai.io");
     // this one sends some cryptic headers and expect something from us
     // X-TLS-ClientRandom-Challenge: try="0xDEADDEADDEADC0DE0[0...]-in-Random"
-    run("tls13.1d.pw");
+    //run("tls13.1d.pw");
     //run("127.0.0.1:11111");
 
     // some other tests
