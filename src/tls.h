@@ -476,10 +476,13 @@ struct tls13_ {
             ube16 &ciphers_len = w;
             int n_suites{};
             all_suites::for_each([&](auto &&s) {
-                if (!(int)force_suite || force_suite == (decltype(force_suite))s.suite()) {
+                if (!(int)force_suite || force_suite == s.suite()) {
                     ube16 &su = w;
                     su = s.suite();
                     ++n_suites;
+                    if (visit(suite, [&](auto &&s){return s.suite();}) != force_suite) {
+                        suite = s;
+                    }
                 }
             });
             ciphers_len = sizeof(ube16) * n_suites;
