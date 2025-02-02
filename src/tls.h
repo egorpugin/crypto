@@ -70,12 +70,7 @@ struct tls13_ {
                 return bump_nonce();
             }
             void make_keys(auto &&input_secret, auto &&h) {
-                string s;
-                s += Peer;
-                s += " ";
-                s += Type;
-                s += " ";
-                s += "traffic";
+                auto s = std::format("{} {} traffic", (string_view)Peer, (string_view)Type);
                 secret = derive_secret<hash>(input_secret, s, h);
                 key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
                 iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
@@ -96,9 +91,12 @@ struct tls13_ {
                     c = cipher{key};
                 }
             }
-        };
-        template <auto Type>
-        struct server_peer_data : peer_data<"s"_s, Type> {
+            auto encrypt(auto &&plain_text, auto &&auth_data) {
+                if constexpr (requires { suite_type::make_keys(*this); }) {
+                    suite_type::make_keys(*this);
+                }
+                return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
+            }
             auto decrypt(auto &&ciphered_text, auto &&auth_data) {
                 if constexpr (requires { suite_type::make_keys(*this); }) {
                     suite_type::make_keys(*this);
@@ -107,19 +105,10 @@ struct tls13_ {
             }
         };
         template <auto Type>
-        struct client_peer_data : peer_data<"c"_s, Type> {
-            auto encrypt(auto &&plain_text, auto &&auth_data) {
-                if constexpr (requires { suite_type::make_keys(*this); }) {
-                    suite_type::make_keys(*this);
-                }
-                return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
-            }
-        };
-        template <auto Type>
         struct peer_pair {
             array<hash::digest_size_bytes> secret;
-            server_peer_data<Type> server;
-            client_peer_data<Type> client;
+            peer_data<"s"_s, Type> server;
+            peer_data<"c"_s, Type> client;
 
             void make_keys(auto &&input_secret, auto &&h) {
                 secret = input_secret;
@@ -135,14 +124,14 @@ struct tls13_ {
         auto make_handshake_keys(auto &&shared) {
             std::array<u8, hash::digest_size_bytes> zero_bytes{};
             auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
-            auto derived1 = derive_secret<hash>(early_secret, "derived"s);
-            auto handshake_secret = hkdf_extract<hash>(derived1, shared);
+            auto derived = derive_secret<hash>(early_secret, "derived"s);
+            auto handshake_secret = hkdf_extract<hash>(derived, shared);
             handshake.make_keys(handshake_secret, h);
         }
         auto make_master_keys() {
-            auto derived2 = derive_secret<hash>(handshake.secret, "derived"s);
             std::array<u8, hash::digest_size_bytes> zero_bytes{};
-            auto master_secret = hkdf_extract<hash>(derived2, zero_bytes);
+            auto derived = derive_secret<hash>(handshake.secret, "derived"s);
+            auto master_secret = hkdf_extract<hash>(derived, zero_bytes);
             traffic.make_keys(master_secret, h);
         }
     };
