@@ -165,28 +165,28 @@ struct tls13_ {
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
         : gost_suite<mgm<grasshopper>, streebog<256>,
-                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
+                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S> {
         static inline constexpr u64 C[] = {0xffffffffe0000000ULL, 0xffffffffffff0000ULL, 0xfffffffffffffff8ULL};
         // static inline constexpr u64 SNMAX = (1ULL << 42) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
         : gost_suite<mgm<grasshopper>, streebog<256>,
-                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
+                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
                      TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L> {
         static inline constexpr u64 C[] = {0xf800000000000000ULL, 0xfffffff000000000ULL, 0xffffffffffffe000ULL};
         // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
     };
     struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_S
         : gost_suite<mgm<magma>, streebog<256>,
-                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
+                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
                      TLS_GOSTR341112_256_WITH_MAGMA_MGM_S> {
         static inline constexpr u64 C[] = {0xfffffffffc000000ULL, 0xffffffffffffe000ULL, 0xffffffffffffffffULL};
         // static inline constexpr u64 SNMAX = (1ULL << 39) - 1;
     };
     struct TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
         : gost_suite<mgm<magma>, streebog<256>,
-                     parameters::cipher_suites::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
+                     tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
                      TLS_GOSTR341112_256_WITH_MAGMA_MGM_L> {
         static inline constexpr u64 C[] = {0xffe0000000000000ULL, 0xffffffffc0000000ULL, 0xffffffffffffff80ULL};
         // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
@@ -209,25 +209,21 @@ struct tls13_ {
         static constexpr auto size() {
             return sizeof...(KeyExchanges) + 1;
         }
-
         static void for_each(auto &&f) {
             f(KeyExchange{});
             (f(KeyExchanges{}), ...);
         }
     };
-
     template <typename DefaultSuite, typename... Suites>
     struct suites : types<DefaultSuite, Suites...> {
         static constexpr auto size() {
             return sizeof...(Suites) + 1;
         }
-
         static void for_each(auto &&f) {
             f(DefaultSuite{});
             (f(Suites{}), ...);
         }
     };
-
     using all_suites = suites<
         suite_<gcm<aes_ecb<128>>, sha2<256>, tls13::CipherSuite::TLS_AES_128_GCM_SHA256>, // mandatory
         suite_<gcm<aes_ecb<256>>, sha2<384>, tls13::CipherSuite::TLS_AES_256_GCM_SHA384>, // nice to have
@@ -294,7 +290,7 @@ struct tls13_ {
 
     all_suites::variant_type suite;
     all_key_exchanges::variant_type kex;
-    parameters::cipher_suites force_suite{};
+    tls13::CipherSuite force_suite{};
     parameters::supported_groups force_kex{};
 
     //
@@ -786,6 +782,7 @@ struct tls13_ {
                         constexpr auto Ed25519 = make_oid<1,3,101,112>();
                         constexpr auto GOST_R3410_12_256 = make_oid<1,2,643,7,1,1,1,1>();
                         constexpr auto GOST_R3410_12_512 = make_oid<1,2,643,7,1,1,1,2>();
+                        constexpr auto sm2 = make_oid<1,2,156,10197,1,301>();
 
                         auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info,
                                                     x509::public_key_algorithm, 0);
@@ -816,6 +813,7 @@ struct tls13_ {
                         } else if (pka == Ed25519) {
                         } else if (pka == GOST_R3410_12_256) {
                         } else if (pka == GOST_R3410_12_512) {
+                        } else if (pka == sm2) {
                         } else {
                             string s = pka;
                             std::cerr << "unknown x509::public_key_algorithm: " << s << "\n";
