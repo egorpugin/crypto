@@ -24,7 +24,7 @@ constexpr auto hmac_bytes(streebog_base<Settings...>) {
 }
 template <auto... Settings>
 constexpr auto hmac_bytes(sm3) {
-    return sm3::digest_size_bytes;
+    return sm3::chunk_size_bytes;
 }
 template <auto... Settings>
 constexpr auto hmac_bytes(sha1) {
