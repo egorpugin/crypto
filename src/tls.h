@@ -235,9 +235,6 @@ struct tls13_ {
         TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
         // cn
         suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>
-        // security, parameters are incorrect, so we can't use it for real
-        // we don't support fallback to prev. tls
-        //suite_<gcm<aes_ecb<128>>, sha2<512>, tls13::CipherSuite::TLS_FALLBACK_SCSV>
         >;
     using all_key_exchanges = key_exchanges<
         key_exchange<curve25519, parameters::supported_groups::x25519>,
