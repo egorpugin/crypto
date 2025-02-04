@@ -16,6 +16,7 @@
 #include <format>
 using std::format;
 #include <iostream>
+#include <map>
 #include <print>
 #include <ranges>
 #include <span>
@@ -128,11 +129,17 @@ struct bytes_concept {
         }
         return memcmp(data(), rhs.data(), sz) == 0;
     }*/
-    bool operator==(const auto &rhs) const {
+    bool operator==(const bytes_concept &rhs) const {
         if (sz != rhs.size()) {
             return false;
         }
         return std::memcmp(data(), rhs.data(), size()) == 0;
+    }
+    auto operator<=>(const bytes_concept &rhs) const {
+        if (sz != rhs.size()) {
+            return sz <=> rhs.size();
+        }
+        return std::memcmp(data(), rhs.data(), size()) <=> 0;
     }
     bool contains(u8 c) const {
         return std::memchr(data(), c, sz);
