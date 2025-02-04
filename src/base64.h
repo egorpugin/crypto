@@ -155,9 +155,10 @@ struct base_raw {
         }
         return s;
     }
+    template <bool IgnoreNonAlphabetChars>
     static auto decode(auto &&data) {
         auto sz = data.size();
-        if (sz % b_chars && Pad) {
+        if ((sz % b_chars) && Pad && !IgnoreNonAlphabetChars) {
             throw std::runtime_error{std::format("bad {}: incorrect length", name())};
         }
         std::string s;
@@ -166,14 +167,35 @@ struct base_raw {
         }
         s.resize(sz * b_size / b_chars);
         auto p = (b*)s.data();
-        for (int i = 0; i < sz; i += b_chars, p += b_size) {
+        std::string_view alph = Alphabet;
+        int skipped{};
+        for (int i = 0; i < sz; ) {
+            if constexpr (IgnoreNonAlphabetChars) {
+                if (!alph.contains(data[i])) {
+                    ++i;
+                    ++skipped;
+                    continue;
+                }
+            }
             p->template decode<b_chars>(&data[i]);
+            i += b_chars;
+            p += b_size;
+        }
+        if constexpr (IgnoreNonAlphabetChars) {
+            s.resize((sz - skipped) * b_size / b_chars);
         }
         if constexpr (max_tail) {
             int tailsize{};
             auto t = max_tail;
             while (t--) {
-                if (data[--sz] == padding) {
+                auto c = data[--sz];
+                if constexpr (IgnoreNonAlphabetChars) {
+                    if (!alph.contains(c) && c != padding) {
+                        ++t;
+                        continue;
+                    }
+                }
+                if (c == padding) {
                     ++tailsize;
                 } else {
                     break;
@@ -184,6 +206,9 @@ struct base_raw {
             s.resize(s.size() - tail);
         }
         return s;
+    }
+    static auto decode(auto &&data) {
+        return decode<false>(data);
     }
 };
 struct base16    : base_raw<16, "0123456789ABCDEF"_s> {};
