@@ -33,47 +33,11 @@ struct jwt {
         static auto name() {
             return std::format("RS{}", Bits);
         }
-        static consteval auto sha_id() {
-            if (Bits == 256) return 1;
-            if (Bits == 384) return 2;
-            if (Bits == 512) return 3;
-            throw;
-        }
-        auto op(auto &&m, auto &&modulus) {
-            // RSA_PKCS1
-            // RSA_PKCS1_PADDING
-            auto mhash = sha2<Bits>::digest(m);
-            auto t = asn1_sequence::make(
-                asn1_sequence::make(
-                    asn1_oid::make(make_oid<2,16,840,1,101,3,4,2,sha_id()>()),
-                    asn1_null::make()
-                ),
-                asn1_octet_string::make(mhash)
-            );
-            auto tlen = t.size();
-            auto emlen = modulus.size();
-            constexpr auto RSA_PKCS1_PADDING_SIZE = 11;
-            if (emlen < tlen + RSA_PKCS1_PADDING_SIZE) {
-                throw std::runtime_error{"intended encoded message length too short"};
-            }
-            std::string ps(emlen - tlen - 3, 0xff);
-            std::string em(emlen, 0);
-            em[1] = 0x01;
-            memcpy(em.data() + 2, ps.data(), ps.size());
-            memcpy(em.data() + 2 + ps.size() + 1, t.data(), t.size());
-            return em;
-        }
         auto sign(auto &&m, auto &&pkey) {
-            auto em = op(m, pkey.n);
-            auto h = bytes_to_bigint(em);
-            h = h.powm(pkey.d, pkey.n);
-            return h.to_string();
+            return pkey.sign<Bits>(m);
         }
         bool verify(auto &&m, auto &&signature, auto &&pubkey) {
-            auto em = op(m, pubkey.n);
-            auto h = bytes_to_bigint(signature);
-            h = h.powm(pubkey.e, pubkey.n);
-            return bytes_concept{em} == bytes_concept{h.to_string(pubkey.n.size())};
+            return pubkey.verify<Bits>(m, signature);
         }
     };
     template <auto Bits>
