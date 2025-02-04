@@ -4,7 +4,7 @@
 #pragma once
 
 #include "ec25519_impl.h"
-#include "helpers.h"
+#include "random.h"
 
 namespace crypto {
 

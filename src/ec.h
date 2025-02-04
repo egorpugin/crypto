@@ -5,6 +5,7 @@
 
 #include "bigint.h"
 #include "hmac.h"
+#include "random.h"
 
 // https://neuromancer.sk/std/
 // https://safecurves.cr.yp.to/index.html
