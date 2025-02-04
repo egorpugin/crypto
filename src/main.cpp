@@ -1758,6 +1758,23 @@ void test_asn1() {
     }
 }
 
+void test_x509() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    x509_storage ss;
+    ss.load_system_storage();
+
+    auto data1 = read_file("test1.der");
+    auto data2 = read_file("test2.der");
+
+    x509_storage s;
+    s.add(data1);
+    s.add(data2);
+    cmp_bool(s.verify(ss), true);
+}
+
 void test_streebog() {
     LOG_TEST();
 
@@ -2102,6 +2119,7 @@ auto test_all() {
     test_scrypt();
     test_argon2();
     test_asn1();
+    test_x509();
     test_streebog();
     test_grasshopper();
     test_mgm();
@@ -2126,7 +2144,7 @@ int main() {
     //test_sha3();
     //test_blake2();
     //test_blake3();
-    test_sm3();
+    //test_sm3();
     //test_sm4();
     //test_ec();
     //test_ecdsa();
@@ -2137,12 +2155,13 @@ int main() {
     //test_scrypt();
     //test_argon2();
     //test_asn1();
+    test_x509();
     //test_streebog();
     //test_grasshopper();
     //test_mgm();
     //test_gost();
     //
-    test_tls();
-    //test_jwt();
+    //test_tls();
+    test_jwt();
 }
 #endif

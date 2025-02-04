@@ -19,7 +19,7 @@
 #include "sm4.h"
 #include "streebog.h"
 #include "tls13.h"
-
+#include "x509.h"
 
 #include <boost/asio.hpp>
 
@@ -752,6 +752,7 @@ struct tls13_ {
                 static int d = -1;
                 ++d;
                 int cert_number = 0;
+                x509_storage certs;
                 while (s2) {
                     // read one cert
                     length_type<3> len = s2.read();
@@ -782,13 +783,15 @@ struct tls13_ {
                         constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
 
                         auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info, x509::public_key_algorithm, 0);
+                        auto issuer = a.get<asn1_sequence>(x509::main, x509::certificate, x509::issuer_name);
+                        auto subject = a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name);
+                        bool root_cert = issuer == subject;
 
-                        int i = 0;
-                        path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, i++);
                         auto write_cert = [&]() {
-                            fs::create_directories(fn.parent_path());
-                            std::ofstream of{fn, std::ios::binary};
-                            of.write((const char *)data.data(), data.size());
+                            //path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, cert_number);
+                            //fs::create_directories(fn.parent_path());
+                            //std::ofstream of{fn, std::ios::binary};
+                            //of.write((const char *)data.data(), data.size());
                         };
 
                         if (pka == ecPublicKey) {
@@ -847,12 +850,13 @@ struct tls13_ {
                                     servername_ok |= compare_servername(s);
                                 }
                             };
-                            for (auto &&seq : a.get<asn1_set>(x509::main, x509::certificate, x509::subject_name, 0)) {
-                                auto s = seq.get<asn1_sequence>();
-                                auto string_name = s.get<asn1_oid>(0);
+                            for (auto &&seq : a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name)) {
+                                auto s = seq.get<asn1_set>();
+                                auto s2 = s.get<asn1_sequence>();
+                                auto string_name = s2.get<asn1_oid>(0);
                                 constexpr auto commonName = make_oid<2, 5, 4, 3>();
                                 if (string_name == commonName) {
-                                    check_name(s.subsequence(1));
+                                    check_name(s2.subsequence(1));
                                 }
                             }
                             if (!servername_ok) {
@@ -879,11 +883,12 @@ struct tls13_ {
                                 write_cert();
                                 throw std::runtime_error{format("cannot match servername")};
                             }
-
-                            // verify cert here? or in certificate_verify
-                            int a = 5;
-                            a++;
                         }
+
+                        // verify cert here? or in certificate_verify
+                        //write_cert();
+
+                        certs.add(data);
 
                         read_extensions(s2);
                         break;
@@ -892,6 +897,21 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
+                {
+                    // or system storage
+                    static auto trusted_system_storage = [](){
+                        x509_storage s;
+                        s.load_system_storage();
+                        return s;
+                    }();
+                    if (!certs.verify(trusted_system_storage)) {
+                        throw std::runtime_error{"certificate verification failed"};
+                    }
+
+                    int a = 5;
+                    a++;
+                }
+
                 break;
             }
             case parameters::handshake_type::certificate_verify: {
