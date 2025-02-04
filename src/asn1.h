@@ -13,6 +13,9 @@ struct asn1_container {
     bytes_concept data;
 
     operator bytes_concept() const { return data; }
+    auto operator==(const asn1_container &rhs) const {
+        return data == rhs.data;
+    }
     auto operator==(const bytes_concept &rhs) const {
         return data == rhs;
     }
@@ -48,6 +51,12 @@ struct asn1_container {
             return std::tuple{j, len};
         }
         return std::tuple{pos + 1, len};
+    }
+    auto get_tag_raw() {
+        return get_tag_raw(data);
+    }
+    auto get_tag() {
+        return get_tag(data);
     }
 };
 struct asn1_base : asn1_container {
@@ -97,6 +106,10 @@ struct asn1_base : asn1_container {
     bool is() const {
         return get_tag(data) == T::tag;
     }
+    template <typename T>
+    bool is_raw() const {
+        return get_tag_raw(data) == T::tag;
+    }
     static auto subsequence1(bytes_concept data, auto p, auto... pos) {
         if (data.empty()) {
             throw std::runtime_error{"empty object"};
@@ -116,17 +129,25 @@ struct asn1_base : asn1_container {
     auto subsequence(auto... pos) {
         return asn1_base{subsequence1(data, pos...)};
     }
-    template <typename T>
-    T get(auto... pos) {
+    auto get_raw(auto... pos) {
         auto d = data;
         if constexpr (sizeof...(pos) > 0) {
             d = subsequence1(data, pos...);
-            if (get_tag(d) != T::tag) {
-                throw std::runtime_error{"not a requested type"};
-            }
         }
         auto [start, len] = get_next_data(d);
+        return std::tuple{d.subspan(0, start + len), start, len};
+    }
+    template <typename T>
+    T get(auto... pos) {
+        auto [d,start,len] = get_raw(pos...);
+        if (get_tag(d) != T::tag) {
+            throw std::runtime_error{"not a requested type"};
+        }
         return T{d.subspan(start, len)};
+    }
+    auto get(auto... pos) {
+        auto [d,start,len] = get_raw(pos...);
+        return asn1_base{d.subspan(start, len)};
     }
 
     auto data_as_strings() {
@@ -278,6 +299,15 @@ struct asn1_sequence : asn1_base {
         ((memcpy(p, data.data(), data.size()),p += data.size()),...);
         return s;
     }
+    template <typename Tag>
+    std::optional<Tag> get_next() {
+        for (auto &&seq : *this) {
+            if (seq.is_raw<Tag>()) {
+                return Tag{seq.data};
+            }
+        }
+        return {};
+    }
 };
 struct asn1_set : asn1_base {
     static inline constexpr auto tag = 0x31;
@@ -296,42 +326,6 @@ constexpr auto make_oid() {
     (asn1::write_bytes(p, nodes),...);
     return data;
 }
-
-// some structures of asn1 objects
-struct x509 {
-    /*
-    struct certificate {
-        struct version_number {};
-    };
-    struct certificate_signature_algorithm {};
-    struct certificate_signature {};
-    */
-    enum {
-        main, // main object
-    };
-    enum {
-        certificate,
-        certificate_signature_algorithm,
-        certificate_signature,
-    };
-    enum {
-        version_number,
-        serial_number,
-        signature_algorithm_id,
-        issuer_name,
-        validity,
-        subject_name,
-        subject_public_key_info,
-    };
-    enum {
-        not_before,
-        not_after,
-    };
-    enum {
-        public_key_algorithm,
-        subject_public_key,
-    };
-};
 
 struct pkcs1 {
     struct public_key {
