@@ -120,6 +120,10 @@ struct bytes_concept {
         sz = std::min<size_t>(this->sz - start, sz);
         return bytes_concept{p + start, sz};
     }
+    auto remove_prefix(size_t s) {
+        p += s;
+        sz -= s;
+    }
     auto &operator[](int i) { return data()[i]; }
     auto operator[](int i) const { return data()[i]; }
     void operator+=(int i) { p += i; }

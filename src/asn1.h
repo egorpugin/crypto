@@ -135,19 +135,19 @@ struct asn1_base : asn1_container {
             d = subsequence1(data, pos...);
         }
         auto [start, len] = get_next_data(d);
-        return std::tuple{d.subspan(0, start + len), start, len};
+        return std::tuple{d.subspan(0, start + len), start};
     }
     template <typename T>
     T get(auto... pos) {
-        auto [d,start,len] = get_raw(pos...);
+        auto [d,start] = get_raw(pos...);
         if (get_tag(d) != T::tag) {
             throw std::runtime_error{"not a requested type"};
         }
-        return T{d.subspan(start, len)};
+        return T{d.subspan(start)};
     }
     auto get(auto... pos) {
-        auto [d,start,len] = get_raw(pos...);
-        return asn1_base{d.subspan(start, len)};
+        auto [d,start] = get_raw(pos...);
+        return asn1_base{d.subspan(start)};
     }
 
     auto data_as_strings() {
@@ -281,6 +281,12 @@ struct asn1_oid : asn1_base {
         memcpy(p, data.data(), data.size());
         return s;
     }
+};
+struct asn1_utc_time : asn1_base {
+    static inline constexpr auto tag = 0x17;
+};
+struct asn1_generalized_time : asn1_base {
+    static inline constexpr auto tag = 0x18;
 };
 struct asn1_sequence : asn1_base {
     static inline constexpr auto tag = 0x30;

@@ -13,13 +13,6 @@ namespace crypto {
 
 // rfc5280
 struct x509 {
-    /*
-    struct certificate {
-        struct version_number {};
-    };
-    struct certificate_signature_algorithm {};
-    struct certificate_signature {};
-    */
     enum {
         main, // main object
     };
@@ -62,6 +55,7 @@ struct asn1_x509_extensions : asn1_base {
 };
 
 struct x509_storage {
+    using clock = std::chrono::system_clock;
     struct key {
         bytes_concept subject;
         bytes_concept keyid;
@@ -72,7 +66,49 @@ struct x509_storage {
     };
     struct value {
         bytes_concept data;
-        bool verified{};
+        bool verified{}; // trusted?
+
+        bool is_valid(auto &&now) const {
+            asn1 a{data};
+            auto validity = a.get<asn1_sequence>(x509::main, x509::certificate, x509::validity);
+            auto decode_time = [&](int i) {
+                auto [data,start] = validity.get_raw(i);
+                if (asn1::get_tag(data) == asn1_utc_time::tag) {
+                    data.remove_prefix(start);
+                    auto with_seconds = data.size() == 13;
+                    if (data.size() != 11 && !with_seconds) {
+                        throw std::runtime_error{"bad time"};
+                    }
+                    tm t{};
+                    auto p = (const char *)data.p;
+                    auto parse = [&](auto &t) {
+                        if (auto [_,ec] = std::from_chars(p, p + 2, t); ec != std::errc{}) {
+                            throw std::runtime_error{"bad time"};
+                        }
+                        p += 2;
+                    };
+                    parse(t.tm_year);
+                    parse(t.tm_mon);
+                    parse(t.tm_mday);
+                    parse(t.tm_hour);
+                    parse(t.tm_min);
+                    if (with_seconds) {
+                        parse(t.tm_sec);
+                    }
+                    if (t.tm_year <= 49) {
+                        t.tm_year += 100;
+                    }
+                    if (auto t2 = mktime(&t); t2 != -1) {
+                        return clock::from_time_t(t2);
+                    }
+                } else {
+                    // 99991231235959Z = not_after is not specified
+                    throw std::runtime_error{"generalised time is not implemented"};
+                }
+                throw std::runtime_error{"bad time"};
+            };
+            return decode_time(0) <= now && now <= decode_time(1);
+        }
     };
     std::map<key, value> index;
     std::vector<std::string> storage;
@@ -112,7 +148,7 @@ struct x509_storage {
             if (keystor.get_tag() == asn1_octet_string::tag) {
                 keyid = keystor.get<asn1_octet_string>(0);
             } else if (keystor.get_tag() == asn1_sequence::tag) {
-                keyid = keystor.get(0);
+                keyid = keystor.get(0, 0);
             }
         }
         if (keyid.empty()) {
@@ -124,6 +160,7 @@ struct x509_storage {
         return index.emplace(key{subject,keyid}, data).first->second;
     }
     bool verify(auto &&trusted_storage) {
+        auto now = clock::now();
         while (1) {
             bool did_verify{};
             for (auto &&[sk,v] : index) {
@@ -133,8 +170,8 @@ struct x509_storage {
                 did_verify = true;
                 asn1 current_cert{v.data};
                 auto issuer = current_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::issuer_name);
-                auto [cert_raw,cert_start,cert_len] = current_cert.get_raw(x509::main, x509::certificate);
-                asn1_sequence cert{cert_raw.subspan(cert_start,cert_len)};
+                auto [cert_raw,cert_start] = current_cert.get_raw(x509::main, x509::certificate);
+                asn1_sequence cert{cert_raw.subspan(cert_start)};
                 if (auto exts = cert.get_next<asn1_x509_extensions>()) {
                     constexpr auto old_authority_keyid = make_oid<2, 5, 29, 1>();
                     constexpr auto authority_keyid = make_oid<2, 5, 29, 35>(); // old authority_keyid = 1
@@ -174,6 +211,9 @@ struct x509_storage {
 
                             if (pubk.verify<256>(cert_raw, sig.data.subspan(1))) {
                                 v.verified = true;
+                                if (!v.is_valid(now)) {
+                                    return false;
+                                }
                             } else {
                                 return false;
                             }

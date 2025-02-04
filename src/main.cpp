@@ -2161,7 +2161,7 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    //test_tls();
-    test_jwt();
+    test_tls();
+    //test_jwt();
 }
 #endif
