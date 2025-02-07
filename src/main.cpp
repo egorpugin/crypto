@@ -130,6 +130,7 @@ auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
     to_string2(type{}, "The quick brown fox jumps over the lazy dog", h1);
     to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
+
 auto read_file(const std::filesystem::path &fn) {
     if (!std::filesystem::exists(fn)) {
         throw std::runtime_error{"file does not exist: " + fn.string()};
@@ -817,7 +818,6 @@ void test_ec() {
             auto r = m * p;
             cmp_base(r.x, "57520216126176808443631405023338071176630104906313632182896741342206604859403"_bi);
             cmp_base(r.y, "17614944419213781543809391949654080031942662045363639260709847859438286763994"_bi);
-            //std::cout << r.y << "\n";
         }
         // gost 34.10 example 2
         {
@@ -862,6 +862,56 @@ void test_ec() {
             check_shared(s,pubc);
             check_shared(c,pubs);
         }
+        //
+        {
+            ec::weierstrass_prime_field c{
+                "0x7",
+                "0x5fbff498aa938ce739b8e022fbafef40563f6e6a3472fc2a514c0ce9dae23b7e",
+                "0x8000000000000000000000000000000000000000000000000000000000000431"
+            };
+            ec::ec_field_point p{
+                c,
+                "2",
+                "0x8e2a8a0e65147d4bd6316030e16d19c85c97f0a9ca267122b96abbcea7e8fc8"
+            };
+            auto m = "0x8000000000000000000000000000000150FE8A1892976154C59CFC193ACCF5B3"_bi;
+            auto q = m;
+            auto d = "0x7A929ADE789BB9BE10ED359DD39A72C11B60961F49397EEE1D19CE9891EC3B28"_bi; // private key
+            auto r = d * p; // pubkey
+            auto xq = "0x7F2B49E270DB6D90D8595BEC458B50C58585BA1D4E9B788F6689DBD8E56FD80B"_bi;
+            auto yq = "0x26F1B489D6701DD185C8413A977B3CBBAF64D1C593D26627DFFB101A87FF77DA"_bi;
+            cmp_base(r.x, xq);
+            cmp_base(r.y, yq);
+
+            using curve_t = ec::gost::r34102012::curve<256, "0x8000000000000000000000000000000000000000000000000000000000000431"_s,
+                                   "0x7"_s,
+                                   "0x5fbff498aa938ce739b8e022fbafef40563f6e6a3472fc2a514c0ce9dae23b7e"_s,
+
+                                   "0x2"_s,
+                                   "0x8e2a8a0e65147d4bd6316030e16d19c85c97f0a9ca267122b96abbcea7e8fc8"_s,
+
+                                   "0x8000000000000000000000000000000150FE8A1892976154C59CFC193ACCF5B3"_s, "1"_s>;
+
+            curve_t ec;
+            ec.private_key_ = d;
+            auto pubk = ec.public_key();
+            cmp_base(bytes_to_bigint(pubk.x), xq);
+            cmp_base(bytes_to_bigint(pubk.y), yq);
+
+            {
+                auto e = "0x2DFBC1B372D89A1188C09C52E0EEC61FCE52032AB1022E8E67ECE6672B043EE5"_bi;
+                auto k = "0x77105C9B20BCD3122823C8CF6FCC7B956DE33814E95B7FE64FED924594DCEAB3"_bi;
+                auto r = "0x41AA28D2F1AB148280CD9ED56FEDA41974053554A42767B83AD043FD39DC0493"_bi;
+                auto s = "0x1456C64BA4642A1653C235A98A60249BCD6D3F746B631DF928014F6C5BF9C40"_bi;
+
+                auto c = k * p;
+                auto r2 = c.x % q;
+                cmp_base(c.x, r);
+
+                auto s2 = (r2 * d + k * e) % q;
+                cmp_base(s2, s);
+            }
+        }
     }
 
     {
@@ -893,7 +943,7 @@ void test_ecdsa() {
             cmp_bytes(r, r_in);
             cmp_bytes(s, s_in);
 
-            cmp_base(c.verify<decltype(h)>(h, pubkey, r, s), true);
+            cmp_base(c.verify(h, pubkey, r, s), true);
         };
 
         {
@@ -1741,7 +1791,7 @@ void test_asn1() {
     using namespace crypto;
 
     mmap_file<uint8_t> f{"d:/dev/crypto/_.gosuslugi.ru.der"};
-    asn1 a{f};
+    asn1 a{bytes_concept{f}};
     //a.parse();
 
     //rsaEncryption (PKCS #1)
@@ -1764,7 +1814,8 @@ void test_x509() {
     using namespace crypto;
 
     x509_storage ss;
-    ss.load_system_storage();
+    ss.load_pem(mmap_file<char>{"roots.pem"}, true);
+    ss.load_pem(mmap_file<char>{"infotecsCA.der"}, true);
 
     auto data1 = read_file("test1.der");
     auto data2 = read_file("test2.der");
@@ -1773,6 +1824,11 @@ void test_x509() {
     s.add(data1);
     s.add(data2);
     cmp_bool(s.verify(ss), true);
+
+    x509_storage s2;
+    auto data3 = read_file("infotecs.der");
+    s2.add(data3);
+    cmp_bool(s2.verify(ss), true);
 }
 
 void test_streebog() {
@@ -1889,6 +1945,10 @@ void test_tls() {
     LOG_TEST();
 
     using namespace crypto;
+
+    auto &tcs = x509_storage::trusted_storage();
+    tcs.load_pem(mmap_file<char>{"roots.pem"}, true);
+    tcs.load_der(mmap_file<char>{"infotecsCA.der"}, true);
 
     auto run0 = [](auto &&t, auto &&url) {
         //std::cout << "connecting to " << url << "\n";
@@ -2146,7 +2206,7 @@ int main() {
     //test_blake3();
     //test_sm3();
     //test_sm4();
-    //test_ec();
+    test_ec();
     //test_ecdsa();
     //test_hmac();
     //test_pbkdf2();

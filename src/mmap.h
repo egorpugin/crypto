@@ -147,6 +147,8 @@ struct mmap_file {
     }
     auto data() { return p; }
     auto size() { return sz; }
+    template <typename T>
+    operator T() const {return T{p,p+sz};}
 
     T *alloc_raw(size_type sz) {
         close();
