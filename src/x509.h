@@ -188,23 +188,30 @@ struct x509_storage {
                         auto alg = current_cert.get<asn1_oid>(x509::main, x509::certificate_signature_algorithm, 0);
                         auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature).data.subspan(1);
                         constexpr auto sha256WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 11>();
+                        constexpr auto sha384WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 12>();
+                        constexpr auto sha512WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 13>();
                         constexpr auto gost2012Signature256 = make_oid<1,2,643,7,1,1,3,2>();
                         constexpr auto gost2012Signature512 = make_oid<1,2,643,7,1,1,3,3>();
 
                         auto pubk_info = issuer_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_public_key_info);
                         auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key).data.subspan(1);
 
-                        if (alg == sha256WithRSAEncryption) {
+                        auto sha = [&]<auto Bits>() {
                             auto pubk = rsa::public_key::load(issuer_pubkey);
-
-                            if (pubk.verify<256>(cert_raw, sig)) {
+                            if (pubk.verify<Bits>(cert_raw, sig)) {
                                 v.trusted = true;
-                                if (!v.is_valid(now)) {
-                                    return false;
+                                if (v.is_valid(now)) {
+                                    return true;
                                 }
-                            } else {
-                                return false;
                             }
+                            return false;
+                        };
+                        if (alg == sha256WithRSAEncryption) {
+                            sha.template operator()<256>();
+                        } else if (alg == sha384WithRSAEncryption) {
+                            sha.template operator()<384>();
+                        } else if (alg == sha512WithRSAEncryption) {
+                            sha.template operator()<512>();
                         } else if (alg == gost2012Signature256) {
                             ec::gost::r34102012::ec256a c;
                             auto r = issuer_pubkey.subspan(0, sig.size() / 2);
