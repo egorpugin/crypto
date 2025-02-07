@@ -29,7 +29,7 @@ struct weierstrass_binary_field {
 };
 
 // a * x^2 + y^2 = 1 + d * x^2 * y^2
-struct twisted_edwards {
+struct twisted_edwards_field {
     bigint a, d, p;
 };
 
@@ -159,6 +159,55 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
+    ec_field_point double_() const
+        requires std::same_as<Curve, twisted_edwards_field>
+    {
+        if (y == 0) {
+            return ec_field_point{ec};
+        }
+        bigint temp = y * 2u;
+        mpz_invert(temp, temp, ec.p);
+        bigint slope = (x * x * 3u + ec.a) * temp;
+        slope %= ec.p;
+        ec_field_point r{ec};
+        r.x = slope * slope - x * 2u;
+        r.x %= ec.p;
+        r.y = slope * (x - r.x) - y;
+        r.y %= ec.p;
+        return r;
+    }
+    ec_field_point operator+(const ec_field_point &q)
+        requires std::same_as<Curve, twisted_edwards_field>
+    {
+        if (*this == 0) {
+            return q;
+        }
+        if (q == 0) {
+            return *this;
+        }
+        bigint temp1;
+        if (q.y != 0) {
+            temp1 = (q.y - ec.p);
+            temp1 %= ec.p;
+        }
+        if (y == temp1 && x == q.x) {
+            return {ec};
+        }
+        if (*this == q) {
+            return double_();
+        }
+        bigint temp = q.x - x;
+        temp %= ec.p;
+        mpz_invert(temp, temp, ec.p);
+        bigint slope = (q.y - y) * temp;
+        slope %= ec.p;
+        ec_field_point r{ec};
+        r.x = slope * slope - x - q.x;
+        r.x %= ec.p;
+        r.y = slope * (x - r.x) - y;
+        r.y %= ec.p;
+        return r;
+    }
 };
 
 template <typename Curve>
@@ -237,8 +286,8 @@ struct parameters<T, weierstrass_prime_field> {
 };
 
 template <typename T>
-struct parameters<T, twisted_edwards> {
-    using CurveForm = twisted_edwards;
+struct parameters<T, twisted_edwards_field> {
+    using CurveForm = twisted_edwards_field;
 
     T p;
     T a, d;
@@ -362,7 +411,6 @@ struct secp {
 
         return std::tuple{r.to_string(bitlen{PointSizeBits}),s.to_string(bitlen{PointSizeBits})};
     }
-    template <typename Hash>
     auto verify(auto &&hash, auto &&pubkey, auto &&r, auto &&s) {
         auto ec = parameters.curve();
         auto q = bigint{parameters.order};
@@ -482,11 +530,39 @@ struct curve {
         memcpy(shared_secret.data(), (u8 *)&k2.x, point_size_bytes);
         return shared_secret;
     }
+
+    /*template <typename Hash>
+    auto sign(auto &&hash) {
+        auto pubkey = public_key();
+
+        auto ec = parameters.curve();
+        auto q = bigint{parameters.order};
+        auto hs = prepare_hash_for_signature(hash);
+
+        bigint k,r;
+        while (1) {
+            auto t = d.digest({}, PointSizeBits);
+            k = bytes_to_bigint(t);
+            if (0 < k && k < q) {
+                r = (k * ec.G).x % q;
+                if (r != 0) {
+                    break;
+                }
+            }
+        }
+
+        auto hb = bytes_to_bigint(hs) % q;
+        auto pk = bytes_to_bigint(private_key_);
+        mpz_invert(k, k, q);
+        auto s = (k * (hb + pk * r)) % q;
+
+        return std::tuple{r.to_string(bitlen{PointSizeBits}),s.to_string(bitlen{PointSizeBits})};
+    }*/
 };
 
 template <auto PointSizeBits, auto P, auto A, auto D, auto Gx, auto Gy, auto Order, auto Cofactor, typename Wcurve>
 struct twisted_edwards {
-    static inline const auto parameters = ec::parameters<string_view, ec::twisted_edwards>{.p = P,
+    static inline const auto parameters = ec::parameters<string_view, ec::twisted_edwards_field>{.p = P,
                                                                                            .a = A,
                                                                                            .d = D,
                                                                                            .G =
@@ -550,6 +626,42 @@ struct twisted_edwards {
         memcpy(shared_secret.data(), (u8 *)&k2.x, this->point_size_bytes);
         return shared_secret;
     }
+
+    static auto prepare_hash_for_signature(auto &&h) {
+        auto q = bigint{Wcurve::parameters.order};
+        bitlen qlen{PointSizeBits};
+        return ec::prepare_hash_for_signature(h, q, qlen);
+    }
+    auto verify(auto &&hash, auto &&pubkey_in, auto &&r, auto &&s) {
+        auto &pubkey = *(key_type *)pubkey_in.data();
+
+        auto wc = Wcurve::parameters.curve();
+        auto q = bigint{Wcurve::parameters.order};
+        auto hs = prepare_hash_for_signature(hash);
+
+        auto e = bytes_to_bigint(hs) % q;
+        if (e == 0) {
+            e = 1;
+        }
+        auto rb = bytes_to_bigint(r);
+
+        decltype(wc.G) Q{wc.G.ec};
+        Q.x = bytes_to_bigint(pubkey.x);
+        Q.y = bytes_to_bigint(pubkey.y);
+
+        bigint w;
+        mpz_invert(w, e, q);
+        auto z1 = (bytes_to_bigint(s) * w) % q;
+        auto z2 = (-rb * w) % q;
+        auto ug = z1 * wc.G;
+        auto uq = z2 * Q;
+        auto r2 = ug + uq;
+        if (r2.x == 0) {
+            return false;
+        }
+        auto v = r2.x % q;
+        return v == rb;
+    }
 };
 
 // https://neuromancer.sk/std/gost
@@ -576,7 +688,7 @@ using ec256a_w = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffff
 
                        "0x1000000000000000000000000000000003f63377f21ed98d70456bd55b0d8319c"_s, "4"_s>;
 
-using ec256a = twisted_edwards<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s, "0x01"_s,
+using ec256a = twisted_edwards<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s, "1"_s,
                                "0x605f6b7c183fa81578bc39cfad518132b9df62897009af7e522c32d6dc7bffb"_s,
 
                                "0x0d"_s, "0x60ca1e32aa475b348488c38fab07649ce7ef8dbe87f22e81f92b2592dba300e7"_s,
