@@ -145,6 +145,25 @@ struct asn1_base : asn1_container {
         }
         return T{d.subspan(start)};
     }
+    template <typename ... Types>
+        requires (sizeof...(Types) > 1)
+    auto get(auto... pos) {
+        using var = std::variant<Types...>;
+        var r;
+        bool ok{};
+        auto [d,start] = get_raw(pos...);
+        auto f = [&]<typename T>(T**) {
+            if (get_tag(d) == T::tag) {
+                r = T{d.subspan(start)};
+                ok = true;
+            }
+        };
+        (f((Types**)nullptr),...);
+        if (!ok) {
+            throw std::runtime_error{"not a requested type"};
+        }
+        return r;
+    }
     auto get(auto... pos) {
         auto [d,start] = get_raw(pos...);
         return asn1_base{d.subspan(start)};
@@ -284,9 +303,62 @@ struct asn1_oid : asn1_base {
 };
 struct asn1_utc_time : asn1_base {
     static inline constexpr auto tag = 0x17;
+
+    auto decode() const {
+        auto with_seconds = data.size() == 13;
+        if (data.size() != 11 && !with_seconds) {
+            throw std::runtime_error{"bad utc time"};
+        }
+        tm t{};
+        auto p = (const char *)data.p;
+        auto parse = [&](auto &t) {
+            if (auto [_,ec] = std::from_chars(p, p + 2, t); ec != std::errc{}) {
+                throw std::runtime_error{"bad utc time"};
+            }
+            p += 2;
+        };
+        parse(t.tm_year);
+        parse(t.tm_mon);
+        parse(t.tm_mday);
+        parse(t.tm_hour);
+        parse(t.tm_min);
+        if (with_seconds) {
+            parse(t.tm_sec);
+        }
+        if (t.tm_year <= 49) {
+            t.tm_year += 100;
+        }
+        return t;
+    }
 };
 struct asn1_generalized_time : asn1_base {
     static inline constexpr auto tag = 0x18;
+
+    auto decode() const {
+        if (data.size() < 10) {
+            throw std::runtime_error{"bad utc time"};
+        }
+        // 99991231235959Z = not_after is not specified
+        tm t{};
+        auto p = (const char *)data.p;
+        auto parse = [&](auto &t, int len = 2) {
+            if ((u8*)p - data.data() > data.size() - len) {
+                return;
+            }
+            if (auto [_,ec] = std::from_chars(p, p + len, t); ec != std::errc{}) {
+                throw std::runtime_error{"bad utc time"};
+            }
+            p += len;
+        };
+        parse(t.tm_year, 4);
+        parse(t.tm_mon);
+        parse(t.tm_mday);
+        parse(t.tm_hour);
+        parse(t.tm_min);
+        parse(t.tm_sec);
+        t.tm_year -= 1900;
+        return t;
+    }
 };
 struct asn1_sequence : asn1_base {
     static inline constexpr auto tag = 0x30;
