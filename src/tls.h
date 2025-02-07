@@ -745,14 +745,23 @@ struct tls13_ {
                 break;
             }
             case parameters::handshake_type::certificate: {
-                auto s2 = s.substream((u32)h.length);
+                auto s2 = s.substream(h.length);
                 u8 certificate_request_context = s2.read();
                 s2.step(certificate_request_context);
                 length_type<3> len = s2.read();
-                static int d = -1;
-                ++d;
                 int cert_number = 0;
                 x509_storage certs;
+
+                static int d = -1;
+                ++d;
+                bytes_concept data;
+                auto write_cert = [&]() {
+                    path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, cert_number);
+                    fs::create_directories(fn.parent_path());
+                    std::ofstream of{fn, std::ios::binary};
+                    of.write((const char *)data.data(), data.size());
+                };
+
                 while (s2) {
                     // read one cert
                     length_type<3> len = s2.read();
@@ -765,7 +774,7 @@ struct tls13_ {
                     case tls13::CertificateType::X509: {
                         u32 len2 = len;
 
-                        auto data = s2.span(len2);
+                        data = s2.span(len2);
                         asn1 a{data};
 
                         // https://www.rfc-editor.org/rfc/rfc8017 pkcs #1
@@ -787,13 +796,6 @@ struct tls13_ {
                         auto subject = a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name);
                         bool root_cert = issuer == subject;
 
-                        auto write_cert = [&]() {
-                            //path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, cert_number);
-                            //fs::create_directories(fn.parent_path());
-                            //std::ofstream of{fn, std::ios::binary};
-                            //of.write((const char *)data.data(), data.size());
-                        };
-
                         if (pka == ecPublicKey) {
                             auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info, x509::public_key_algorithm, 1);
                             constexpr auto secp256r1 = make_oid<1, 2, 840, 10045, 3, 1, 7>();
@@ -803,7 +805,6 @@ struct tls13_ {
                             } else {
                                 string s = curve;
                                 std::cerr << "unknown x509::public_key_algorithm::curve: " << s << "\n";
-
                                 write_cert();
                                 throw std::runtime_error{"unknown x509::public_key_algorithm::curve"};
                             }
@@ -860,36 +861,23 @@ struct tls13_ {
                                 }
                             }
                             if (!servername_ok) {
-                                for (auto &&seq : a.get<asn1_sequence>(x509::main, x509::certificate)) {
-                                    if (seq.data[0] != 0xA3) { // exts
-                                        continue;
-                                    }
-                                    for (auto &&seq2 : seq.get<asn1_bit_string>().get<asn1_sequence>(0)) {
-                                        auto s = seq2.get<asn1_sequence>();
-                                        auto string_name = s.get<asn1_oid>(0);
-                                        constexpr auto subjectAltName = make_oid<2, 5, 29, 17>();
-                                        if (string_name != subjectAltName) {
-                                            continue;
-                                        }
-                                        auto names = s.get<asn1_sequence>(1, 0);
+                                auto cert = a.get<asn1_sequence>(x509::main, x509::certificate);
+                                if (auto exts = cert.get_next<asn1_x509_extensions>()) {
+                                    constexpr auto subjectAltName = make_oid<2, 5, 29, 17>();
+                                    if (auto sk = exts->get_extension(subjectAltName)) {
+                                        auto names = sk->get<asn1_sequence>(0, 1, 0);
                                         for (auto &&name : names.data_as_strings()) {
                                             servername_ok |= compare_servername(name);
                                         }
                                     }
                                 }
                             }
-                            // still check for server_name even if ignore_server_certificate_check set?
                             if (!servername_ok && !ignore_server_certificate_check) {
                                 write_cert();
                                 throw std::runtime_error{format("cannot match servername")};
                             }
                         }
-
-                        // verify cert here? or in certificate_verify
-                        //write_cert();
-
                         certs.add(data);
-
                         read_extensions(s2);
                         break;
                     }
@@ -897,21 +885,10 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
-                {
-                    // or system storage
-                    static auto trusted_system_storage = [](){
-                        x509_storage s;
-                        s.load_system_storage();
-                        return s;
-                    }();
-                    if (!certs.verify(trusted_system_storage)) {
-                        throw std::runtime_error{"certificate verification failed"};
-                    }
-
-                    int a = 5;
-                    a++;
+                if (!certs.verify()) {
+                    write_cert();
+                    throw std::runtime_error{"certificate verification failed"};
                 }
-
                 break;
             }
             case parameters::handshake_type::certificate_verify: {

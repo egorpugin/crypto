@@ -9,6 +9,9 @@
 #include "rsa.h"
 #include "sha1.h"
 
+#include "ec.h"
+#include "streebog.h"
+
 namespace crypto {
 
 // rfc5280
@@ -66,75 +69,54 @@ struct x509_storage {
     };
     struct value {
         bytes_concept data;
-        bool verified{}; // trusted?
+        bool trusted{};
 
         bool is_valid(auto &&now) const {
+            if (!trusted) {
+                return false;
+            }
             asn1 a{data};
             auto validity = a.get<asn1_sequence>(x509::main, x509::certificate, x509::validity);
             auto decode_time = [&](int i) {
-                auto [data,start] = validity.get_raw(i);
-                if (asn1::get_tag(data) == asn1_utc_time::tag) {
-                    data.remove_prefix(start);
-                    auto with_seconds = data.size() == 13;
-                    if (data.size() != 11 && !with_seconds) {
-                        throw std::runtime_error{"bad time"};
-                    }
-                    tm t{};
-                    auto p = (const char *)data.p;
-                    auto parse = [&](auto &t) {
-                        if (auto [_,ec] = std::from_chars(p, p + 2, t); ec != std::errc{}) {
-                            throw std::runtime_error{"bad time"};
-                        }
-                        p += 2;
-                    };
-                    parse(t.tm_year);
-                    parse(t.tm_mon);
-                    parse(t.tm_mday);
-                    parse(t.tm_hour);
-                    parse(t.tm_min);
-                    if (with_seconds) {
-                        parse(t.tm_sec);
-                    }
-                    if (t.tm_year <= 49) {
-                        t.tm_year += 100;
-                    }
+                return visit(validity.get<asn1_utc_time,asn1_generalized_time>(i), [](auto &&at) {
+                    tm t = at.decode();
                     if (auto t2 = mktime(&t); t2 != -1) {
                         return clock::from_time_t(t2);
                     }
-                } else {
-                    // 99991231235959Z = not_after is not specified
-                    throw std::runtime_error{"generalised time is not implemented"};
-                }
-                throw std::runtime_error{"bad time"};
+                    throw std::runtime_error{"bad time"};
+                });
             };
             return decode_time(0) <= now && now <= decode_time(1);
         }
     };
     std::map<key, value> index;
     std::vector<std::string> storage;
-    //index
 
-    void load_system_storage() {
-        mmap_file<char> m{"roots.pem"};
+    static auto &trusted_storage() {
+        static x509_storage s;
+        return s;
+    }
+    void load_pem(std::string_view data, bool trusted = false) {
         auto delim = "-----BEGIN CERTIFICATE-----"sv;
-        std::string_view file(m.data(), m.data()+m.size());
-        auto p = file.find(delim);
+        auto p = data.find(delim);
         if (p == -1) {
             return;
         }
-        file = file.substr(p);
-        for (auto &&cert : file | std::views::split(delim)) {
+        data = data.substr(p);
+        for (auto &&cert : data | std::views::split(delim)) {
             std::string_view sv(cert);
             if (sv.empty()) {
                 continue;
             }
-            //sv.remove_prefix(delim.size());
             sv = sv.substr(0, sv.find("---"sv));
             auto decoded = base64::decode<true>(sv);
             std::string_view data = storage.emplace_back(decoded);
             auto &v = add(data);
-            v.verified = true;
+            v.trusted = trusted;
         }
+    }
+    void load_der(std::string_view data, bool trusted = false) {
+        add(storage.emplace_back(data)).trusted = trusted;
     }
     value &add(auto &&data) {
         asn1 a{data};
@@ -159,12 +141,15 @@ struct x509_storage {
         }
         return index.emplace(key{subject,keyid}, data).first->second;
     }
+    bool verify() {
+        return verify(trusted_storage());
+    }
     bool verify(auto &&trusted_storage) {
         auto now = clock::now();
         while (1) {
             bool did_verify{};
             for (auto &&[sk,v] : index) {
-                if (v.verified) {
+                if (v.trusted) {
                     continue;
                 }
                 did_verify = true;
@@ -186,7 +171,7 @@ struct x509_storage {
                         bytes_concept issuer_cert_data;
                         auto find = [&](auto &&store) {
                             auto i = store.index.find(key{issuer,keyid});
-                            if (i != store.index.end() && i->second.verified) {
+                            if (i != store.index.end() && i->second.is_valid(now)) {
                                 issuer_cert_data = i->second.data;
                             }
                         };
@@ -195,28 +180,45 @@ struct x509_storage {
                             find(trusted_storage);
                         }
                         if (issuer_cert_data.empty()) {
-                            continue;
+                            return false; // cannot find parent (issuer)
                         }
 
                         asn1 issuer_cert{issuer_cert_data};
 
                         auto alg = current_cert.get<asn1_oid>(x509::main, x509::certificate_signature_algorithm, 0);
-                        auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature);
+                        auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature).data.subspan(1);
                         constexpr auto sha256WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 11>();
+                        constexpr auto gost2012Signature256 = make_oid<1,2,643,7,1,1,3,2>();
+                        constexpr auto gost2012Signature512 = make_oid<1,2,643,7,1,1,3,3>();
+
+                        auto pubk_info = issuer_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_public_key_info);
+                        auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key).data.subspan(1);
 
                         if (alg == sha256WithRSAEncryption) {
-                            auto pubk_info = issuer_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_public_key_info);
-                            auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
-                            auto pubk = rsa::public_key::load(issuer_pubkey.data.subspan(1));
+                            auto pubk = rsa::public_key::load(issuer_pubkey);
 
-                            if (pubk.verify<256>(cert_raw, sig.data.subspan(1))) {
-                                v.verified = true;
+                            if (pubk.verify<256>(cert_raw, sig)) {
+                                v.trusted = true;
                                 if (!v.is_valid(now)) {
                                     return false;
                                 }
                             } else {
                                 return false;
                             }
+                        } else if (alg == gost2012Signature256) {
+                            ec::gost::r34102012::ec256a c;
+                            auto r = issuer_pubkey.subspan(0, sig.size() / 2);
+                            auto s = issuer_pubkey.subspan(sig.size() / 2);
+                            if (c.verify(streebog<256>::digest(cert_raw), issuer_pubkey, r, s)) {
+                                v.trusted = true;
+                                if (!v.is_valid(now)) {
+                                    return false;
+                                }
+                            } else {
+                                return false;
+                            }
+                        } else if (alg == gost2012Signature512) {
+                            throw std::runtime_error{"gost2012Signature512 not impl"};
                         } else {
                             string s = alg;
                             std::cerr << "unknown x509::signature_algorithm: " << s << "\n";
