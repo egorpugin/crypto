@@ -66,6 +66,11 @@ struct bigint {
         return &p[0];
     }
 
+    auto operator-() {
+        bigint r;
+        mpz_neg(r, *this);
+        return r;
+    }
     auto &operator%=(const bigint &m) {
         mpz_mod(*this, *this, m);
         return *this;
