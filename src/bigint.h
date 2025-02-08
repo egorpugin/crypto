@@ -50,6 +50,9 @@ struct bigint {
         mpz_clear(*this);
     }
 
+    auto data() const {
+        return (u8*)p[0]._mp_d;
+    }
     auto size() const {
         return mpz_size(*this) * sizeof(mp_limb_t);
     }
@@ -139,6 +142,11 @@ struct bigint {
         return to_array<array_gost, N, -1>();
     }
 
+    bigint invert(const bigint &q) {
+        bigint r;
+        mpz_invert(r, *this, q);
+        return r;
+    }
     bigint operator*(const bigint &p) const {
         auto b = *this;
         mpz_mul(b, b, p);
