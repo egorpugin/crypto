@@ -767,6 +767,16 @@ using ec512c = twisted_edwards<
 
 } // namespace gost::r34102012
 
+namespace gost::r34102001 {
+
+using ec256a = r34102012::ec256b;
+using ec256b = r34102012::ec256c;
+using ec256c = r34102012::ec256d;
+using ec256xcha = ec256a;
+using ec256xchb = ec256c;
+
+}  // namespace gost::r34102001
+
 // ShangMi (SM) Cipher Suites for TLS 1.3
 // https://www.rfc-editor.org/rfc/rfc8998.html
 
