@@ -319,6 +319,7 @@ struct asn1_utc_time : asn1_base {
         };
         parse(t.tm_year);
         parse(t.tm_mon);
+        --t.tm_mon;
         parse(t.tm_mday);
         parse(t.tm_hour);
         parse(t.tm_min);
@@ -352,6 +353,7 @@ struct asn1_generalized_time : asn1_base {
         };
         parse(t.tm_year, 4);
         parse(t.tm_mon);
+        --t.tm_mon;
         parse(t.tm_mday);
         parse(t.tm_hour);
         parse(t.tm_min);
