@@ -156,7 +156,7 @@ struct bytes_concept {
             throw std::runtime_error{"bad array conversion"};
         }
         array<N> a{};
-        std::memcpy(a.data() + sz - N, p, sz);
+        std::memcpy(a.data() + N - sz, p, sz);
         return a;
     }
     template <auto N>
@@ -165,7 +165,7 @@ struct bytes_concept {
             throw std::runtime_error{"bad array conversion"};
         }
         array_gost<N> a{};
-        std::memcpy(a.data() + sz - N, p, sz);
+        std::memcpy(a.data(), p, sz);
         return a;
     }
     /*template <typename T, auto N>
