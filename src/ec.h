@@ -686,7 +686,10 @@ using ec256a_w = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffff
                        "0x91e38443a5e82c0d880923425712b2bb658b9196932e02c78b2582fe742daa28"_s,
                        "0x32879423ab1a0375895786c4bb46e9565fde0b5344766740af268adb32322e5c"_s,
 
-                       "0x1000000000000000000000000000000003f63377f21ed98d70456bd55b0d8319c"_s, "4"_s>;
+                        // this is m, not q
+                        //"0x1000000000000000000000000000000003f63377f21ed98d70456bd55b0d8319c"_s,
+                        "0x400000000000000000000000000000000FD8CDDFC87B6635C115AF556C360C67"_s,
+                        "4"_s>;
 
 using ec256a = twisted_edwards<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s, "1"_s,
                                "0x605f6b7c183fa81578bc39cfad518132b9df62897009af7e522c32d6dc7bffb"_s,
@@ -746,7 +749,9 @@ using ec512c_w = curve<
     "0xe2e31edfc23de7bdebe241ce593ef5de2295b7a9cbaef021d385f7074cea043aa27272a7ae602bf2a7b9033db9ed3610c6fb85487eae97aac5bc7928c1950148"_s,
     "0xf5ce40d95b5eb899abbccff5911cb8577939804d6527378b8c108c3d2090ff9be18e2d33e3021ed2ef32d85822423b6304f726aa854bae07d0396e9a9addc40f"_s,
 
-    "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff26336e91941aac0130cea7fd451d40b323b6a79e9da6849a5188f3bd1fc08fb4"_s,
+    // this is m, not q
+    //"0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff26336e91941aac0130cea7fd451d40b323b6a79e9da6849a5188f3bd1fc08fb4"_s,
+    "0x3fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffc98cdba46506ab004c33a9ff5147502cc8eda9e7a769a12694623cef47f023ed"_s,
     "4"_s>;
 using ec512c = twisted_edwards<
     512,
