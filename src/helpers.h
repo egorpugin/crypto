@@ -72,6 +72,9 @@ struct bytes_concept {
     bytes_concept() = default;
     bytes_concept(u8 *p, size_t sz) : p{p}, sz{sz} {
     }
+    template <typename T>
+    bytes_concept(const T *p, size_t sz) : p{(u8*)p}, sz{sz} {
+    }
     template <typename T, auto N>
     bytes_concept(T (&d)[N]) : p{(u8*)d}, sz{sizeof(T) * N} {
     }

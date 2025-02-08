@@ -869,7 +869,7 @@ void test_ec() {
                 "0x5fbff498aa938ce739b8e022fbafef40563f6e6a3472fc2a514c0ce9dae23b7e",
                 "0x8000000000000000000000000000000000000000000000000000000000000431"
             };
-            ec::ec_field_point p{
+            ec::ec_field_point P{
                 c,
                 "2",
                 "0x8e2a8a0e65147d4bd6316030e16d19c85c97f0a9ca267122b96abbcea7e8fc8"
@@ -877,11 +877,11 @@ void test_ec() {
             auto m = "0x8000000000000000000000000000000150FE8A1892976154C59CFC193ACCF5B3"_bi;
             auto q = m;
             auto d = "0x7A929ADE789BB9BE10ED359DD39A72C11B60961F49397EEE1D19CE9891EC3B28"_bi; // private key
-            auto r = d * p; // pubkey
+            auto Q = d * P; // pubkey
             auto xq = "0x7F2B49E270DB6D90D8595BEC458B50C58585BA1D4E9B788F6689DBD8E56FD80B"_bi;
             auto yq = "0x26F1B489D6701DD185C8413A977B3CBBAF64D1C593D26627DFFB101A87FF77DA"_bi;
-            cmp_base(r.x, xq);
-            cmp_base(r.y, yq);
+            cmp_base(Q.x, xq);
+            cmp_base(Q.y, yq);
 
             using curve_t = ec::gost::r34102012::curve<256, "0x8000000000000000000000000000000000000000000000000000000000000431"_s,
                                    "0x7"_s,
@@ -904,13 +904,91 @@ void test_ec() {
                 auto r = "0x41AA28D2F1AB148280CD9ED56FEDA41974053554A42767B83AD043FD39DC0493"_bi;
                 auto s = "0x1456C64BA4642A1653C235A98A60249BCD6D3F746B631DF928014F6C5BF9C40"_bi;
 
-                auto c = k * p;
+                // sign
+                auto c = k * P;
                 auto r2 = c.x % q;
                 cmp_base(c.x, r);
 
                 auto s2 = (r2 * d + k * e) % q;
                 cmp_base(s2, s);
+
+                // verify
+                auto v = e.invert(q);
+                cmp_base(v, "0x271A4EE429F84EBC423E388964555BB29D3BA53C7BF945E5FAC8F381706354C2"_bi);
+
+                auto z1 = (s * v) % q;
+                auto z2 = (-r * v) % q;
+                cmp_base(z1, "0x5358F8FFB38F7C09ABC782A2DF2A3927DA4077D07205F763682F3A76C9019B4F"_bi);
+                cmp_base(z2, "0x3221B4FBBF6D101074EC14AFAC2D4F7EFAC4CF9FEC1ED11BAE336D27D527665"_bi);
+
+                auto C = z1 * P + z2 * Q;
+                cmp_base(C.x % q, r);
             }
+
+            auto h = streebog<256>::digest("test");
+            auto sig = ec.sign(h);
+            cmp_base(ec.verify(h, bytes_concept{&pubk,sizeof(pubk)}, sig), true);
+        }
+        // all non twisted edwards
+        {
+            auto h = streebog<256>::digest("some data");
+            auto h2 = streebog<512>::digest("some data");
+            cmp_bytes(h, "fb163564090e52332bd401f9218d62f7b1ad1e0d85988cd55663e8b7875a1875"_sb);
+            cmp_bytes(h2, "aefa48f59945d65352797c3aa872357019716ad218ee19f76161df4815313f1d1d66449a82bfed36d95e1e229231fd877123f29f16547091afc7aa2a7caa8392"_sb);
+
+            auto check = [](auto c, auto &&h, auto &&pk, auto &&pubkx, auto &&pubky, auto &&sig) {
+                c.private_key_ = bytes_concept{pk};
+                auto pubk = c.public_key();
+                cmp_bytes(pubk.x, pubkx);
+                cmp_bytes(pubk.y, pubky);
+                cmp_base(c.verify(h, bytes_concept{&pubk,sizeof(pubk)}, sig), true);
+                // random sign & verify
+                cmp_base(c.verify(h, bytes_concept{&pubk,sizeof(pubk)}, c.sign(h)), true);
+            };
+
+            check(ec::gost::r34102012::ec256a{}, h,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "350208a00f0a78c15ef3faa68feefb0ec804cd9eae9cfa0b4f4b8e3351563ae9"_sb,
+                "57aa47e08a421e8373e5b7d1947b46f62c0db53b55ffaffe48dafba7d68ac5a2"_sb,
+                "08c7296c628619b747fce05f5ea0060251deea450491c0a55cdd8441a7455ec715a590da47a0be9caaf4963ee90a0f97220fa9fb8de46bb16f4937f00257e6b9"_sb
+            );
+            check(ec::gost::r34102012::ec256b{}, h,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "bf4e76550b73dfe435fef49742327274422b37fa5ab6554ccfa8727de2bf08e7"_sb,
+                "4aa5bd0f69072dbc8ced84c2c5873f92fe491bd1f0115d3efd7af5108b920bf8"_sb,
+                "4c495c83477eeb1d650ba8b1621f0b2c01ab797d3d95837316dd935154b4bbb515e6197fef15b818a0a64f836abb43f6f70582c922a95c9a957eb791e34e78a9"_sb
+            );
+            check(ec::gost::r34102012::ec256c{}, h,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "3af74bc0bcbf01e58e7676c9eb56a553ff10dccf600818e8e83423a7c1183c57"_sb,
+                "d54a1bc1b7fc30f987c99a41cd39e6ecefb177439f98aa09505febedd14db609"_sb,
+                "1a47b37a0338ec053ce5abb7f133557921c306fd235aab21b5d2bfa67d7f65ef760a19e3eae46d5ec06c56a54d4e695a167ea18cf827571d0c86a894b159e17e"_sb
+            );
+            check(ec::gost::r34102012::ec256d{}, h,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "d92e0b13cd506dfba87399b6472ae1c682ad82ad0c2288e9d76e99b0693b5a6e"_sb,
+                "df072de75411b32cc935cba3a5079692cb3dd7aeaf8e938c3c2b2b2951c30195"_sb,
+                "4620f84a48eaee14e4e0b63853d9ff18e65af3000f4917e30ea4fb9d506587d1886426b909a417e99357edcca35ac4aad7fa85f4b5e7c975e8b5428af640704a"_sb
+            );
+
+            check(ec::gost::r34102012::ec512a{}, h2,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "d6274e275a12898de87b835dd2b7a583f993d6a605d7ed869ae65d7350f9b85af8b14ed153e8982176ebf432a936b5de2a8aca197718be183fd115758082d1ac"_sb,
+                "67a861c5cbafc99f2597d9773beba6cb2e335aa59e8270909071ba83720c3630d15cbfc252d487e3a8a9aab16de15f039ced3a6a631a8d5cd91db1b14f329fcd"_sb,
+                "e197c18f669222262265c574d5911c3e9c3336fde1c0164c6eaa94f66615a8e7ace78bfb17c17ac2fa515b758e4020f07d38e87b138895069412a78aec225e211029974df95bd7d8b66e7bd8b2274a2a3096b818c6aec62375141c0a6a0c3f60c40462bd98a90f04b5da2353ead54622870a0df24a99e8d44b146c428ff6fd45"_sb
+            );
+            check(ec::gost::r34102012::ec512b{}, h2,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "2017a304d30b67873bd0811ba8a4a798a9fa2f340012f96a9c2a3377f26bec485f76c278abdb27a8a7770afcc4273423de784250703863883df3820ca5bb4d31"_sb,
+                "ce809ced666b746e3af53676c4e0c65f3ff0f1e7025e72b2d6790680efc3a1b98e9938ad31c2c77dcb563ef575d88f5c5f9af281b31eb83a57fe361f2ae09e03"_sb,
+                "06ba0869ecbb5a49f1a28efe0b73a09d0e770b2abf9e449a5e2f51a3fd215b2250b1092661e4ac0f1f09cd7ab88c47fcd2b85106d195b414c8da39526bf475895773e1be05c872bb4fd022e74dfbd1fe5bc4e0088b1aac9f792455761f3586358626c82f107beda04526e5fce497c1160a0db9b1567e92095c377f739eac188e"_sb
+            );
+            check(ec::gost::r34102012::ec512c{}, h2,
+                "316ac7252683fdf9f6dfb272183a0a98ea732a200822a45b97a4468342371fe9"_sb,
+                "cacff08b72c04b5e88342221f68cb188a4cd7792336fff33d9c08187564073862b4d0b7caa1321bb068a122966d39a23032cd6d2fa530fd8fa841643a8dcb26b"_sb,
+                "c2fd9d0bb8ed53c889ab26abf4c111bfdc110f212eb42238312bf6e4f562023ca9b873c88a2f2a81aaa67f9ad201da5ddc6b16844ef63c06f1c5ceedba4476a2"_sb,
+                "357666b68a3b336a091a642064c2472fd7e80b63c92ccb7c3c927b284ea345f113ebd280afd3c16e27f831309af4325437756cd4094e092b42ab88f032aea8420364fe74f5cbba0d9d9230417de9d988462136368533b5cd84d7eb0d9fecd09b1e0cf75d86ddd53c7f2427079946e151f5d74d2887d93a4a3ddfba2e31ba27aa"_sb
+            );
         }
     }
 
@@ -943,7 +1021,7 @@ void test_ecdsa() {
             cmp_bytes(r, r_in);
             cmp_bytes(s, s_in);
 
-            cmp_base(c.verify(h, pubkey, r, s), true);
+            cmp_base(c.verify(h, bytes_concept{&pubkey,sizeof(pubkey)}, r, s), true);
         };
 
         {
@@ -1815,7 +1893,7 @@ void test_x509() {
 
     x509_storage ss;
     ss.load_pem(mmap_file<char>{"roots.pem"}, true);
-    ss.load_pem(mmap_file<char>{"infotecsCA.der"}, true);
+    ss.load_der(mmap_file<char>{"infotecsCA.der"}, true);
 
     auto data1 = read_file("test1.der");
     auto data2 = read_file("test2.der");
@@ -1977,6 +2055,8 @@ void test_tls() {
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
         run0(t, url);
     };
+
+    run("example.com");
 
     int n = 50;
     //while (n--)
