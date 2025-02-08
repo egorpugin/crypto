@@ -246,7 +246,7 @@ auto prepare_hash_for_signature(auto &&h, auto &&q, bitlen qlen) {
         hs = expand_bytes(hs, qlen);
     }
     if (auto hb = bytes_to_bigint(hs); hb >= q) {
-        hb = hb - q;
+        hb = hb - q; // equal to 'hb % q'
         hs = hb.to_string(qlen);
     }
     return hs;
@@ -411,7 +411,9 @@ struct secp {
 
         return std::tuple{r.to_string(bitlen{PointSizeBits}),s.to_string(bitlen{PointSizeBits})};
     }
-    auto verify(auto &&hash, auto &&pubkey, auto &&r, auto &&s) {
+    static auto verify(auto &&hash, auto &&pubkey_in, auto &&r, auto &&s) {
+        auto &pubkey = *(key_type *)pubkey_in.data();
+
         auto ec = parameters.curve();
         auto q = bigint{parameters.order};
         auto hs = prepare_hash_for_signature(hash);
@@ -531,33 +533,77 @@ struct curve {
         return shared_secret;
     }
 
-    /*template <typename Hash>
-    auto sign(auto &&hash) {
-        auto pubkey = public_key();
-
+    static auto prepare_hash_for_signature(auto &&h) {
+        auto q = bigint{parameters.order};
+        bitlen qlen{PointSizeBits};
+        return ec::prepare_hash_for_signature(h, q, qlen);
+    }
+    static auto sign(auto &&d, auto &&hash) {
         auto ec = parameters.curve();
         auto q = bigint{parameters.order};
         auto hs = prepare_hash_for_signature(hash);
-
-        bigint k,r;
-        while (1) {
-            auto t = d.digest({}, PointSizeBits);
-            k = bytes_to_bigint(t);
-            if (0 < k && k < q) {
-                r = (k * ec.G).x % q;
-                if (r != 0) {
-                    break;
-                }
-            }
+        auto e = bytes_to_bigint(hs) % q;
+        if (e == 0) {
+            e = 1;
         }
 
-        auto hb = bytes_to_bigint(hs) % q;
-        auto pk = bytes_to_bigint(private_key_);
-        mpz_invert(k, k, q);
-        auto s = (k * (hb + pk * r)) % q;
+        bigint k = q, r, s;
+        while (1) {
+            get_random_secure_bytes(k.data(), k.size());
+            if (k > 0 && k < q) {
+                auto c = k * ec.G;
+                r = c.x % q;
+                if (r == 0) {
+                    continue;
+                }
+                s = (r * d + k * e) % q;
+                if (s == 0) {
+                    continue;
+                }
+                break;
+            }
+        }
+        return s.to_string(bitlen{PointSizeBits}) + r.to_string(bitlen{PointSizeBits});
+    }
+    auto sign(auto &&hash) {
+        return sign(bytes_to_bigint(private_key_), hash);
+    }
+    static auto verify(auto &&hash, auto &&pubkey_in, bytes_concept sig) {
+        auto &pubkey = *(key_type *)pubkey_in.data();
 
-        return std::tuple{r.to_string(bitlen{PointSizeBits}),s.to_string(bitlen{PointSizeBits})};
-    }*/
+        auto ec = parameters.curve();
+        auto q = bigint{parameters.order};
+
+        auto s = sig.subspan(0, sig.size() / 2);
+        auto r = sig.subspan(sig.size() / 2);
+        auto rb = bytes_to_bigint(r);
+        auto sb = bytes_to_bigint(s);
+        if (!(0 < rb && rb < q && 0 < sb && sb < q)) {
+            return false;
+        }
+
+        auto hs = prepare_hash_for_signature(hash);
+        auto e = bytes_to_bigint(hs) % q;
+        if (e == 0) {
+            e = 1;
+        }
+
+        decltype(ec.G) Q{ec.G.ec};
+        Q.x = bytes_to_bigint(pubkey.x);
+        Q.y = bytes_to_bigint(pubkey.y);
+
+        auto w = e.invert(q);
+        auto z1 = (sb * w) % q;
+        auto z2 = (-rb * w) % q;
+        auto ug = z1 * ec.G;
+        auto uq = z2 * Q;
+        auto r2 = ug + uq;
+        if (r2.x == 0) {
+            return false;
+        }
+        auto v = r2.x % q;
+        return v == rb;
+    }
 };
 
 template <auto PointSizeBits, auto P, auto A, auto D, auto Gx, auto Gy, auto Order, auto Cofactor, typename Wcurve>
@@ -627,56 +673,15 @@ struct twisted_edwards {
         return shared_secret;
     }
 
-    static auto prepare_hash_for_signature(auto &&h) {
-        auto q = bigint{Wcurve::parameters.order};
-        bitlen qlen{PointSizeBits};
-        return ec::prepare_hash_for_signature(h, q, qlen);
+    auto sign(auto &&hash) {
+        return Wcurve::sign(bytes_to_bigint(private_key_), hash);
     }
-    auto verify(auto &&hash, auto &&pubkey_in, auto &&r, auto &&s) {
-        auto &pubkey = *(key_type *)pubkey_in.data();
-
-        auto wc = Wcurve::parameters.curve();
-        auto q = bigint{Wcurve::parameters.order};
-        auto hs = prepare_hash_for_signature(hash);
-
-        auto e = bytes_to_bigint(hs) % q;
-        if (e == 0) {
-            e = 1;
-        }
-        auto rb = bytes_to_bigint(r);
-
-        decltype(wc.G) Q{wc.G.ec};
-        Q.x = bytes_to_bigint(pubkey.x);
-        Q.y = bytes_to_bigint(pubkey.y);
-
-        bigint w;
-        mpz_invert(w, e, q);
-        auto z1 = (bytes_to_bigint(s) * w) % q;
-        auto z2 = (-rb * w) % q;
-        auto ug = z1 * wc.G;
-        auto uq = z2 * Q;
-        auto r2 = ug + uq;
-        if (r2.x == 0) {
-            return false;
-        }
-        auto v = r2.x % q;
-        return v == rb;
+    static auto verify(auto &&hash, auto &&pubkey_in, bytes_concept sig) {
+        return Wcurve::verify(hash, pubkey_in, sig);
     }
 };
 
 // https://neuromancer.sk/std/gost
-// use SAGE to convert twisted edwards A,B,Gx,Gy to weierstrass form
-/*
-g = to_weierstrass(a, d, K(Gx), K(Gy))
-
-print(E)
-print("p =",hex())
-print("a =",hex())
-print("b =",hex( ))
-print("n =",hex(E.order()))
-print("Gx =",hex(g[0]))
-print("Gy =",hex(g[1]))
-*/
 
 // id-tc26-gost-3410-2012-256-paramSetA
 using ec256a_w = curve<256, "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffd97"_s,
