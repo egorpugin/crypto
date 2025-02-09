@@ -20,7 +20,7 @@ struct x509 {
         main, // main object
     };
     enum {
-        certificate,
+        certificate, // tbsCertificate
         certificate_signature_algorithm,
         certificate_signature,
     };
@@ -124,20 +124,27 @@ struct x509_storage {
         bytes_concept keyid;
         constexpr auto subject_keyid = make_oid<2, 5, 29, 14>();
         auto cert = a.get<asn1_sequence>(x509::main, x509::certificate);
-        if (auto exts = cert.get_next<asn1_x509_extensions>();
-            auto sk = exts->get_extension(subject_keyid)) {
-            auto keystor = sk->get<asn1_octet_string>(0, 1);
-            if (keystor.get_tag() == asn1_octet_string::tag) {
-                keyid = keystor.get<asn1_octet_string>(0);
-            } else if (keystor.get_tag() == asn1_sequence::tag) {
-                keyid = keystor.get(0, 0);
+        if (auto exts = cert.get_next<asn1_x509_extensions>()) {
+            if (auto sk = exts->get_extension(subject_keyid)) {
+                auto keystor = sk->get<asn1_octet_string>(0, 1);
+                if (keystor.get_tag() == asn1_octet_string::tag) {
+                    keyid = keystor.get<asn1_octet_string>(0);
+                } else if (keystor.get_tag() == asn1_sequence::tag) {
+                    keyid = keystor.get(0, 0);
+                }
             }
         }
         if (keyid.empty()) {
             // see 4.2.1.2.  Subject Key Identifier
-            auto spk = a.get<asn1_bit_string>(x509::main, x509::certificate, x509::subject_public_key_info, x509::subject_public_key);
-            auto h = sha1::digest(spk.data.subspan(1));
-            keyid = storage.emplace_back(h.begin(), h.end());
+            auto [data,_] = a.get_raw(x509::main, x509::certificate, x509::subject_public_key_info, x509::subject_public_key);
+            if (asn1::get_tag(data) == asn1_bit_string::tag) {
+                auto spk = a.get<asn1_bit_string>(x509::main, x509::certificate, x509::subject_public_key_info, x509::subject_public_key);
+                auto h = sha1::digest(spk.data.subspan(1));
+                keyid = storage.emplace_back(h.begin(), h.end());
+            } else if (asn1::get_tag(data) == asn1_null::tag) {
+            } else {
+                throw std::runtime_error{"not impl"};
+            }
         }
         return index.emplace(key{subject,keyid}, data).first->second;
     }
@@ -152,11 +159,17 @@ struct x509_storage {
                 if (v.trusted) {
                     continue;
                 }
-                did_verify = true;
                 asn1 current_cert{v.data};
-                auto issuer = current_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::issuer_name);
                 auto [cert_raw,cert_start] = current_cert.get_raw(x509::main, x509::certificate);
-                asn1_sequence cert{cert_raw.subspan(cert_start)};
+                asn1_sequence cert{cert_raw.subspan(cert_start)}; // tbsCertificate
+
+                auto issuer = cert.get<asn1_sequence>(x509::issuer_name);
+                auto subject = cert.get<asn1_sequence>(x509::subject_name);
+                auto root_cert = issuer == subject;
+                if (root_cert) {
+                    continue;
+                }
+
                 if (auto exts = cert.get_next<asn1_x509_extensions>()) {
                     constexpr auto old_authority_keyid = make_oid<2, 5, 29, 1>();
                     constexpr auto authority_keyid = make_oid<2, 5, 29, 35>(); // old authority_keyid = 1
@@ -180,25 +193,41 @@ struct x509_storage {
                             find(trusted_storage);
                         }
                         if (issuer_cert_data.empty()) {
-                            return false; // cannot find parent (issuer)
+                            continue;
                         }
+
+                        did_verify = true;
 
                         asn1 issuer_cert{issuer_cert_data};
 
                         auto alg = current_cert.get<asn1_oid>(x509::main, x509::certificate_signature_algorithm, 0);
                         auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature).data.subspan(1);
+
+                        // https://www.rfc-editor.org/rfc/rfc8017 pkcs #1
+                        // 1.3.6.1.5.5.7.3.1 serverAuth
+
                         constexpr auto sha256WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 11>();
                         constexpr auto sha384WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 12>();
                         constexpr auto sha512WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 13>();
+                        constexpr auto ecdsa_with_SHA256 = make_oid<1,2,840,10045,4,3,2>();
                         constexpr auto ecdsa_with_SHA384 = make_oid<1,2,840,10045,4,3,3>();
+                        constexpr auto ecdsa_with_SHA512 = make_oid<1,2,840,10045,4,3,4>();
                         constexpr auto gost2012Signature256 = make_oid<1,2,643,7,1,1,3,2>();
                         constexpr auto gost2012Signature512 = make_oid<1,2,643,7,1,1,3,3>();
+
+                        // rsaEncryption (PKCS #1)
+                        //constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
+                        //constexpr auto ecPublicKey = make_oid<1, 2, 840, 10045, 2, 1>();
+                        //constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
+                        //constexpr auto GOST_R3410_12_256 = make_oid<1, 2, 643, 7, 1, 1, 1, 1>();
+                        //constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
+                        //constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
 
                         auto pubk_info = issuer_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_public_key_info);
                         auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
                         auto issuer_pubkey_data = issuer_pubkey.data.subspan(1);
 
-                        auto rsasha = [&]<auto Bits>() {
+                        auto rsa_sha2 = [&]<auto Bits>() {
                             auto pubk = rsa::public_key::load(issuer_pubkey_data);
                             if (pubk.verify<Bits>(cert_raw, sig)) {
                                 v.trusted = true;
@@ -208,13 +237,7 @@ struct x509_storage {
                             }
                             return false;
                         };
-                        if (alg == sha256WithRSAEncryption) {
-                            rsasha.template operator()<256>();
-                        } else if (alg == sha384WithRSAEncryption) {
-                            rsasha.template operator()<384>();
-                        } else if (alg == sha512WithRSAEncryption) {
-                            rsasha.template operator()<512>();
-                        } else if (alg == ecdsa_with_SHA384) {
+                        auto ecdsa_sha2 = [&]<auto Bits>() {
                             constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
                             constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
                             auto curve = pubk_info.get<asn1_oid>(0, 1);
@@ -222,7 +245,7 @@ struct x509_storage {
                             auto r = asn1_sequence{sig}.get<asn1_integer>(0,0).data;
                             auto s = asn1_sequence{sig}.get<asn1_integer>(0,1).data;
 
-                            auto h = sha2<384>::digest(cert_raw);
+                            auto h = sha2<Bits>::digest(cert_raw);
 
                             auto f = [&]<typename Curve>(Curve **) {
                                 if (Curve::verify(h, issuer_pubkey_data, r, s)) {
@@ -245,6 +268,33 @@ struct x509_storage {
                             } else {
                                 string s = curve;
                                 throw std::runtime_error{"curve is not impl: " + s};
+                            }
+                            return true;
+                        };
+
+                        if (alg == sha256WithRSAEncryption) {
+                            if (!rsa_sha2.template operator()<256>()) {
+                                return false;
+                            }
+                        } else if (alg == sha384WithRSAEncryption) {
+                            if (!rsa_sha2.template operator()<384>()) {
+                                return false;
+                            }
+                        } else if (alg == sha512WithRSAEncryption) {
+                            if (!rsa_sha2.template operator()<512>()) {
+                                return false;
+                            }
+                        } else if (alg == ecdsa_with_SHA256) {
+                            if (!ecdsa_sha2.template operator()<256>()) {
+                                return false;
+                            }
+                        } else if (alg == ecdsa_with_SHA384) {
+                            if (!ecdsa_sha2.template operator()<384>()) {
+                                return false;
+                            }
+                        } else if (alg == ecdsa_with_SHA512) {
+                            if (!ecdsa_sha2.template operator()<512>()) {
+                                return false;
                             }
                         } else if (alg == gost2012Signature256) {
                             constexpr auto gost_r34102001_param_set_a = make_oid<1,2,643,2,2,35,1>();
