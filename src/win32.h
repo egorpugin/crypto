@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
 
-// SPDX-License-Identifier: AGPL-3.0-only
-// Copyright (C) 2022 Egor Pugin <egor.pugin@gmail.com>
-
 #pragma once
 
 #ifdef _WIN32
@@ -23,6 +20,8 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "OleAut32.lib")
+// for certs
+#pragma comment(lib, "crypt.lib")
 
 namespace win32 {
 
@@ -74,9 +73,50 @@ struct handle {
 
     void reset() {
         CloseHandle(h);
+        release();
+    }
+    void release() {
         h = INVALID_HANDLE_VALUE;
     }
 };
+
+struct certificate_store {
+    struct iter {
+        certificate_store &s;
+        PCCERT_CONTEXT ctx{};
+        iter(certificate_store &s) : s{s} {
+            operator++();
+        }
+        bool operator==(int) const {return !ctx;}
+        auto operator*() {
+            return std::string_view{(const char*)ctx->pbCertEncoded, ctx->cbCertEncoded};
+        }
+        void operator++() {
+            ctx = CertEnumCertificatesInStore(s.h, ctx);
+        }
+    };
+
+    HANDLE h;
+
+    certificate_store(const std::string &name) {
+        if (!(h = CertOpenSystemStore(0, name.c_str()))) {
+            throw std::runtime_error{"can't open cert store" + name};
+        }
+    }
+    ~certificate_store() {
+        CertCloseStore(h, 0);
+    }
+    auto begin() {
+        return iter{*this};
+    }
+    auto end() {
+        return 0;
+    }
+};
+
+auto enum_certificate_store(auto &&name) {
+    return certificate_store{name};
+}
 
 } // namespace win32
 
