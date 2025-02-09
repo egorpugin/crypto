@@ -6,7 +6,7 @@ void build(Solution &s) {
         t += "src/.*\\.h"_rr;
 
         t.Public += "org.sw.demo.boost.asio"_dep;
-        t.Public += "org.sw.demo.neargye.nameof"_dep;
+        //t.Public += "org.sw.demo.neargye.nameof"_dep;
 
         t += "bcrypt.lib"_slib;
     }
