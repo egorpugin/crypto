@@ -777,50 +777,6 @@ struct tls13_ {
                         data = s2.span(len2);
                         asn1 a{data};
 
-                        // https://www.rfc-editor.org/rfc/rfc8017 pkcs #1
-                        //  1.2.840.113549.1.1.11 sha256WithRSAEncryption
-                        //  1.2.840.113549.1.1.12 sha384WithRSAEncryption
-                        //  1.3.101.112 curveEd25519 (EdDSA 25519 signature algorithm)
-                        // 1.3.6.1.5.5.7.3.1 serverAuth
-
-                        // rsaEncryption (PKCS #1)
-                        constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
-                        constexpr auto ecPublicKey = make_oid<1, 2, 840, 10045, 2, 1>();
-                        constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
-                        constexpr auto GOST_R3410_12_256 = make_oid<1, 2, 643, 7, 1, 1, 1, 1>();
-                        constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
-                        constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
-
-                        auto pka = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info, x509::public_key_algorithm, 0);
-                        auto issuer = a.get<asn1_sequence>(x509::main, x509::certificate, x509::issuer_name);
-                        auto subject = a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name);
-                        bool root_cert = issuer == subject;
-
-                        if (pka == ecPublicKey) {
-                            auto curve = a.get<asn1_oid>(x509::main, x509::certificate, x509::subject_public_key_info, x509::public_key_algorithm, 1);
-                            constexpr auto secp256r1 = make_oid<1, 2, 840, 10045, 3, 1, 7>();
-                            constexpr auto secp384r1 = make_oid<1, 3, 132, 0, 34>();
-                            if (curve == secp256r1) {
-                            } else if (curve == secp384r1) {
-                            } else {
-                                string s = curve;
-                                std::cerr << "unknown x509::public_key_algorithm::curve: " << s << "\n";
-                                write_cert();
-                                throw std::runtime_error{"unknown x509::public_key_algorithm::curve"};
-                            }
-                        } else if (pka == rsaEncryption) {
-                        } else if (pka == Ed25519) {
-                        } else if (pka == GOST_R3410_12_256) {
-                        } else if (pka == GOST_R3410_12_512) {
-                        } else if (pka == sm2) {
-                        } else {
-                            string s = pka;
-                            std::cerr << "unknown x509::public_key_algorithm: " << s << "\n";
-
-                            write_cert();
-                            throw std::runtime_error{"unknown x509::public_key_algorithm"};
-                        }
-
                         if (cert_number++ == 0) {
                             bool servername_ok{};
                             auto compare_servername = [&](bytes_concept certname) {
