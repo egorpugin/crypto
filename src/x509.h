@@ -8,6 +8,7 @@
 #include "mmap.h"
 #include "rsa.h"
 #include "sha1.h"
+#include "oid.h"
 
 #include "ec.h"
 #include "streebog.h"
@@ -122,10 +123,9 @@ struct x509_storage {
         asn1 a{data};
         auto subject = a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name);
         bytes_concept keyid;
-        constexpr auto subject_keyid = make_oid<2, 5, 29, 14>();
         auto cert = a.get<asn1_sequence>(x509::main, x509::certificate);
         if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-            if (auto sk = exts->get_extension(subject_keyid)) {
+            if (auto sk = exts->get_extension(oid::subject_keyid)) {
                 auto keystor = sk->get<asn1_octet_string>(0, 1);
                 if (keystor.get_tag() == asn1_octet_string::tag) {
                     keyid = keystor.get<asn1_octet_string>(0);
@@ -212,8 +212,6 @@ struct x509_storage {
                         constexpr auto ecdsa_with_SHA256 = make_oid<1,2,840,10045,4,3,2>();
                         constexpr auto ecdsa_with_SHA384 = make_oid<1,2,840,10045,4,3,3>();
                         constexpr auto ecdsa_with_SHA512 = make_oid<1,2,840,10045,4,3,4>();
-                        constexpr auto gost2012Signature256 = make_oid<1,2,643,7,1,1,3,2>();
-                        constexpr auto gost2012Signature512 = make_oid<1,2,643,7,1,1,3,3>();
 
                         // rsaEncryption (PKCS #1)
                         //constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
@@ -296,8 +294,7 @@ struct x509_storage {
                             if (!ecdsa_sha2.template operator()<512>()) {
                                 return false;
                             }
-                        } else if (alg == gost2012Signature256) {
-                            constexpr auto gost_r34102001_param_set_a = make_oid<1,2,643,2,2,35,1>();
+                        } else if (alg == oid::gost2012Signature256) {
                             auto param_set = pubk_info.get<asn1_oid>(0, 1, 0);
 
                             auto f = [&](auto &&c) {
@@ -313,7 +310,7 @@ struct x509_storage {
                                 return false;
                             };
 
-                            if (param_set == gost_r34102001_param_set_a) {
+                            if (param_set == oid::gost_r34102001_param_set_a) {
                                 if (!f(ec::gost::r34102001::ec256a{})) {
                                     return false;
                                 }
@@ -321,7 +318,7 @@ struct x509_storage {
                                 string s = param_set;
                                 throw std::runtime_error{"param set is not impl: " + s};
                             }
-                        } else if (alg == gost2012Signature512) {
+                        } else if (alg == oid::gost2012Signature512) {
                             throw std::runtime_error{"gost2012Signature512 is not impl"};
                         } else {
                             string s = alg;
