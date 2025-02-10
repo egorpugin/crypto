@@ -23,6 +23,7 @@
 #include "scrypt.h"
 #include "jwt.h"
 #include "rsa.h"
+#include "pki.h"
 
 #include <array>
 #include <chrono>
@@ -1909,6 +1910,15 @@ void test_x509() {
     cmp_bool(s2.verify(ss), true);
 }
 
+void test_pki() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    public_key_infrastructure p{".sw/pki"};
+    p.make_ca("ca");
+}
+
 void test_streebog() {
     LOG_TEST();
 
@@ -2027,6 +2037,15 @@ void test_tls() {
     auto &tcs = x509_storage::trusted_storage();
     tcs.load_pem(mmap_file<char>{"roots.pem"}, true);
     tcs.load_der(mmap_file<char>{"infotecsCA.der"}, true);
+#ifdef _WIN32
+    auto load_certs = [&](auto &&store) {
+        for (auto &&s : win32::enum_certificate_store(store)) {
+            tcs.load_der(s, true);
+        }
+    };
+    load_certs("CA");
+    load_certs("ROOT");
+#endif
 
     auto run0 = [](auto &&t, auto &&url) {
         //std::cout << "connecting to " << url << "\n";
@@ -2056,19 +2075,13 @@ void test_tls() {
         run0(t, url);
     };
 
-    run("example.com");
-
-    int n = 50;
+    //int n = 50;
     //while (n--)
         //run_with_params("91.244.183.22:15082", 0, parameters::supported_groups::GC512B);
     //run("github.com");
 
     // aliexpress.ru
     //run_with_params("https://aliexpress.ru/", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
-
-    run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
-
-    run("software-network.org");
 
     //run_with_params("127.0.0.1:11111", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
     //return;
@@ -2260,6 +2273,7 @@ auto test_all() {
     test_argon2();
     test_asn1();
     test_x509();
+    test_pki();
     test_streebog();
     test_grasshopper();
     test_mgm();
@@ -2286,7 +2300,7 @@ int main() {
     //test_blake3();
     //test_sm3();
     //test_sm4();
-    test_ec();
+    //test_ec();
     //test_ecdsa();
     //test_hmac();
     //test_pbkdf2();
@@ -2295,13 +2309,14 @@ int main() {
     //test_scrypt();
     //test_argon2();
     //test_asn1();
-    test_x509();
+    //test_x509();
+    test_pki();
     //test_streebog();
     //test_grasshopper();
     //test_mgm();
     //test_gost();
     //
-    test_tls();
+    //test_tls();
     //test_jwt();
 }
 #endif
