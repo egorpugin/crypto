@@ -196,7 +196,37 @@ struct asn1_base : asn1_container {
         return x{data};
     }
 
-    static constexpr auto count_bytes(auto v) {
+    static constexpr auto count_length_bytes(auto v) {
+        int bytes = 1;
+        if (v >= 0x80) {
+            while (v > 0) {
+                ++bytes;
+                v >>= 8;
+            }
+        }
+        return bytes;
+    }
+    static constexpr auto write_length_bytes(auto &p, auto v) {
+        if (v < 0x80) {
+            *p++ = v;
+        } else {
+            auto b = count_length_bytes(v);
+            *p++ = 0x80 | --b;
+            auto d = p;
+            p += b;
+            while (v > 0) {
+                *(d+--b) = v;
+                v >>= 8;
+            }
+        }
+    }
+    static constexpr auto make_length(auto sz) {
+        std::string s(count_length_bytes(sz), 0);
+        auto p = s.data();
+        write_length_bytes(p, sz);
+        return s;
+    }
+    static constexpr auto count_oid_bytes(auto v) {
         int bytes = 1;
         while (v >= 0x80) {
             ++bytes;
@@ -204,11 +234,11 @@ struct asn1_base : asn1_container {
         }
         return bytes;
     }
-    static constexpr auto write_bytes(auto &p, auto v) {
+    static constexpr auto write_oid_bytes(auto &p, auto v) {
         if (v < 0x80) {
             *p++ = v;
         } else {
-            auto b = count_bytes(v);
+            auto b = count_oid_bytes(v);
             p += b - 1;
             *p-- = v & 0b0111'1111;
             v >>= 7;
@@ -220,26 +250,44 @@ struct asn1_base : asn1_container {
             p += b;
         }
     }
-    static constexpr auto make_bytes(auto sz) {
-        std::string s(count_bytes(sz), 0);
-        auto p = s.data();
-        write_bytes(p, sz);
-        return s;
-    }
 };
 
 struct asn1_integer : asn1_base {
     static inline constexpr auto tag = 0x02;
+
+    static auto make(bytes_concept data) {
+        auto len = data.size();
+        std::string s(1 + len + count_length_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_length_bytes(p, len);
+        memcpy(p, data.data(), data.size());
+        return s;
+    }
+    static auto make(int v) {
+        v = std::byteswap(v);
+        return make({&v, sizeof(v)});
+    }
 };
 // has leading byte - number of unused bits in the tail
 struct asn1_bit_string : asn1_base {
     static inline constexpr auto tag = 0x03;
+
+    static auto make(auto &&data) {
+        int unused_bits_size = 1;
+        auto len = make_length(data.size() + unused_bits_size);
+        std::string s(len.size() + data.size() + 1 + unused_bits_size, 0);
+        s[0] = tag;
+        memcpy(s.data() + 1, len.data(), len.size());
+        memcpy(s.data() + 1 + unused_bits_size + len.size(), data.data(), data.size());
+        return s;
+    }
 };
 struct asn1_octet_string : asn1_base {
     static inline constexpr auto tag = 0x04;
 
     static auto make(auto &&data) {
-        auto len = make_bytes(data.size());
+        auto len = make_length(data.size());
         std::string s(len.size() + data.size() + 1, 0);
         s[0] = tag;
         memcpy(s.data() + 1, len.data(), len.size());
@@ -264,6 +312,15 @@ struct asn1_utf8_string : asn1_base {
     static inline constexpr auto tag = 0x0C;
     operator string_view() const {
         return {(const char *)data.data(), data.size()};
+    }
+    static auto make(auto &&data) {
+        auto len = data.size();
+        std::string s(1 + len + count_length_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_length_bytes(p, len);
+        memcpy(p, data.data(), data.size());
+        return s;
     }
 };
 struct asn1_oid : asn1_base {
@@ -293,10 +350,10 @@ struct asn1_oid : asn1_base {
     }
     static auto make(auto &&data) {
         auto len = data.size();
-        std::string s(1 + len + count_bytes(len), 0);
+        std::string s(1 + len + count_length_bytes(len), 0);
         s[0] = tag;
         auto p = s.data() + 1;
-        write_bytes(p, len);
+        write_length_bytes(p, len);
         memcpy(p, data.data(), data.size());
         return s;
     }
@@ -361,6 +418,31 @@ struct asn1_generalized_time : asn1_base {
         t.tm_year -= 1900;
         return t;
     }
+    static auto make(time_t t) {
+        auto ptm = gmtime(&t);
+        if (!ptm) {
+            throw std::runtime_error{"bad time"};
+        }
+        auto tm = *ptm;
+        auto ts = std::format("{:04}{:02}{:02}{:02}{:02}{:02}Z"
+            , tm.tm_year + 1900
+            , tm.tm_mon + 1
+            , tm.tm_mday
+            , tm.tm_hour
+            , tm.tm_min
+            , tm.tm_sec
+        );
+        auto len = ts.size();
+        std::string s(1 + len + count_length_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_length_bytes(p, len);
+        memcpy(p, ts.data(), ts.size());
+        return s;
+    }
+    static auto make(auto &&t) {
+        return make(std::chrono::system_clock::to_time_t(t));
+    }
 };
 struct asn1_sequence : asn1_base {
     static inline constexpr auto tag = 0x30;
@@ -372,10 +454,10 @@ struct asn1_sequence : asn1_base {
     }
     static auto make(auto &&...data) {
         auto len = (0 + ... + data.size());
-        std::string s(1 + len + count_bytes(len), 0);
+        std::string s(1 + len + count_length_bytes(len), 0);
         s[0] = tag;
         auto p = s.data() + 1;
-        write_bytes(p, len);
+        write_length_bytes(p, len);
         ((memcpy(p, data.data(), data.size()),p += data.size()),...);
         return s;
     }
@@ -391,6 +473,16 @@ struct asn1_sequence : asn1_base {
 };
 struct asn1_set : asn1_base {
     static inline constexpr auto tag = 0x31;
+
+    static auto make(auto &&...data) {
+        auto len = (0 + ... + data.size());
+        std::string s(1 + len + count_length_bytes(len), 0);
+        s[0] = tag;
+        auto p = s.data() + 1;
+        write_length_bytes(p, len);
+        ((memcpy(p, data.data(), data.size()),p += data.size()),...);
+        return s;
+    }
 };
 
 struct asn1 : asn1_sequence {
@@ -399,11 +491,11 @@ struct asn1 : asn1_sequence {
 
 template <auto n1, auto n2, auto ... nodes>
 constexpr auto make_oid() {
-    constexpr int nbytes = (1 + ... + asn1::count_bytes(nodes));
+    constexpr int nbytes = (1 + ... + asn1::count_oid_bytes(nodes));
     std::array<u8, nbytes> data;
     data[0] = n1 * 40 + n2;
     auto p = data.data() + 1;
-    (asn1::write_bytes(p, nodes),...);
+    (asn1::write_oid_bytes(p, nodes),...);
     return data;
 }
 
@@ -466,7 +558,7 @@ struct rsa_private_key {
     };
 };
 
-struct oid {
+struct oid_enums {
     enum {
         iso = 1,
         joint_iso_itu_t,
