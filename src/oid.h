@@ -11,6 +11,15 @@ constexpr auto subject_keyid = make_oid<2, 5, 29, 14>();
 
 constexpr auto gost_r34102001_param_set_a = make_oid<1,2,643,2,2,35,1>();
 
+constexpr auto gost_3410_12_256_param_set_a = make_oid<1,2,643,7,1,2,1,1,1>();
+constexpr auto gost_3410_12_256_param_set_b = make_oid<1,2,643,7,1,2,1,1,2>();
+constexpr auto gost_3410_12_256_param_set_c = make_oid<1,2,643,7,1,2,1,1,3>();
+constexpr auto gost_3410_12_256_param_set_d = make_oid<1,2,643,7,1,2,1,1,4>();
+
+constexpr auto gost_3410_12_512_param_set_a = make_oid<1,2,643,7,1,2,1,2,1>();
+constexpr auto gost_3410_12_512_param_set_b = make_oid<1,2,643,7,1,2,1,2,2>();
+constexpr auto gost_3410_12_512_param_set_c = make_oid<1,2,643,7,1,2,1,2,3>();
+
 constexpr auto gost2012PublicKey256 = make_oid<1,2,643,7,1,1,1,1>();
 constexpr auto gost2012PublicKey512 = make_oid<1,2,643,7,1,1,1,2>();
 
