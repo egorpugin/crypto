@@ -2296,7 +2296,7 @@ auto test_all() {
     test_mgm();
     test_gost();
 
-    //test_tls();
+    test_tls();
     test_jwt();
     return success != total;
 }
