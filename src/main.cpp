@@ -2290,13 +2290,13 @@ auto test_all() {
     test_argon2();
     test_asn1();
     test_x509();
-    test_pki();
+    test_pki();*/
     test_streebog();
     test_grasshopper();
     test_mgm();
     test_gost();
 
-    test_tls();*/
+    //test_tls();
     test_jwt();
     return success != total;
 }
