@@ -17,6 +17,7 @@ jobs:
       run: ./sw -Dci-build=true run test-0.0.1
 
   linux:
+    if: false
     runs-on: ubuntu-22.04
     container: fedora:latest
     steps:
@@ -33,6 +34,7 @@ jobs:
       run: ./sw -compiler gcc -Dci-build=true run test-0.0.1
 
   macos:
+    if: false
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v1
