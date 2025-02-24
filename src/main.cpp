@@ -1918,9 +1918,9 @@ void test_pki() {
     public_key_infrastructure p{".sw/pki"};
     gost_sig<ec::gost::r34102001::ec256a, oid::gost_r34102001_param_set_a, streebog<256>> gs256, gs256_child;
     gost_sig<ec::gost::r34102012::ec512c, oid::gost_3410_12_512_param_set_c, streebog<512>> gs512;
-    auto &&[cakey,casubj] = p.make_ca("ca256", gs256, cert_request{.subject = {.common_name = "localhost CA", .country = "RU"}});
+    auto &&[cakey,casubj] = p.make_ca("ca256", gs256, cert_request{.subject = {.common_name = "localhost CA 256", .country = "RU"}});
     p.make_cert("ca256_child", casubj, gs256, gs256_child, cert_request{.subject = {.common_name = "localhost", .country = "RU"}});
-    p.make_ca("ca512", gs512, cert_request{.subject = {.common_name = "localhost", .country = "RU"}});
+    p.make_ca("ca512", gs512, cert_request{.subject = {.common_name = "localhost CA 512", .country = "RU"}});
 }
 
 void test_streebog() {

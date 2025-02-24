@@ -169,7 +169,7 @@ struct base_raw {
         auto p = (b*)s.data();
         std::string_view alph = Alphabet;
         int skipped{};
-        for (int i = 0; i < sz; ) {
+        for (int i = 0; i < sz;) {
             if constexpr (IgnoreNonAlphabetChars) {
                 if (!alph.contains(data[i])) {
                     ++i;

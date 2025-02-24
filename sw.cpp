@@ -9,6 +9,7 @@ void build(Solution &s) {
         //t.Public += "org.sw.demo.neargye.nameof"_dep;
 
         t += "bcrypt.lib"_slib;
+        t += "Crypt32.lib"_slib;
     }
 
     auto &test = s.addTarget<Executable>("test");
