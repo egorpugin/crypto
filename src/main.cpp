@@ -2272,13 +2272,13 @@ void test_jwt() {
 }
 
 auto test_all() {
-    //test_aes();
+    test_aes();
     test_sha1();
     test_sha2();
-    /*test_sha3();
+    test_sha3();
     test_blake2();
     test_blake3();
-    test_sm3();
+    /*test_sm3();
     test_sm4();
     test_ec();
     test_ecdsa();
