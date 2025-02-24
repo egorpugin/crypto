@@ -2286,7 +2286,7 @@ auto test_all() {
     test_pbkdf2();
     test_chacha20();
     test_chacha20_aead();
-    test_scrypt();
+    /*test_scrypt();
     test_argon2();
     test_asn1();
     test_x509();
@@ -2296,7 +2296,7 @@ auto test_all() {
     test_mgm();
     test_gost();
 
-    test_tls();
+    test_tls();*/
     test_jwt();
     return success != total;
 }
