@@ -258,6 +258,7 @@ struct tls13_ {
     bool initialized{};
     bool hello_retry_request{};
     bytes_concept client_hello1;
+    bool ignore_server_hostname_check{};
     bool ignore_server_certificate_check{};
     u8 legacy_session_id[32];
     tls13::Random random;
@@ -828,7 +829,7 @@ struct tls13_ {
                                     }
                                 }
                             }
-                            if (!servername_ok && !ignore_server_certificate_check) {
+                            if (!servername_ok && !ignore_server_hostname_check) {
                                 write_cert();
                                 throw std::runtime_error{format("cannot match servername")};
                             }
@@ -841,7 +842,7 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
-                if (!certs.verify()) {
+                if (!certs.verify() && !ignore_server_certificate_check) {
                     write_cert();
                     throw std::runtime_error{"certificate verification failed"};
                 }
@@ -938,6 +939,7 @@ struct http_client {
     tls13_<socket_type, awaitable> tls_layer{&s};
     bool follow_location{true}; // for now
     bool redirect{};
+    bool tls{true};
 
     struct http_message {
         static inline constexpr auto line_delim = "\r\n"sv;
@@ -1039,6 +1041,7 @@ struct http_client {
             }
         }
     };
+    http_message m;
 
     http_client(auto &&url) : url_internal{url} {
     }
@@ -1055,15 +1058,15 @@ struct http_client {
             return u.substr(0, u.find(':'));
         };
 
-        auto m = co_await open_url(url_internal);
-        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt", std::ios::binary} << m.response;
-        std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg", std::ios::binary} << m.body;
+        m = co_await open_url(url_internal);
+        //std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt", std::ios::binary} << m.response;
+        //std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg", std::ios::binary} << m.body;
         int i = 0;
-        while (!m.headers["Location"].empty() && follow_location) {
+        while (m.headers.contains("Location") && follow_location) {
             redirect = true;
             string url{m.headers["Location"].begin(), m.headers["Location"].end()};
             m = co_await open_url(url);
-            std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt", std::ios::binary} << m.response;
+            //std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt", std::ios::binary} << m.response;
         }
     }
     awaitable<http_message> open_url(auto &&url) {
@@ -1071,13 +1074,18 @@ struct http_client {
         auto ex = co_await boost::asio::this_coro::executor;
 
         string host = url;
+        string port = "443";
         if (host.starts_with("http://")) {
             host = host.substr(7);
+            port = "80";
+            tls = false;
         }
         if (host.starts_with("https://")) {
             host = host.substr(8);
         }
-        host = host.substr(0, host.find('/'));
+        auto p_slash = host.find('/');
+        auto path = p_slash == -1 ? "/" : host.substr(p_slash);
+        host = host.substr(0, p_slash);
         if (host.empty()) {
             throw std::runtime_error{"bad host"};
         }
@@ -1091,7 +1099,6 @@ struct http_client {
             // host = host.substr(p + 1);
         }
 
-        string port = "443";
         if (auto p = host.rfind(':'); p != -1) {
             port = host.substr(p + 1);
             host = host.substr(0, p);
@@ -1121,21 +1128,26 @@ struct http_client {
         // std::cout << ss << "\n";
 
         if (host == "91.244.183.22") {
-            host = "test-gost.infotecs.ru";
+            //host = "test-gost.infotecs.ru";
         }
         if (host == "127.0.0.1") {
             // host = "localhost";
             // host = "www.wolfssl.com";
         }
-        tls_layer = decltype(tls_layer){.s = &s, .servername = host, .force_suite = tls_layer.force_suite, .force_kex = tls_layer.force_kex};
-        if (host == "127.0.0.1") {
-            tls_layer.ignore_server_certificate_check = true;
-        }
+        tls_layer = decltype(tls_layer){
+                .s = &s,
+                .servername = host,
+                .ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
+                .force_suite = tls_layer.force_suite,
+                .force_kex = tls_layer.force_kex,
+        };
+        //if (host == "127.0.0.1") {
+            //tls_layer.ignore_server_certificate_check = true;
+        //}
 
         // http layer
-        // string req = "GET /image.jpg HTTP/1.1\r\n";
-        string req = "GET / HTTP/1.1\r\n";
-        req += "Host: "s + url + "\r\n";
+        string req = std::format("GET {} HTTP/1.1\r\n", path);
+        req += "Host: "s + host + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
         req += "\r\n";
         auto resp = co_await http_query(req);
@@ -1153,9 +1165,19 @@ struct http_client {
     }
 
     awaitable<std::string> receive_some() {
-        co_return co_await tls_layer.receive_tls_message();
+        if (!tls) {
+            char buf[8192];
+            auto n = co_await s.async_read_some(boost::asio::mutable_buffer(buf, sizeof(buf)), boost::asio::use_awaitable);
+            co_return std::string{buf, n};
+        } else {
+            co_return co_await tls_layer.receive_tls_message();
+        }
     }
     awaitable<void> send_message(bytes_concept data) {
+        if (!tls) {
+            co_await s.async_send(boost::asio::const_buffer(data.data(), data.size()), boost::asio::use_awaitable);
+            co_return;
+        }
         if (!tls_layer.initialized) {
             co_await tls_layer.init_ssl();
         }

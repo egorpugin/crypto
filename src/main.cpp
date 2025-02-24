@@ -147,6 +147,27 @@ void write_file(const std::filesystem::path &fn, auto &&s) {
     std::ofstream o{fn, std::ios::binary};
     o << s;
 }
+auto cacert_pem() {
+    auto name = "roots.pem";
+    if (!std::filesystem::exists(name)) {
+        crypto::http_client t{"https://curl.se/ca/cacert.pem"};
+        t.tls_layer.ignore_server_certificate_check = true;
+        t.run();
+        write_file(name, t.m.body);
+    }
+    auto &tcs = crypto::x509_storage::trusted_storage();
+    tcs.load_pem(read_file(name), true);
+    return name;
+}
+auto infotecs_ca() {
+    auto name = "infotecsCA.der";
+    /*if (!std::filesystem::exists(name)) {
+        crypto::http_client t{"http://testcert.infotecs.ru/CA.der"};
+        t.run();
+        write_file(name, t.m.body);
+    }*/
+    return name;
+}
 
 void test_aes() {
     LOG_TEST();
@@ -1865,11 +1886,11 @@ ee ad 9d 67 89 0c bb 22 39 23 36 fe a1 85 1f 38
 }
 
 void test_asn1() {
-    LOG_TEST();
+    /*LOG_TEST();
 
     using namespace crypto;
 
-    mmap_file<uint8_t> f{"d:/dev/crypto/_.gosuslugi.ru.der"};
+    mmap_file<uint8_t> f{"_.gosuslugi.ru.der"};
     asn1 a{bytes_concept{f}};
     //a.parse();
 
@@ -1880,11 +1901,7 @@ void test_asn1() {
     if (pka != rsaEncryption) {
         throw std::runtime_error{"unknown x509::public_key_algorithm"};
     }
-    auto pk = a.get<asn1_bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);
-    {
-    int a = 5;
-    a++;
-    }
+    auto pk = a.get<asn1_bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);*/
 }
 
 void test_x509() {
@@ -1893,8 +1910,8 @@ void test_x509() {
     using namespace crypto;
 
     x509_storage ss;
-    ss.load_pem(mmap_file<char>{"roots.pem"}, true);
-    ss.load_der(mmap_file<char>{"infotecsCA.der"}, true);
+    ss.load_pem(read_file(cacert_pem()), true);
+    ss.load_der(read_file(infotecs_ca()), true);
 
     auto data1 = read_file("test1.der");
     auto data2 = read_file("test2.der");
@@ -2039,8 +2056,8 @@ void test_tls() {
     using namespace crypto;
 
     auto &tcs = x509_storage::trusted_storage();
-    tcs.load_pem(mmap_file<char>{"roots.pem"}, true);
-    tcs.load_der(mmap_file<char>{"infotecsCA.der"}, true);
+    tcs.load_pem(read_file(cacert_pem()), true);
+    tcs.load_der(read_file(infotecs_ca()), true);
 #ifdef _WIN32
     auto load_certs = [&](auto &&store) {
         for (auto &&s : win32::enum_certificate_store(store)) {
@@ -2310,11 +2327,14 @@ int main() {
     } catch (...) {
         std::println(std::cerr, "unknown exception");
     }
+    return 1;
 }
 #endif
 
 #ifndef CI_TESTS
 int main() {
+    try {
+
     //test_aes();
     //test_sha1();
     //test_sha2();
@@ -2331,15 +2351,22 @@ int main() {
     //test_chacha20_aead();
     //test_scrypt();
     //test_argon2();
-    //test_asn1();
-    //test_x509();
-    //test_pki();
-    //test_streebog();
-    //test_grasshopper();
-    //test_mgm();
-    //test_gost();
+    test_asn1();
+    test_x509();
+    test_pki();
+    test_streebog();
+    test_grasshopper();
+    test_mgm();
+    test_gost();
     //
     test_tls();
     //test_jwt();
+
+    } catch (std::exception &e) {
+        std::println(std::cerr, "{}", e.what());
+    } catch (...) {
+        std::println(std::cerr, "unknown exception");
+    }
+    return 1;
 }
 #endif

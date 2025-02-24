@@ -193,7 +193,7 @@ struct x509_storage {
                             find(trusted_storage);
                         }
                         if (issuer_cert_data.empty()) {
-                            continue;
+                            return false;
                         }
 
                         did_verify = true;
