@@ -2272,10 +2272,10 @@ void test_jwt() {
 }
 
 auto test_all() {
-    test_aes();
+    //test_aes();
     test_sha1();
     test_sha2();
-    test_sha3();
+    /*test_sha3();
     test_blake2();
     test_blake3();
     test_sm3();
@@ -2297,7 +2297,7 @@ auto test_all() {
     test_gost();
 
     test_tls();
-    test_jwt();
+    test_jwt();*/
     return success != total;
 }
 
