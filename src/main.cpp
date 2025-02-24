@@ -2278,13 +2278,13 @@ auto test_all() {
     test_sha3();
     test_blake2();
     test_blake3();
-    /*test_sm3();
+    test_sm3();
     test_sm4();
     test_ec();
     test_ecdsa();
     test_hmac();
     test_pbkdf2();
-    test_chacha20();
+    /*test_chacha20();
     test_chacha20_aead();
     test_scrypt();
     test_argon2();
@@ -2294,10 +2294,10 @@ auto test_all() {
     test_streebog();
     test_grasshopper();
     test_mgm();
-    test_gost();
+    test_gost();*/
 
     test_tls();
-    test_jwt();*/
+    test_jwt();
     return success != total;
 }
 
