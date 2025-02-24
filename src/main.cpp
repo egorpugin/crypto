@@ -2075,7 +2075,9 @@ void test_tls() {
         http_client t{url};
         t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
+#ifndef CI_TESTS
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
+#endif
         run0(t, url);
     };
 
@@ -2218,6 +2220,13 @@ void test_jwt() {
             std::println("{}", (std::string)x);
         }
     };
+    auto verify_ps512 = [&](auto &&payload, auto &&pkey, auto &&pubkey, auto &&res) {
+        jwt x{payload};
+        jwt::ps<512> h{};
+        if (!cmp_base(x.verify(h, pubkey), true)) {
+            std::println("{}", (std::string)x);
+        }
+    };
 
     check_hs256(
         R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, "000",
@@ -2256,6 +2265,10 @@ void test_jwt() {
         R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk, pubk,
         ""_jwt
     );
+    verify_ps512(
+        R"(eyJhbGciOiJQUzUxMiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.V0xxUc58hL2QGsrKdeAWRCFqZULhYg98lNrHkMVqo8nB1No88-VHmti1EIVvZSV2fxMGNXbu0xNZ4qUMy8x43JieP4uvWGggX5KZTZn_dRpqtZKfC7o6pt5F2lwetnQjp9bhsYGqbOoQ9MLchRKg4oDtCYIl03yE4oiJuRQR-FobKHW-M61vkXGGvcnTL3AUyvyLgFRXYzzYPAy3JIhmLjy4IqQ8s4Vrz9sRiGw6zUpl3YSk0gq7KUdxR6DTtk5HF-WSHwNKtvmpgEFfuxHJm0amH3RQwvx-vwUjGTEogpOleeaYTUvWgzv-D9DHB5lW6uQbs2P7xf0ZWJ_wnHU2Dg)", pk, pubk,
+        ""_jwt
+    );
 }
 
 auto test_all() {
@@ -2285,7 +2298,7 @@ auto test_all() {
 
     test_tls();
     test_jwt();
-    return success == total;
+    return success != total;
 }
 
 #ifdef CI_TESTS
@@ -2314,13 +2327,13 @@ int main() {
     //test_argon2();
     //test_asn1();
     //test_x509();
-    test_pki();
+    //test_pki();
     //test_streebog();
     //test_grasshopper();
     //test_mgm();
     //test_gost();
     //
     //test_tls();
-    //test_jwt();
+    test_jwt();
 }
 #endif

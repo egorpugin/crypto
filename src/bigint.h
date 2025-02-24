@@ -125,7 +125,8 @@ struct bigint {
         mpz_export(p, 0, 1, 1, 0, 0, *this);
         return s;
     }
-    auto to_string() {
+    // this one is dangerous to be just 'to_string()' because we may lose initial zeros
+    auto to_shortest_string() {
         auto size = 1;
         auto nail = 0;
         auto numb = 8 * size - nail;

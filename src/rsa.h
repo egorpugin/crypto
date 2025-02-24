@@ -111,7 +111,7 @@ struct private_key {
         auto em = op<Bits>(m, n);
         auto h = bytes_to_bigint(em);
         h = h.powm(d, n);
-        return h.to_string();
+        return h.to_string(em.size());
     }
 };
 struct public_key {

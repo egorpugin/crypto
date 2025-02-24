@@ -102,11 +102,11 @@ struct jwt {
 
             //
             auto h = bytes_to_bigint(em);
-            return pkey.encrypt(h).to_string();
+            return pkey.encrypt(h).to_string(em.size());
         }
         bool verify(auto &&m, auto &&signature, auto &&pubkey) {
             auto h = bytes_to_bigint(signature);
-            auto em = pubkey.decrypt(h).to_string();
+            auto em = pubkey.decrypt(h).to_string(signature.size());
 
             auto mhash = sha2<Bits>::digest(m);
             auto hlen = mhash.size();
