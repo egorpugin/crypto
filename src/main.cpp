@@ -2296,14 +2296,20 @@ auto test_all() {
     test_mgm();
     test_gost();
 
-    //test_tls();
+    test_tls();
     test_jwt();
     return success != total;
 }
 
 #ifdef CI_TESTS
 int main() {
-    return test_all();
+    try {
+        return test_all();
+    } catch (std::exception &e) {
+        std::println(std::cerr, "{}", e.what());
+    } catch (...) {
+        std::println(std::cerr, "unknown exception");
+    }
 }
 #endif
 
@@ -2333,7 +2339,7 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    //test_tls();
-    test_jwt();
+    test_tls();
+    //test_jwt();
 }
 #endif
