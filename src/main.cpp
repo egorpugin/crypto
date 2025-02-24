@@ -2286,8 +2286,8 @@ auto test_all() {
     test_pbkdf2();
     test_chacha20();
     test_chacha20_aead();
-    /*test_scrypt();
-    test_argon2();*/
+    test_scrypt();
+    //test_argon2();
     test_asn1();
     test_x509();
     test_pki();
