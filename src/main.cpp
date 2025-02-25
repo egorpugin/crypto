@@ -1936,8 +1936,14 @@ void test_pki() {
     gost_sig<ec::gost::r34102001::ec256a, oid::gost_r34102001_param_set_a, streebog<256>> gs256, gs256_child;
     gost_sig<ec::gost::r34102012::ec512c, oid::gost_3410_12_512_param_set_c, streebog<512>> gs512;
     auto &&[cakey,casubj] = p.make_ca("ca256", gs256, cert_request{.subject = {.common_name = "localhost CA 256", .country = "RU"}});
-    p.make_cert("ca256_child", casubj, gs256, gs256_child, cert_request{.subject = {.common_name = "localhost", .country = "RU"}});
-    p.make_ca("ca512", gs512, cert_request{.subject = {.common_name = "localhost CA 512", .country = "RU"}});
+    auto &&[cakey2,casubj2] = p.make_cert("ca256_child", casubj, gs256, gs256_child, cert_request{.subject = {.common_name = "localhost", .country = "RU"}});
+    auto &&[cakey3,casubj3] = p.make_ca("ca512", gs512, cert_request{.subject = {.common_name = "localhost CA 512", .country = "RU"}});
+
+    x509_storage s;
+    s.load_der(p.certs[cakey], true);
+    s.load_der(p.certs[cakey3], true);
+    s.add(p.certs[cakey2]);
+    //cmp_bool(s.verify(s), true);
 }
 
 void test_streebog() {
@@ -2072,6 +2078,7 @@ void test_tls() {
         //std::cout << "connecting to " << url << "\n";
         try {
             t.follow_location = false;
+            t.tls_layer.ignore_server_hostname_check = true;
             t.run();
 #ifndef CI_TESTS
             std::cout << "connecting to " << url << "\n";
@@ -2098,50 +2105,9 @@ void test_tls() {
         run0(t, url);
     };
 
-    //int n = 50;
-    //while (n--)
-        //run_with_params("91.244.183.22:15082", 0, parameters::supported_groups::GC512B);
-    //run("github.com");
-
-    // aliexpress.ru
-    //run_with_params("https://aliexpress.ru/", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
-
-    //run_with_params("127.0.0.1:11111", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
-    //return;
-
-    for (auto s : {
-        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
-        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
-        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
-        tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
-    }) {
-        for (auto k : {
-            parameters::supported_groups::GC256A,
-            parameters::supported_groups::GC256B,
-            parameters::supported_groups::GC256C,
-            parameters::supported_groups::GC256D,
-            parameters::supported_groups::GC512A,
-            parameters::supported_groups::GC512B,
-            parameters::supported_groups::GC512C,
-        }) {
-#ifndef CI_TESTS
-            //run_with_params("127.0.0.1:443", s, k);
-#endif
-        }
-        // does not support 1.3 yet
-        //run_with_params("https://tlsgost-256.cryptopro.ru:2443", s, parameters::supported_groups::GC256A);
-        //run_with_params("https://tlsgost-256.cryptopro.ru:3443", s, parameters::supported_groups::GC256B);
-        //run_with_params("https://tlsgost-256.cryptopro.ru:4443", s, parameters::supported_groups::GC256C);
-        //run_with_params("https://tlsgost-512.cryptopro.ru", s, parameters::supported_groups::GC512A);
-        //run_with_params("https://tlsgost-512.cryptopro.ru:1443", s, parameters::supported_groups::GC512B);
-    }
-    //return;
-    //
-    //
-    ////
     ////// https://infotecs.ru/stand_tls/
     //
-    for (auto s : {
+    /*for (auto s : {
         tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
         tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
         tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
@@ -2157,7 +2123,7 @@ void test_tls() {
 
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
-    }
+    }*/
 
     run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
 

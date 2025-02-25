@@ -1127,23 +1127,14 @@ struct http_client {
         std::string ss = remote_ad.to_string();
         // std::cout << ss << "\n";
 
-        if (host == "91.244.183.22") {
-            //host = "test-gost.infotecs.ru";
-        }
-        if (host == "127.0.0.1") {
-            // host = "localhost";
-            // host = "www.wolfssl.com";
-        }
         tls_layer = decltype(tls_layer){
                 .s = &s,
                 .servername = host,
+                .ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
                 .ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
                 .force_suite = tls_layer.force_suite,
                 .force_kex = tls_layer.force_kex,
         };
-        //if (host == "127.0.0.1") {
-            //tls_layer.ignore_server_certificate_check = true;
-        //}
 
         // http layer
         string req = std::format("GET {} HTTP/1.1\r\n", path);
