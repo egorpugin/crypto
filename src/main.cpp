@@ -24,6 +24,7 @@
 #include "jwt.h"
 #include "rsa.h"
 #include "pki.h"
+#include "hpke.h"
 
 #include <array>
 #include <chrono>
@@ -1226,6 +1227,14 @@ void test_hmac() {
         "8c6e0683409427f8931711b10ca92a506eb1fafa48fadd66d76126f47ac2c333"s,
         "e2f178144221853d60f7e9ddaf13ea57c6bddd54d9bd18b175fc59278f491a63"s
     );
+
+    auto ikm = "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"_sb;
+    auto salt = "000102030405060708090a0b0c"_sb;
+    auto info = "f0f1f2f3f4f5f6f7f8f9"_sb;
+    auto prk = hkdf<sha256>::extract(salt, ikm);
+    auto okm = hkdf<sha256>::expand<42>(prk, info);
+    cmp_bytes(prk, "077709362c2e32df0ddc3f0dc47bba6390b6c73bb50f9c3122ec844ad7c2b3e5"_sb);
+    cmp_bytes(okm, "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"_sb);
 }
 
 void test_pbkdf2() {
@@ -2256,6 +2265,201 @@ void test_jwt() {
     );
 }
 
+void test_hpke() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    auto info = "4f6465206f6e2061204772656369616e2055726e"_sb;
+    auto pt = "4265617574792069732074727574682c20747275746820626561757479"_sb;
+    auto psk = "0247fd33b913760fa1fa51e1892d9f307fbe65eb171e8132c2af18555a738b82"_sb;
+    auto psk_id = "456e6e796e20447572696e206172616e204d6f726961"_sb;
+    auto aad = "Count-"s; // "436f756e742d"_sb;
+    auto make_aad = [&](int i) {
+        return aad + std::to_string(i);
+    };
+
+    {
+        auto ikmE = "7268600d403fce431561aef583ee1613527cff655c1343f29812e66706df3234"_sb;
+        auto ikmR = "6db9df30aa07dd42ee5e8181afdb977e538f5e1fec8a06223f33f7013e525037"_sb;
+
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, gcm<aes_ecb<128>>> hE, hR;
+
+        auto [skEm,pkEm] = hE.derive_key_pair(ikmE);
+        cmp_bytes(skEm, "52c4a758a802cd8b936eceea314432798d5baf2d7e9235dc084ab1b9cfa2f736"_sb);
+        cmp_bytes(pkEm, "37fda3567bdbd628e88668c3c8d7e97d1d1253b6d4ea6d44c150f741f1bf4431"_sb);
+
+        auto [skRm,pkRm] = hR.derive_key_pair(ikmR);
+        cmp_bytes(skRm, "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8"_sb);
+        cmp_bytes(pkRm, "3948cfe0ad1ddb695d780e59077195da6c56506b027329794ab02bca80815c4d"_sb);
+
+        auto ssE = hE.shared_secret<'S'>(pkRm);
+        auto ssR = hR.shared_secret<'R'>(pkEm);
+
+        cmp_bytes(ssE, "fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc"_sb);
+        cmp_bytes(ssR, "fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc"_sb);
+
+        auto ctxE = hE.key_schedule<'S'>(mode_type::base, ssE, info, ""sv, ""sv);
+        auto ctxR = hR.key_schedule<'R'>(mode_type::base, ssR, info, ""sv, ""sv);
+        int i = 0;
+        auto test = [&](auto &&ct, int i2) {
+            while (i != i2) {
+                ctxE.increment_seq();
+                ctxR.increment_seq();
+                ++i;
+            }
+            cmp_bytes(ctxE.seal(make_aad(i), pt), ct);
+            cmp_bytes(ctxR.open(make_aad(i), ct), pt);
+            ++i;
+        };
+        test("f938558b5d72f1a23810b4be2ab4f84331acc02fc97babc53a52ae8218a355a96d8770ac83d07bea87e13c512a"_sb, 0);
+        test("af2d7e9ac9ae7e270f46ba1f975be53c09f8d875bdc8535458c2494e8a6eab251c03d0c22a56b8ca42c2063b84"_sb, 1);
+        test("583bd32bc67a5994bb8ceaca813d369bca7b2a42408cddef5e22f880b631215a09fc0012bc69fccaa251c0246d"_sb, 4);
+        test("7175db9717964058640a3a11fb9007941a5d1757fda1a6935c805c21af32505bf106deefec4a49ac38d71c9e0a"_sb, 255);
+        test("957f9800542b0b8891badb026d79cc54597cb2d225b54c00c5238c25d05c30e3fbeda97d2e0e1aba483a2df9f2"_sb, 256);
+
+        cmp_bytes(ctxE.export_(""_sb), "3853fe2b4035195a573ffc53856e77058e15d9ea064de3e59f4961d0095250ee"_sb);
+        cmp_bytes(ctxE.export_("00"_sb), "2e8f0b54673c7029649d4eb9d5e33bf1872cf76d623ff164ac185da9e88c21a5"_sb);
+        cmp_bytes(ctxE.export_("TestContext"s), "e9e43065102c3836401bed8c3c3c75ae46be1639869391d62c61f1ec7af54931"_sb);
+    }
+
+    auto check_simple = [&](auto hpke, auto &&ikmE, auto &&ikmR, auto &&ikmS, auto mode, auto &&psk, auto &&psk_id, auto &&ct256, auto &&exp) {
+        decltype(hpke) hE, hR, hS;
+
+        auto [skEm,pkEm] = hE.derive_key_pair(ikmE);
+        auto [skRm,pkRm] = hR.derive_key_pair(ikmR);
+        auto [skSm,pkSm] = hS.derive_key_pair(ikmS);
+        auto ssE = ikmS.empty() ? hE.shared_secret<'S'>(pkRm) : hE.shared_secret<'S'>(pkRm, skSm);
+        auto ssR = ikmS.empty() ? hR.shared_secret<'R'>(pkEm) : hR.shared_secret<'R'>(pkEm, pkSm);
+        cmp_bytes(ssE, ssR);
+
+        auto ctxE = hE.key_schedule<'S'>(mode, ssE, info, psk, psk_id);
+        if constexpr (!decltype(hpke)::export_only) {
+            auto ctxR = hR.key_schedule<'R'>(mode, ssR, info, psk, psk_id);
+            int i = 0;
+            auto test = [&](auto &&ct, int i2) {
+                while (i != i2) {
+                    ctxE.increment_seq();
+                    ctxR.increment_seq();
+                    ++i;
+                }
+                cmp_bytes(ctxE.seal(make_aad(i), pt), ct);
+                cmp_bytes(ctxR.open(make_aad(i), ct), pt);
+                ++i;
+            };
+            test(ct256, 256);
+        }
+        cmp_bytes(ctxE.export_<32>("TestContext"s), exp);
+    };
+    // A.1
+    check_simple(
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, gcm<aes_ecb<128>>>{},
+        "7268600d403fce431561aef583ee1613527cff655c1343f29812e66706df3234"_sb,
+        "6db9df30aa07dd42ee5e8181afdb977e538f5e1fec8a06223f33f7013e525037"_sb,
+        ""_sb,
+        mode_type::base,
+        ""_sb, ""_sb,
+        "957f9800542b0b8891badb026d79cc54597cb2d225b54c00c5238c25d05c30e3fbeda97d2e0e1aba483a2df9f2"_sb,
+        "e9e43065102c3836401bed8c3c3c75ae46be1639869391d62c61f1ec7af54931"_sb
+    );
+    check_simple(
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, gcm<aes_ecb<128>>>{},
+        "78628c354e46f3e169bd231be7b2ff1c77aa302460a26dbfa15515684c00130b"_sb,
+        "d4a09d09f575fef425905d2ab396c1449141463f698f8efdb7accfaff8995098"_sb,
+        ""_sb,
+        mode_type::psk,
+        psk, psk_id,
+        "c5bf246d4a790a12dcc9eed5eae525081e6fb541d5849e9ce8abd92a3bc1551776bea16b4a518f23e237c14b59"_sb,
+        "8aff52b45a1be3a734bc7a41e20b4e055ad4c4d22104b0c20285a7c4302401cd"_sb
+    );
+    check_simple(
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, gcm<aes_ecb<128>>>{},
+        "6e6d8f200ea2fb20c30b003a8b4f433d2f4ed4c2658d5bc8ce2fef718059c9f7"_sb,
+        "f1d4a30a4cef8d6d4e3b016e6fd3799ea057db4f345472ed302a67ce1c20cdec"_sb,
+        "94b020ce91d73fca4649006c7e7329a67b40c55e9e93cc907d282bbbff386f58"_sb,
+        mode_type::auth,
+        ""_sb, ""_sb,
+        "42fa248a0e67ccca688f2b1d13ba4ba84755acf764bd797c8f7ba3b9b1dc3330326f8d172fef6003c79ec72319"_sb,
+        "5a0131813abc9a522cad678eb6bafaabc43389934adb8097d23c5ff68059eb64"_sb
+    );
+    check_simple(
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, gcm<aes_ecb<128>>>{},
+        "4303619085a20ebcf18edd22782952b8a7161e1dbae6e46e143a52a96127cf84"_sb,
+        "4b16221f3b269a88e207270b5e1de28cb01f847841b344b8314d6a622fe5ee90"_sb,
+        "62f77dcf5df0dd7eac54eac9f654f426d4161ec850cc65c54f8b65d2e0b4e345"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        "13239bab72e25e9fd5bb09695d23c90a24595158b99127505c8a9ff9f127e0d657f71af59d67d4f4971da028f9"_sb,
+        "a30c20370c026bbea4dca51cb63761695132d342bae33a6a11527d3e7679436d"_sb
+    );
+    // A.2
+    check_simple(
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, chacha20_poly1305_aead>{},
+        "49d6eac8c6c558c953a0a252929a818745bb08cd3d29e15f9f5db5eb2e7d4b84"_sb,
+        "f3304ddcf15848488271f12b75ecaf72301faabf6ad283654a14c398832eb184"_sb,
+        "20ade1d5203de1aadfb261c4700b6432e260d0d317be6ebbb8d7fffb1f86ad9d"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        "9b7f84224922d2a9edd7b2c2057f3bcf3a547f17570575e626202e593bfdd99e9878a1af9e41ded58c7fb77d2f"_sb,
+        "d3bae066aa8da27d527d85c040f7dd6ccb60221c902ee36a82f70bcd62a60ee4"_sb
+    );
+    // A.3
+    check_simple(
+        hpke<dhkem<ec::secp256r1, hkdf<sha256>>, hkdf<sha256>, gcm<aes_ecb<128>>>{},
+        "3c1fceb477ec954c8d58ef3249e4bb4c38241b5925b95f7486e4d9f1d0d35fbb"_sb,
+        "abcc2da5b3fa81d8aabd91f7f800a8ccf60ec37b1b585a5d1d1ac77f258b6cca"_sb,
+        "6262031f040a9db853edd6f91d2272596eabbc78a2ed2bd643f770ecd0f19b82"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        "f380e19d291e12c5e378b51feb5cd50f6d00df6cb2af8393794c4df342126c2e29633fe7e8ce49587531affd4d"_sb,
+        "18ee4d001a9d83a4c67e76f88dd747766576cac438723bad0700a910a4d717e6"_sb
+    );
+    // A.4
+    check_simple(
+        hpke<dhkem<ec::secp256r1, hkdf<sha256>>, hkdf<sha2<512>>, gcm<aes_ecb<128>>>{},
+        "37ae06a521cd555648c928d7af58ad2aa4a85e34b8cabd069e94ad55ab872cc8"_sb,
+        "7466024b7e2d2366c3914d7833718f13afb9e3e45bcfbb510594d614ddd9b4e7"_sb,
+        "ee27aaf99bf5cd8398e9de88ac09a82ac22cdb8d0905ab05c0f5fa12ba1709f3"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        "9f659482ebc52f8303f9eac75656d807ec38ce2e50c72e3078cd13d86b30e3f890690a873277620f8a6a42d836"_sb,
+        "bed80f2e54f1285895c4a3f3b3625e6206f78f1ed329a0cfb5864f7c139b3c6a"_sb
+    );
+    // A.5
+    check_simple(
+        hpke<dhkem<ec::secp256r1, hkdf<sha256>>, hkdf<sha2<256>>, chacha20_poly1305_aead>{},
+        "f3a07f194703e321ef1f753a1b9fe27a498dfdfa309151d70bedd896c239c499"_sb,
+        "1240e55a0a03548d7f963ef783b6a7362cb505e6b31dfd04c81d9b294543bfbd"_sb,
+        "ce2a0387a2eb8870a3a92c34a2975f0f3f271af4384d446c7dc1524a6c6c515a"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        "fb857f4185ce5286c1a52431867537204963ea66a3eee8d2a74419fd8751faee066d08277ac7880473aa4143ba"_sb,
+        "e01dd49e8bfc3d9216abc1be832f0418adf8b47a7b5a330a7436c31e33d765d7"_sb
+    );
+    // A.6
+    check_simple(
+        hpke<dhkem<ec::secp521r1, hkdf<sha2<512>>>, hkdf<sha2<512>>, gcm<aes_ecb<256>>>{},
+        "54272797b1fbc128a6967ff1fd606e0c67868f7762ce1421439cbc9e90ce1b28d566e6c2acbce712e48eebf236696eb680849d6873e9959395b2931975d61d38bd6c"_sb,
+        "3db434a8bc25b27eb0c590dc64997ab1378a99f52b2cb5a5a5b2fa540888f6c0f09794c654f4468524e040e6b4eca2c9dcf229f908b9d318f960cc9e9baa92c5eee6"_sb,
+        "65d523d9b37e1273eb25ad0527d3a7bd33f67208dd1666d9904c6bc04969ae5831a8b849e7ff642581f2c3e56be84609600d3c6bbdaded3f6989c37d2892b1e978d5"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        "24f9d8dadd2107376ccd143f70f9bafcd2b21d8117d45ff327e9a78f603a32606e42a6a8bdb57a852591d20907"_sb,
+        "f8b4e72cefbff4ca6c4eabb8c0383287082cfcbb953d900aed4959afd0017095"_sb
+    );
+    // A.7
+    check_simple(
+        hpke<dhkem<curve25519, hkdf<sha256>>, hkdf<sha256>, hpke_export_only>{},
+        "94efae91e96811a3a49fd1b20eb0344d68ead6ac01922c2360779aa172487f40"_sb,
+        "4dfde6fadfe5cb50fced4034e84e6d3a104aa4bf2971360032c1c0580e286663"_sb,
+        "26c12fef8d71d13bbbf08ce8157a283d5e67ecf0f345366b0e90341911110f1b"_sb,
+        mode_type::auth_psk,
+        psk, psk_id,
+        ""_sb,
+        "84f3466bd5a03bde6444324e63d7560e7ac790da4e5bbab01e7c4d575728c34a"_sb
+    );
+}
+
 auto test_all() {
     test_aes();
     test_sha1();
@@ -2280,9 +2484,9 @@ auto test_all() {
     test_grasshopper();
     test_mgm();
     test_gost();
-
     test_tls();
     test_jwt();
+    test_hpke();
     return success != total;
 }
 
@@ -2313,22 +2517,23 @@ int main() {
     //test_sm4();
     //test_ec();
     //test_ecdsa();
-    //test_hmac();
+    test_hmac();
     //test_pbkdf2();
     //test_chacha20();
     //test_chacha20_aead();
     //test_scrypt();
     //test_argon2();
-    test_asn1();
-    test_x509();
-    test_pki();
-    test_streebog();
-    test_grasshopper();
-    test_mgm();
-    test_gost();
+    //test_asn1();
+    //test_x509();
+    //test_pki();
+    //test_streebog();
+    //test_grasshopper();
+    //test_mgm();
+    //test_gost();
     //
-    test_tls();
+    //test_tls();
     //test_jwt();
+    test_hpke();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());

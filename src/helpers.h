@@ -523,4 +523,21 @@ auto expand_bytes(auto &&v, auto len) {
     return vs;
 }
 
+auto concat(auto && ... what) {
+    auto total_sz = (what.size() + ... + 0);
+    std::string s(total_sz, 0);
+    auto p = s.data();
+    ((memcpy(p, what.data(), what.size()), p += what.size()),...);
+    return s;
+}
+
+void increment_be_number(auto &&n) {
+    auto sz = n.size();
+    for (int i = sz - 1; i >= 0; --i) {
+        if (++n[i] != 0) {
+            break;
+        }
+    }
+}
+
 } // namespace crypto
