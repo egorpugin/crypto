@@ -177,29 +177,31 @@ template <typename Hash>
 auto hkdf_extract(bytes_concept salt, bytes_concept input_key_material) {
     return hmac<Hash>(salt, input_key_material);
 }
+template <typename Hash>
+auto hkdf_extract(bytes_concept input_key_material) {
+    array<Hash::digest_size_bytes> salt{};
+    return hkdf_extract(salt, input_key_material);
+}
 // constexpr info?
 template <typename Hash, auto Len = Hash::digest_size_bytes>
 auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
+    static_assert(Len <= 255 * Hash::digest_size_bytes);
+
     constexpr auto hash_bytes = Hash::digest_size_bytes;
-    auto n = Len / hash_bytes + (Len % hash_bytes == 0 ? 0 : 1);
-    //auto n = (Len + hash_bytes - 1) / hash_bytes;
-    string r;
-    r.reserve(hash_bytes + info.size() + 1);
-    r.append((const char *)info.data(), info.size());
-    r.resize(r.size() + 1);
-    std::array<u8, Len> r2;
-    int pos = 0;
-    for (int i = 0; i < n; ++i) {
-        if (i == 1) {
-            memcpy(r.data() + hash_bytes, info.data(), info.size());
+    constexpr auto n = ceil(Len, hash_bytes);
+    std::array<u8, Len> r;
+    for (int i = 1, pos = 0; i <= n; ++i) {
+        hmac2<Hash> h{pseudorandom_key};
+        if (i > 1) {
+            h.update(r.data() + pos - hash_bytes, hash_bytes);
         }
-        r[r.size() - 1] = i + 1;
-        memcpy(r.data(), hkdf_extract<Hash>(pseudorandom_key, r).data(), hash_bytes);
-        auto sz = (i == n - 1) ? Len - pos : hash_bytes;
-        memcpy(r2.data() + pos, r.data(), sz);
+        h.update(info);
+        h.update(bytes_concept{&i, 1});
+        auto sz = i == n ? Len - pos : hash_bytes;
+        memcpy(r.data() + pos, h.digest().data(), sz);
         pos += sz;
     }
-    return r2;
+    return r;
 }
 template <typename Hash>
 struct hkdf {
@@ -207,6 +209,10 @@ struct hkdf {
 
     static auto extract(bytes_concept salt, bytes_concept input_key_material) {
         return hkdf_extract<Hash>(salt, input_key_material);
+    }
+    static auto extract(bytes_concept input_key_material) {
+        array<digest_size_bytes> salt{};
+        return extract(salt, input_key_material);
     }
     template <auto Len = Hash::digest_size_bytes>
     static auto expand(bytes_concept pseudorandom_key, bytes_concept info) {
