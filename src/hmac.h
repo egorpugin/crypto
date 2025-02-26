@@ -206,6 +206,7 @@ auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
 template <typename Hash>
 struct hkdf {
     static inline constexpr auto digest_size_bytes = Hash::digest_size_bytes;
+    using hash_type = Hash;
 
     static auto extract(bytes_concept salt, bytes_concept input_key_material) {
         return hkdf_extract<Hash>(salt, input_key_material);

@@ -2629,7 +2629,7 @@ int main() {
     //
     //test_tls();
     //test_jwt();
-    //test_hpke();
+    test_hpke();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());

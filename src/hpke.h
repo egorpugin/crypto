@@ -47,45 +47,33 @@ struct dhkem_params;
 
 template <> struct dhkem_params<curve25519, hkdf<sha256>> {
     static inline constexpr uint16_t id = 0x20;
-    static inline constexpr auto n_secret = 32;
-    static inline constexpr auto n_enc = 32;
-    static inline constexpr auto n_pk = 32;
-    static inline constexpr auto n_sk = 32;
 
+    template <auto n_sk>
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
         return hpke_derive_key_pair_edwards<n_sk>(obj, version, input_key_material);
     }
 };
-// x448 // 64 |56  |56 |56
+// x448+sha512 // 64 |56  |56 |56
 template <> struct dhkem_params<ec::secp256r1, hkdf<sha256>> {
     static inline constexpr uint16_t id = 0x10;
-    static inline constexpr auto n_secret = 32;
-    static inline constexpr auto n_enc = 65;
-    static inline constexpr auto n_pk = 65;
-    static inline constexpr auto n_sk = 32;
 
+    template <auto n_sk>
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
         return hpke_derive_key_pair_ec<n_sk>(obj, version, input_key_material, 0xff);
     }
 };
 template <> struct dhkem_params<ec::secp384r1, hkdf<sha2<384>>> {
     static inline constexpr uint16_t id = 0x11;
-    static inline constexpr auto n_secret = 48;
-    static inline constexpr auto n_enc = 97;
-    static inline constexpr auto n_pk = 97;
-    static inline constexpr auto n_sk = 48;
 
+    template <auto n_sk>
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
         return hpke_derive_key_pair_ec<n_sk>(obj, version, input_key_material, 0xff);
     }
 };
 template <> struct dhkem_params<ec::secp521r1, hkdf<sha2<512>>> {
     static inline constexpr uint16_t id = 0x12;
-    static inline constexpr auto n_secret = 64;
-    static inline constexpr auto n_enc = 133;
-    static inline constexpr auto n_pk = 133;
-    static inline constexpr auto n_sk = 66;
 
+    template <auto n_sk>
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
         return hpke_derive_key_pair_ec<n_sk>(obj, version, input_key_material, 0x01);
     }
@@ -94,7 +82,6 @@ template <> struct dhkem_params<ec::secp521r1, hkdf<sha2<512>>> {
 template <typename Curve, typename Hkdf>
 struct dhkem {
     using params_type = dhkem_params<Curve, Hkdf>;
-    static_assert(Curve::key_size == params_type::n_pk);
 
     Curve c;
 
@@ -116,13 +103,12 @@ struct dhkem {
     }
     static auto extract_and_expand(bytes_concept version, bytes_concept dh, bytes_concept kem_context) {
         auto eae_prk = labeled_extract(version, ""sv, "eae_prk"sv, dh);
-        auto shared_secret = labeled_expand<params_type::n_secret>(version, eae_prk, "shared_secret"sv, kem_context);
+        auto shared_secret = labeled_expand<Hkdf::hash_type::digest_size_bytes>(version, eae_prk, "shared_secret"sv, kem_context);
         return shared_secret;
     }
 
-    // only x25519 and x448
     auto derive_key_pair(bytes_concept version, auto &&input_key_material) {
-        return params_type::derive_key_pair(*this, version, input_key_material);
+        return params_type::derive_key_pair<sizeof(Curve::private_key_type)>(*this, version, input_key_material);
     }
 };
 
@@ -134,7 +120,6 @@ struct hpke {
     static inline constexpr auto export_only = std::same_as<Sym, hpke_export_only>;
 
     Kem kem;
-    //static auto kem() {return Kem{};}
 
     static consteval uint16_t kdf_id_() {
         if constexpr (std::same_as<Hkdf, hkdf<sha2<256>>>) return 1;
