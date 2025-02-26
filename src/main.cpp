@@ -34,7 +34,7 @@
 #include <span>
 #include <sstream>
 
-#define LOG_TEST() std::print("{} ... ", __FUNCTION__);scoped_timer ____timer;
+#define LOG_TEST() std::print("{} ... ", __FUNCTION__);std::flush(std::cout);scoped_timer ____timer;
 
 static int total, success;
 static struct stats {
