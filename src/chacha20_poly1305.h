@@ -8,12 +8,6 @@
 #include "chacha20.h"
 #include "poly1305.h"
 
-#include <algorithm>
-#include <array>
-#include <cstring>
-#include <span>
-#include <stdexcept>
-
 namespace crypto {
 
 struct chacha20_poly1305_aead {
