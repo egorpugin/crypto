@@ -39,10 +39,11 @@
 static int total, success;
 static struct stats {
     ~stats() {
-        std::cerr << "\ntotal:  " << total << "\n"
-            << "passed: " << success << "\n"
-            << "failed: " << total - success << "\n"
-            ;
+        std::print(R"(
+total:  {}
+passed: {}
+failed: {}
+)", total, success, total - success);
     }
 } __;
 

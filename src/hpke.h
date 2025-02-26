@@ -14,27 +14,51 @@ enum class mode_type : uint8_t {
     auth_psk,
 };
 
+template <auto n_sk>
+auto hpke_derive_key_pair_ec(auto &&obj, bytes_concept version, auto &&input_key_material, u8 byte) {
+    auto dkp_prk = obj.labeled_extract(version, ""sv, "dkp_prk"sv, input_key_material);
+    memset(obj.c.private_key_.data(), 0, n_sk);
+    int counter{};
+    bigint sk;
+    while (sk == 0 || sk >= decltype(obj.c)::parameters.curve().order) {
+        if (counter > 255) {
+            throw std::runtime_error{"derive key pair error"};
+        }
+        auto d = obj.labeled_expand<n_sk>(version, dkp_prk, "candidate"sv, bytes_concept{&counter, 1});
+        d[0] &= byte;
+        memcpy(obj.c.private_key_.data(), d.data(), d.size());
+        sk = bytes_to_bigint(obj.c.private_key_);
+        ++counter;
+    }
+    auto pk = obj.c.public_key();
+    return std::tuple{obj.c.private_key_,pk};
+}
+template <auto n_sk>
+auto hpke_derive_key_pair_edwards(auto &&obj, bytes_concept version, auto &&input_key_material) {
+    auto dkp_prk = obj.labeled_extract(version, ""sv, "dkp_prk"sv, input_key_material);
+    auto sk = obj.labeled_expand<n_sk>(version, dkp_prk, "sk"sv, ""sv);
+    memcpy(obj.c.private_key_.data(), sk.data(), sk.size());
+    auto pk = obj.c.public_key();
+    return std::tuple{obj.c.private_key_,pk};
+}
+
 template <typename Curve, typename Hkdf>
 struct dhkem_params;
 
-template <>
-struct dhkem_params<curve25519, hkdf<sha256>> {
+template <> struct dhkem_params<curve25519, hkdf<sha256>> {
     static inline constexpr uint16_t id = 0x20;
     static inline constexpr auto n_secret = 32;
     static inline constexpr auto n_enc = 32;
     static inline constexpr auto n_pk = 32;
     static inline constexpr auto n_sk = 32;
 
+    // hpke_derive_key_pair_edwards
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
-        auto dkp_prk = obj.labeled_extract(version, ""sv, "dkp_prk"sv, input_key_material);
-        auto sk = obj.labeled_expand<n_sk>(version, dkp_prk, "sk"sv, ""sv);
-        memcpy(obj.c.private_key_.data(), sk.data(), sk.size());
-        auto pk = obj.c.public_key();
-        return std::tuple{obj.c.private_key_,pk};
+        return hpke_derive_key_pair_edwards<n_sk>(obj, version, input_key_material);
     }
 };
-template <>
-struct dhkem_params<ec::secp256r1, hkdf<sha256>> {
+// x448 // 64 |56  |56 |56
+template <> struct dhkem_params<ec::secp256r1, hkdf<sha256>> {
     static inline constexpr uint16_t id = 0x10;
     static inline constexpr auto n_secret = 32;
     static inline constexpr auto n_enc = 65;
@@ -42,26 +66,21 @@ struct dhkem_params<ec::secp256r1, hkdf<sha256>> {
     static inline constexpr auto n_sk = 32;
 
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
-        auto dkp_prk = obj.labeled_extract(version, ""sv, "dkp_prk"sv, input_key_material);
-        memset(obj.c.private_key_.data(), 0, n_sk);
-        int counter{};
-        bigint sk;
-        while (sk == 0 || sk >= decltype(obj.c)::parameters.curve().order) {
-            if (counter > 255) {
-                throw std::runtime_error{"derive key pair error"};
-            }
-            auto d = obj.labeled_expand<n_sk>(version, dkp_prk, "candidate"sv, bytes_concept{&counter, 1});
-            d[0] &= 0xff; // noop
-            memcpy(obj.c.private_key_.data(), d.data(), d.size());
-            sk = bytes_to_bigint(obj.c.private_key_);
-            ++counter;
-        }
-        auto pk = obj.c.public_key();
-        return std::tuple{obj.c.private_key_,pk};
+        return hpke_derive_key_pair_ec<n_sk>(obj, version, input_key_material, 0xff);
     }
 };
-template <>
-struct dhkem_params<ec::secp521r1, hkdf<sha2<512>>> {
+template <> struct dhkem_params<ec::secp384r1, hkdf<sha2<384>>> {
+    static inline constexpr uint16_t id = 0x11;
+    static inline constexpr auto n_secret = 48;
+    static inline constexpr auto n_enc = 97;
+    static inline constexpr auto n_pk = 97;
+    static inline constexpr auto n_sk = 48;
+
+    static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
+        return hpke_derive_key_pair_ec<n_sk>(obj, version, input_key_material, 0xff);
+    }
+};
+template <> struct dhkem_params<ec::secp521r1, hkdf<sha2<512>>> {
     static inline constexpr uint16_t id = 0x12;
     static inline constexpr auto n_secret = 64;
     static inline constexpr auto n_enc = 133;
@@ -69,22 +88,7 @@ struct dhkem_params<ec::secp521r1, hkdf<sha2<512>>> {
     static inline constexpr auto n_sk = 66;
 
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
-        auto dkp_prk = obj.labeled_extract(version, ""sv, "dkp_prk"sv, input_key_material);
-        memset(obj.c.private_key_.data(), 0, n_sk);
-        int counter{};
-        bigint sk;
-        while (sk == 0 || sk >= decltype(obj.c)::parameters.curve().order) {
-            if (counter > 255) {
-                throw std::runtime_error{"derive key pair error"};
-            }
-            auto d = obj.labeled_expand<n_sk>(version, dkp_prk, "candidate"sv, bytes_concept{&counter, 1});
-            d[0] &= 0x01;
-            memcpy(obj.c.private_key_.data(), d.data(), d.size());
-            sk = bytes_to_bigint(obj.c.private_key_);
-            ++counter;
-        }
-        auto pk = obj.c.public_key();
-        return std::tuple{obj.c.private_key_,pk};
+        return hpke_derive_key_pair_ec<n_sk>(obj, version, input_key_material, 0x01);
     }
 };
 
