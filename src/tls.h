@@ -952,7 +952,7 @@ struct http_client {
         std::vector<string_view> chunked_body;
 
         http_message() {
-            response.reserve(1'000'000);
+            response.reserve(10'000'000);
         }
         awaitable<void> receive(auto &&s, auto &&transport) {
             auto append = [&]() -> awaitable<size_t> {
@@ -1060,7 +1060,7 @@ struct http_client {
             m = co_await open_url(m.headers["Location"]);
         }
     }
-    awaitable<http_message> open_url(auto &&url) {
+    awaitable<http_message> open_url(std::string_view url) {
         using boost::asio::use_awaitable;
         auto ex = co_await boost::asio::this_coro::executor;
 

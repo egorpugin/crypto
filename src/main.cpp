@@ -2208,7 +2208,8 @@ void test_tls() {
 
     ////// https://infotecs.ru/stand_tls/
     //
-    /*for (auto s : {
+#ifdef CI_TESTS
+    for (auto s : {
         tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L,
         tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_L,
         tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
@@ -2224,7 +2225,8 @@ void test_tls() {
 
         //run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         //run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
-    }*/
+    }
+#endif
 
     run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
 
@@ -2627,7 +2629,7 @@ int main() {
     //
     //test_tls();
     //test_jwt();
-    test_hpke();
+    //test_hpke();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
