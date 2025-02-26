@@ -52,7 +52,6 @@ template <> struct dhkem_params<curve25519, hkdf<sha256>> {
     static inline constexpr auto n_pk = 32;
     static inline constexpr auto n_sk = 32;
 
-    // hpke_derive_key_pair_edwards
     static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
         return hpke_derive_key_pair_edwards<n_sk>(obj, version, input_key_material);
     }

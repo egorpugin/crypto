@@ -74,7 +74,7 @@ auto to_string_raw = [](auto &&d) {
         s << std::setw(2) << (unsigned int)v;
     }
     // printf("%s\n", s.str().c_str());
-    //std::cerr << s.str() << "\n";
+    //std::println(s.str());
     return s.str();
 };
 auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
@@ -103,7 +103,7 @@ auto cmp_bool = [](auto &&left, auto &&right) {
     ++total;
     success += !!r;
     if (!r) {
-        std::cerr << "false" << "\n";
+        std::println("false");
     }
     return r;
 };
@@ -2188,7 +2188,7 @@ void test_tls() {
             cmp_base(0, 0);
         } catch (std::exception &e) {
             std::cout << "connecting to " << url << "\n";
-            std::cerr << e.what() << "\n";
+            std::cout << e.what() << "\n";
             cmp_base(0, 1);
         }
     };
