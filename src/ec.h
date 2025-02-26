@@ -336,6 +336,10 @@ struct secp {
         u8 legacy{4};
         array<point_size_bytes> x;
         array<point_size_bytes> y;
+
+        operator bytes_concept() {
+            return bytes_concept{&legacy, sizeof(key_type)};
+        }
     };
 #pragma pack(pop)
 
@@ -357,7 +361,7 @@ struct secp {
         auto k = public_key();
         memcpy(out.data(), (u8 *)&k, key_size);
     }
-    auto shared_secret(const public_key_type &peer_public_key) {
+    auto shared_secret(bytes_concept peer_public_key) {
         array<point_size_bytes> shared_secret;
         auto &k = *(key_type *)peer_public_key.data();
         auto c = parameters.curve();
