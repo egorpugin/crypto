@@ -95,7 +95,7 @@ struct sm4 : sm4_data {
             x[i] = std::byteswap(data[i]);
         }
         for (int i = 0; i < 32; ++i) {
-            x[0] = x[0] ^ T(x[1] ^ x[2] ^ x[3] ^ rk[i]);
+            x[0] ^= T(x[1] ^ x[2] ^ x[3] ^ rk[i]);
             for (int i = 0; i < 3; ++i) {
                 std::swap(x[i], x[i + 1]);
             }

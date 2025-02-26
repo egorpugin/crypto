@@ -938,7 +938,7 @@ struct http_client {
     socket_type s{ctx};
     tls13_<socket_type, awaitable> tls_layer{&s};
     bool follow_location{true}; // for now
-    bool redirect{};
+    bool redirected{};
     bool tls{true};
 
     struct http_message {
@@ -1054,26 +1054,17 @@ struct http_client {
         ctx.run();
     }
     awaitable<void> run1() {
-        auto make_fn_url = [](auto &&u) {
-            return u.substr(0, u.find(':'));
-        };
-
         m = co_await open_url(url_internal);
-        //std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".txt", std::ios::binary} << m.response;
-        //std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + ".jpg", std::ios::binary} << m.body;
-        int i = 0;
         while (m.headers.contains("Location") && follow_location) {
-            redirect = true;
-            string url{m.headers["Location"].begin(), m.headers["Location"].end()};
-            m = co_await open_url(url);
-            //std::ofstream{"d:/dev/crypto/.sw/" + make_fn_url(url_internal) + "." + std::to_string(++i) + ".txt", std::ios::binary} << m.response;
+            redirected = true;
+            m = co_await open_url(m.headers["Location"]);
         }
     }
     awaitable<http_message> open_url(auto &&url) {
         using boost::asio::use_awaitable;
         auto ex = co_await boost::asio::this_coro::executor;
 
-        string host = url;
+        string host{url};
         string port = "443";
         if (host.starts_with("http://")) {
             host = host.substr(7);
