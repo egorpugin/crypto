@@ -174,14 +174,15 @@ auto pbkdf2(auto &&pass, auto &&salt, auto &&c, u32 derived_key_bytes = Hash::di
 
 // https://www.rfc-editor.org/rfc/rfc5869
 template <typename Hash>
-auto hkdf_extract(bytes_concept salt, bytes_concept input_keying_material) {
-    return hmac<Hash>(salt, input_keying_material);
+auto hkdf_extract(bytes_concept salt, bytes_concept input_key_material) {
+    return hmac<Hash>(salt, input_key_material);
 }
 // constexpr info?
 template <typename Hash, auto Len = Hash::digest_size_bytes>
 auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
     constexpr auto hash_bytes = Hash::digest_size_bytes;
     auto n = Len / hash_bytes + (Len % hash_bytes == 0 ? 0 : 1);
+    //auto n = (Len + hash_bytes - 1) / hash_bytes;
     string r;
     r.reserve(hash_bytes + info.size() + 1);
     r.append((const char *)info.data(), info.size());
@@ -200,6 +201,18 @@ auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
     }
     return r2;
 }
+template <typename Hash>
+struct hkdf {
+    static inline constexpr auto digest_size_bytes = Hash::digest_size_bytes;
+
+    static auto extract(bytes_concept salt, bytes_concept input_key_material) {
+        return hkdf_extract<Hash>(salt, input_key_material);
+    }
+    template <auto Len = Hash::digest_size_bytes>
+    static auto expand(bytes_concept pseudorandom_key, bytes_concept info) {
+        return hkdf_expand<Hash, Len>(pseudorandom_key, info);
+    }
+};
 
 // tls 1.3
 template <typename Hash, auto Len = Hash::digest_size_bytes>
