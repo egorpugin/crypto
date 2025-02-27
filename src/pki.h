@@ -30,6 +30,8 @@ struct subject {
     std::string locality;
     std::string state;
     std::string country;
+
+    auto operator<=>(const subject &) const = default;
 };
 
 template <typename Curve, typename Settings>
@@ -117,6 +119,8 @@ struct cert_request {
     subject subject;
     clock::time_point not_before{clock::now()};
     clock::time_point not_after{not_before + std::chrono::years{1}};
+
+    bool is_ca() const {return issuer == subject;}
 };
 
 struct public_key_infrastructure {
@@ -172,12 +176,19 @@ struct public_key_infrastructure {
             asn1_generalized_time::make(std::chrono::system_clock::now() + std::chrono::years{1})
         );
 
-        auto exts = asn1_sequence::make(
-            asn1_sequence::make(
-                asn1_oid::make(oid::subject_keyid),
-                subject_sig.keyid
-            )
+        auto exts_string = asn1_sequence::make(
+            asn1_oid::make(oid::subject_keyid),
+            subject_sig.keyid
         );
+        if (!cert_request.is_ca()) {
+            auto a = asn1_sequence::make(issuer_sig.keyid.substr(4));
+            a[0] = 0x80;
+            exts_string += asn1_sequence::make(
+                asn1_oid::make(oid::authority_keyid),
+                asn1_octet_string::make(asn1_sequence::make(a))
+            );
+        }
+        auto exts = asn1_sequence::make(exts_string);
         // asn1_x509_extensions
         auto x509_exts = asn1_sequence::make(exts);
         x509_exts[0] = 0xA3;

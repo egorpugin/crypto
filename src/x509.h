@@ -333,7 +333,7 @@ struct x509_storage {
                 }
             }
             if (!did_verify) {
-                return true;
+                return std::ranges::all_of(index | std::views::values, [](auto &&v){return v.trusted;});
             }
         }
     }

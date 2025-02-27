@@ -2044,7 +2044,7 @@ void test_pki() {
     s.load_der(p.certs[cakey], true);
     s.load_der(p.certs[cakey3], true);
     s.add(p.certs[cakey2]);
-    //cmp_bool(s.verify(s), true); // TODO:
+    cmp_bool(s.verify(s), true);
 }
 
 void test_streebog() {
@@ -2612,16 +2612,16 @@ int main() {
     //test_sm4();
     //test_ec();
     //test_ecdsa();
-    test_hmac();
-    test_hkdf();
+    //test_hmac();
+    //test_hkdf();
     //test_pbkdf2();
     //test_chacha20();
     //test_chacha20_aead();
     //test_scrypt();
     //test_argon2();
     //test_asn1();
-    //test_x509();
-    //test_pki();
+    test_x509();
+    test_pki();
     //test_streebog();
     //test_grasshopper();
     //test_mgm();
@@ -2629,7 +2629,7 @@ int main() {
     //
     //test_tls();
     //test_jwt();
-    test_hpke();
+    //test_hpke();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
