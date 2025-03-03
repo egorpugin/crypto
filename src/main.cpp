@@ -2195,6 +2195,7 @@ void test_tls() {
                 cmp_base(0, 0);
             }
         });
+        default_io_context().run();
     };
     auto run = [&](auto &&url) {
         auto &t = *new http_client{default_io_context(), url};
@@ -2272,11 +2273,6 @@ void test_tls() {
     // return tls 1.0/1.1
     //run("https://tlsgost-512.cryptopro.ru");
     //run("https://tlsgost-512.cryptopro.ru:1443");
-
-    std::vector<std::jthread> p;
-    for (int i = 0; i < 8; ++i) {
-        p.emplace_back([]{ default_io_context().run(); });
-    }
 }
 
 void test_jwt() {
