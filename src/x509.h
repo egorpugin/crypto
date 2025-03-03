@@ -148,6 +148,8 @@ struct x509_storage {
         }
         return index.emplace(key{subject,keyid}, data).first->second;
     }
+    // TODO: add verify one
+    // verify all
     bool verify() {
         return verify(trusted_storage());
     }
@@ -167,6 +169,29 @@ struct x509_storage {
                 auto subject = cert.get<asn1_sequence>(x509::subject_name);
                 auto root_cert = issuer == subject;
                 if (root_cert) {
+                    if (auto exts = cert.get_next<asn1_x509_extensions>()) {
+                        constexpr auto subject_keyid = make_oid<2, 5, 29, 14>();
+                        if (auto sk = exts->get_extension(subject_keyid)) {
+                            auto keystor = sk->get<asn1_octet_string>(0, 1);
+                            bytes_concept keyid;
+                            if (keystor.get_tag() == asn1_octet_string::tag) {
+                                keyid = keystor.get<asn1_octet_string>(0);
+                            } else if (keystor.get_tag() == asn1_sequence::tag) {
+                                keyid = keystor.get(0, 0);
+                            }
+                            bytes_concept issuer_cert_data;
+                            auto find = [&](auto &&store) {
+                                auto i = store.index.find(key{issuer,keyid});
+                                if (i != store.index.end() && i->second.is_valid(now)) {
+                                    issuer_cert_data = i->second.data;
+                                }
+                            };
+                            find(trusted_storage);
+                            if (!issuer_cert_data.empty()) {
+                                v.trusted = true;
+                            }
+                        }
+                    }
                     continue;
                 }
 
