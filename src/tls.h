@@ -923,6 +923,11 @@ struct tls13_ {
     }
 };
 
+auto &default_io_context() {
+    static boost::asio::io_context ctx;
+    return ctx;
+}
+
 /*
  * some info:
  * tls packet size limit = 32K
@@ -934,8 +939,7 @@ struct http_client {
     using awaitable = boost::asio::awaitable<T>;
 
     std::string url_internal;
-    boost::asio::io_context ctx;
-    socket_type s{ctx};
+    socket_type s;
     tls13_<socket_type, awaitable> tls_layer{&s};
     bool follow_location{true}; // for now
     bool redirected{};
@@ -1043,17 +1047,19 @@ struct http_client {
     };
     http_message m;
 
-    http_client(auto &&url) : url_internal{url} {
+    http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {
     }
-    void run() {
-        boost::asio::co_spawn(ctx, run1(), [](auto eptr) {
+    http_client(auto &&url) : http_client{default_io_context(), url} {
+    }
+    void run(auto &&ctx) {
+        boost::asio::co_spawn(ctx, run_coro(), [](auto eptr) {
             if (eptr) {
                 std::rethrow_exception(eptr);
             }
         });
         ctx.run();
     }
-    awaitable<void> run1() {
+    awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
         while (m.headers.contains("Location") && follow_location) {
             redirected = true;

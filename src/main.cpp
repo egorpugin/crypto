@@ -154,7 +154,7 @@ auto cacert_pem() {
     if (!std::filesystem::exists(name)) {
         crypto::http_client t{"https://curl.se/ca/cacert.pem"};
         t.tls_layer.ignore_server_certificate_check = true;
-        t.run();
+        t.run(crypto::default_io_context());
         write_file(name, t.m.body);
     }
     auto &tcs = crypto::x509_storage::trusted_storage();
@@ -165,7 +165,7 @@ auto infotecs_ca() {
     auto name = "infotecsCA.der";
     /*if (!std::filesystem::exists(name)) {
         crypto::http_client t{"http://testcert.infotecs.ru/CA.der"};
-        t.run();
+        t.run(default_io_context());
         write_file(name, t.m.body);
     }*/
     return name;
@@ -2176,28 +2176,32 @@ void test_tls() {
 #endif
 
     auto run0 = [](auto &&t, auto &&url) {
-        //std::cout << "connecting to " << url << "\n";
-        try {
-            t.follow_location = false;
-            t.tls_layer.ignore_server_hostname_check = true;
-            t.run();
+        t.follow_location = false;
+        t.tls_layer.ignore_server_hostname_check = true;
+        boost::asio::co_spawn(default_io_context(), t.run_coro(), [&](auto eptr) {
+            if (eptr) {
+                try {
+                    std::rethrow_exception(eptr);
+                } catch (std::exception &e) {
+                    std::cout << "connecting to " << url << "\n";
+                    std::cout << e.what() << "\n";
+                }
+                cmp_base(0, 1);
+            } else {
 #ifndef CI_TESTS
-            std::cout << "connecting to " << url << "\n";
-            std::cout << "ok" << "\n";
+                std::cout << "connecting to " << url << "\n";
+                std::cout << "ok" << "\n";
 #endif
-            cmp_base(0, 0);
-        } catch (std::exception &e) {
-            std::cout << "connecting to " << url << "\n";
-            std::cout << e.what() << "\n";
-            cmp_base(0, 1);
-        }
+                cmp_base(0, 0);
+            }
+        });
     };
     auto run = [&](auto &&url) {
-        http_client t{url};
+        auto &t = *new http_client{default_io_context(), url};
         run0(t, url);
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex) {
-        http_client t{url};
+        auto &t = *new http_client{default_io_context(), url};
         t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
 #ifndef CI_TESTS
@@ -2268,6 +2272,8 @@ void test_tls() {
     // return tls 1.0/1.1
     //run("https://tlsgost-512.cryptopro.ru");
     //run("https://tlsgost-512.cryptopro.ru:1443");
+
+    default_io_context().run();
 }
 
 void test_jwt() {
@@ -2620,14 +2626,14 @@ int main() {
     //test_scrypt();
     //test_argon2();
     //test_asn1();
-    test_x509();
-    test_pki();
+    //test_x509();
+    //test_pki();
     //test_streebog();
     //test_grasshopper();
     //test_mgm();
     //test_gost();
     //
-    //test_tls();
+    test_tls();
     //test_jwt();
     //test_hpke();
 
