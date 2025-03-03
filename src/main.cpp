@@ -2273,7 +2273,10 @@ void test_tls() {
     //run("https://tlsgost-512.cryptopro.ru");
     //run("https://tlsgost-512.cryptopro.ru:1443");
 
-    default_io_context().run();
+    std::vector<std::jthread> p;
+    for (int i = 0; i < 8; ++i) {
+        p.emplace_back([]{ default_io_context().run(); });
+    }
 }
 
 void test_jwt() {
