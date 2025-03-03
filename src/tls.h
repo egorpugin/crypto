@@ -1058,6 +1058,7 @@ struct http_client {
             }
         });
         ctx.run();
+        ctx.restart();
     }
     awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
