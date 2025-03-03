@@ -2196,13 +2196,14 @@ void test_tls() {
             }
         });
         default_io_context().run();
+        default_io_context().restart();
     };
     auto run = [&](auto &&url) {
-        auto &t = *new http_client{default_io_context(), url};
+        http_client t{default_io_context(), url};
         run0(t, url);
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex) {
-        auto &t = *new http_client{default_io_context(), url};
+        http_client t{default_io_context(), url};
         t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
 #ifndef CI_TESTS
