@@ -1631,6 +1631,7 @@ void test_argon2() {
 f73b80dd42a7669e98aa98c58007b022055a0c0024d6b9064119b9d3ecba2476e4dcf4e444ba59762960a16660fff039ea80448a1f1e9b35814a05e311f52426
     )"_sb);
     }
+#ifndef CI_TESTS
     {
         argon2 a{
             .password = pass,
@@ -1686,6 +1687,7 @@ e6 40 c7 91 80 e8 ed eb 36 e0 44 d7 88 e4 fa af
 69 1b 0f d4 35 a8 81 d2 ed fd cb 57 e0 bc 10 53
     )"_sb);
     }
+#endif
 }
 
 void test_chacha20() {
@@ -2570,7 +2572,7 @@ auto test_all() {
     test_chacha20();
     test_chacha20_aead();
     test_scrypt();
-    //test_argon2();
+    test_argon2();
     test_asn1();
     test_x509();
     test_pki();
@@ -2617,7 +2619,7 @@ int main() {
     //test_chacha20();
     //test_chacha20_aead();
     //test_scrypt();
-    //test_argon2();
+    test_argon2();
     //test_asn1();
     //test_x509();
     //test_pki();
