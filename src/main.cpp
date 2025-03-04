@@ -1648,6 +1648,7 @@ f73b80dd42a7669e98aa98c58007b022055a0c0024d6b9064119b9d3ecba2476e4dcf4e444ba5976
 f76f7ac4e23bae5c3d1797f5d8a7b40222f770f0b6d339d8b5d4c168a2dfb512838b2bd5f110397e1c15267f782f0067d8ef567a7556470cd13af4dedf1d585d
     )"_sb);
     }
+#endif
     // custom
     {
         argon2 a{
@@ -1687,7 +1688,6 @@ e6 40 c7 91 80 e8 ed eb 36 e0 44 d7 88 e4 fa af
 69 1b 0f d4 35 a8 81 d2 ed fd cb 57 e0 bc 10 53
     )"_sb);
     }
-#endif
 }
 
 void test_chacha20() {
