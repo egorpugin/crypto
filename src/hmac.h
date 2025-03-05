@@ -33,7 +33,7 @@ constexpr auto hmac_bytes(sha1) {
 // but don't allow hmac for shake algos
 template <auto... Settings>
 constexpr auto hmac_bytes(sha3<Settings...>) {
-    return sha3<Settings...>::r / 8;
+    return sha3<Settings...>::rate / 8;
 }
 
 // see table on wiki for more hmac byte sizes

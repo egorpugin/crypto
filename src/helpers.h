@@ -118,11 +118,12 @@ struct bytes_concept {
     auto size() const { return sz; }
     auto empty() const { return size() == 0; }
     auto subspan(size_t start, size_t sz = -1) const {
+        auto b = p + start;
         if (sz == -1 || sz >= this->sz) {
-            return bytes_concept{p + start, this->sz - start};
+            return bytes_concept{b, this->sz - start};
         }
         sz = std::min<size_t>(this->sz - start, sz);
-        return bytes_concept{p + start, sz};
+        return bytes_concept{b, sz};
     }
     auto remove_prefix(size_t s) {
         p += s;
