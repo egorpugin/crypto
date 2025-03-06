@@ -20,6 +20,7 @@
 #include "streebog.h"
 #include "tls13.h"
 #include "x509.h"
+#include "mlkem.h"
 
 #include <boost/asio.hpp>
 
@@ -181,11 +182,49 @@ struct tls13_ {
         using type = T;
         static inline constexpr auto group_name = Value;
 
+        template <typename U> struct type_v {using type = U;};
+        static consteval auto pkt() {
+            if constexpr (requires {typename type::peer_key_type;}) {
+                return type_v<type::peer_key_type>{};
+            } else {
+                return type_v<type::public_key_type>{};
+            }
+        }
+        using peer_key_type = decltype(pkt())::type;
+
         type private_key;
-        type::public_key_type peer_public_key;
+        peer_key_type peer_public_key;
 
         auto shared_secret() {
             return private_key.shared_secret(peer_public_key);
+        }
+    };
+    struct X25519MLKEM768 {
+        using mlkem_type = mlkem<768>;
+        static inline constexpr auto key_size = sizeof(curve25519::public_key_type) + sizeof(mlkem_type::public_key_type);
+        using public_key_type = array<key_size>;
+        static inline constexpr auto peer_key_size = sizeof(curve25519::public_key_type) + mlkem_type::kem_cipher_text_len;
+        using peer_key_type = array<peer_key_size>;
+
+        mlkem_type m;
+        curve25519 ec;
+
+        void private_key() {
+            m.private_key();
+            ec.private_key();
+        }
+        void public_key(auto &&key) {
+            memcpy(key.data(), m.public_key_.data(), m.public_key_.size());
+            ec.public_key(bytes_concept{key.data() + m.public_key_.size(),sizeof(curve25519::public_key_type)});
+        }
+        auto shared_secret(const peer_key_type &peer_public_key) {
+            array<32+32> shared_secret;
+            array<mlkem_type::shared_secret_byte_len> ss;
+            m.decapsulate(std::span{peer_public_key}.first<mlkem_type::kem_cipher_text_len>(), ss);
+            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len,sizeof(curve25519::public_key_type)});
+            memcpy(shared_secret.data(), ss.data(), 32);
+            memcpy(shared_secret.data()+32, ss2.data(), 32);
+            return shared_secret;
         }
     };
     template <typename KeyExchange, typename... KeyExchanges>
@@ -228,7 +267,10 @@ struct tls13_ {
                       key_exchange<ec::gost::r34102012::ec512b, parameters::supported_groups::GC512B>,
                       key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
                       // cn
-                      key_exchange<ec::sm2, parameters::supported_groups::curveSM2>>;
+                      key_exchange<ec::sm2, parameters::supported_groups::curveSM2>,
+                      // ml-kem
+                      key_exchange<X25519MLKEM768, parameters::supported_groups::X25519MLKEM768>
+        >;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory
         parameters::signature_scheme::rsa_pkcs1_sha256,       // mandatory
