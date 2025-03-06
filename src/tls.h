@@ -794,12 +794,12 @@ struct tls13_ {
                 length_type<3> len = s2.read();
                 int cert_number = 0;
                 x509_storage certs;
+                const decltype(x509_storage::index)::key_type *k{};
 
-                static int d = -1;
-                ++d;
+                static int d = 0;
                 bytes_concept data;
                 auto write_cert = [&]() {
-                    path fn = format("d:/dev/crypto/.sw/cert/{}/{}.der", d, cert_number);
+                    path fn = format("d:/dev/crypto/.sw/cert/{}.der", ++d);
                     fs::create_directories(fn.parent_path());
                     std::ofstream of{fn, std::ios::binary};
                     of.write((const char *)data.data(), data.size());
@@ -818,6 +818,7 @@ struct tls13_ {
                         u32 len2 = len;
 
                         data = s2.span(len2);
+                        write_cert();
                         asn1 a{data};
 
                         if (cert_number++ == 0) {
@@ -872,11 +873,13 @@ struct tls13_ {
                                 }
                             }
                             if (!servername_ok && !ignore_server_hostname_check) {
-                                write_cert();
                                 throw std::runtime_error{format("cannot match servername")};
                             }
                         }
-                        certs.add(data);
+                        auto [it,_] = certs.add(data);
+                        if (!k) {
+                            k = &it->first;
+                        }
                         read_extensions(s2);
                         break;
                     }
@@ -884,8 +887,7 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
-                if (!certs.verify() && !ignore_server_certificate_check) {
-                    write_cert();
+                if (!certs.verify_one(*k) && !ignore_server_certificate_check) {
                     throw std::runtime_error{"certificate verification failed"};
                 }
                 break;
