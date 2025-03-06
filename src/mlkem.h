@@ -1,3 +1,6 @@
+// parts are from https://github.com/itzmeanjan/ml-kem
+// MPL-2.0 license
+
 #pragma once
 
 #include "random.h"
