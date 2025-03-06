@@ -1044,20 +1044,99 @@ constexpr void poly_vec_decompress(std::span<ml_kem_field::zq_t, k * ml_kem_ntt:
 
 } // namespace ml_kem_utils
 
+// Constant-time comparison and selection of unsigned integer values.
+namespace subtle {
+
+// Given two unsigned integers x, y of type operandT ( of bitwidth 8, 16, 32 or
+// 64 ), this routine returns true ( if x == y ) or false ( in case x != y )
+// testing equality of two values.
+//
+// We represent truth value using maximum number that can be represented using
+// returnT i.e. all bits of returnT are set to one. While for false value, we
+// set all bits of returnT to zero.
+template <typename operandT, typename returnT>
+static inline constexpr returnT ct_eq(const operandT x, const operandT y)
+    requires(std::is_unsigned_v<operandT> && std::is_unsigned_v<returnT>)
+{
+    const operandT a = x ^ y;
+    const operandT b = a | (-a);
+    const operandT c = b >> ((sizeof(operandT) * 8) - 1); // select only MSB
+    const returnT d = static_cast<returnT>(c);
+    const returnT e = d - static_cast<returnT>(1);
+
+    return e;
+}
+
+// Given a branch value br ( of type branchT ) holding either truth or false
+// value and two unsigned integers x, y ( of bitwidth 8, 16, 32 or 64 ), this
+// routine selects x if br is truth value or it returns y.
+//
+// Branch value br can have either of two values
+//
+// - truth value is represented using all bits of type branchT set to 1
+// - false value is represented using all bits of type branchT set to 0
+//
+// If br takes any other value, this is an undefined behaviour !
+template <typename branchT, typename operandT>
+static inline constexpr operandT ct_select(const branchT br, const operandT x, const operandT y)
+    requires(std::is_unsigned_v<branchT> && std::is_unsigned_v<operandT>)
+{
+    const branchT z = br >> ((sizeof(branchT) * 8) - 1); // select MSB
+    const operandT w = -static_cast<operandT>(z);        // bw(br) = bw(x) = bw(y)
+    const operandT selected = (x & w) | (y & (~w));      // br ? x : y
+
+    return selected;
+}
+
+} // namespace subtle
+
+namespace ml_kem_utils {
+
+// Given two byte arrays of equal length, this routine can be used for comparing them in constant-time,
+// producing truth value (0xffffffff) in case of equality, otherwise it returns false value (0x00000000).
+template <size_t n>
+constexpr uint32_t ct_memcmp(std::span<const uint8_t, n> bytes0, std::span<const uint8_t, n> bytes1) {
+    uint32_t flag = -1u;
+    for (size_t i = 0; i < n; i++) {
+        flag &= subtle::ct_eq<uint8_t, uint32_t>(bytes0[i], bytes1[i]);
+    }
+
+    return flag;
+}
+
+// Given a branch value, taking either 0x00000000 (false value) or 0xffffffff (truth value), this routine can be used for conditionally
+// copying bytes from either `source0` byte array (in case branch holds truth value) or `source1` byte array (if branch holds false value)
+// to `sink` byte array, all in constant-time.
+//
+// In simple words, `sink = cond ? source0 ? source1`
+template <size_t n>
+constexpr void ct_cond_memcpy(const uint32_t cond, std::span<uint8_t, n> sink, std::span<const uint8_t, n> source0, std::span<const uint8_t, n> source1) {
+    for (size_t i = 0; i < n; i++) {
+        sink[i] = subtle::ct_select(cond, source0[i], source1[i]);
+    }
+}
+
+} // namespace ml_kem_utils
+
 template <auto k, auto eta1, auto du, auto dv>
 struct mlkem_base {
     static inline constexpr auto n = 256;
     static inline constexpr auto q = 3329;
     static inline constexpr auto eta2 = 2;
 
-    static inline constexpr auto k_pke_privkey_size = k * 12 * 32;
-    static inline constexpr auto k_pke_pubkey_size = k_pke_privkey_size + 32;
+    static inline constexpr auto pke_privkey_size = k * 12 * 32;
+    static inline constexpr auto pke_pubkey_size = pke_privkey_size + 32;
 
-    static inline constexpr auto ml_kem_privkey_size = k_pke_privkey_size + k_pke_pubkey_size + 32 + 32;
-    static inline constexpr auto ml_kem_pubkey_size = k_pke_pubkey_size;
+    static inline constexpr auto pke_cipher_text_len = 32 * (k * du + dv);
+    static inline constexpr auto kem_cipher_text_len = pke_cipher_text_len;
+    static inline constexpr auto shared_secret_byte_len = 32;
+    static inline constexpr auto message_size = 32;
 
-    static inline constexpr auto privkey_size = ml_kem_privkey_size;
-    static inline constexpr auto pubkey_size = ml_kem_pubkey_size;
+    static inline constexpr auto kem_privkey_size = pke_privkey_size + pke_pubkey_size + 32 + 32;
+    static inline constexpr auto kem_pubkey_size = pke_pubkey_size;
+
+    static inline constexpr auto privkey_size = kem_privkey_size;
+    static inline constexpr auto pubkey_size = kem_pubkey_size;
 
     using private_key_type = array<privkey_size>;
     using public_key_type = array<pubkey_size>;
@@ -1075,9 +1154,7 @@ struct mlkem_base {
     // See algorithm 16 defined in ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
     constexpr void ml_kem_geygen(auto &&d, // used in CPA-PKE
                                  auto &&z  // used in CCA-KEM
-                                 )
-        requires(ml_kem_params::check_keygen_params(k, eta1))
-    {
+    ) {
         std::span pubkey{public_key_};
         std::span seckey{private_key_};
 
@@ -1140,6 +1217,232 @@ struct mlkem_base {
         ml_kem_utils::poly_vec_encode<k, 12>(t_prime, encoded_t_prime_in_pubkey);
         std::copy(rho.begin(), rho.end(), rho_in_pubkey.begin());
         ml_kem_utils::poly_vec_encode<k, 12>(s, seckey);
+    }
+
+    // Given seed `m` and a ML-KEM-512 public key, this routine computes a ML-KEM-512 cipher text and a fixed size shared secret.
+    // If, input ML-KEM-512 public key is malformed, encapsulation will fail, returning false.
+    [[nodiscard("If public key is malformed, encapsulation fails")]] constexpr bool
+    encapsulate(std::span<const uint8_t, 32> m, std::span<uint8_t, pke_cipher_text_len> cipher, std::span<uint8_t, shared_secret_byte_len> shared_secret) {
+        return ml_kem_encapsulate(m, std::span{public_key_}, cipher, shared_secret);
+    }
+
+    // Given ML-KEM public key and 32 -bytes seed ( used for deriving 32 -bytes message & 32 -bytes random coin ), this routine computes
+    // ML-KEM cipher text which can be shared with recipient party ( owning corresponding secret key ) over insecure channel.
+    //
+    // It also computes a fixed length 32 -bytes shared secret, which can be used for fast symmetric key encryption between these
+    // two participating entities. Alternatively they might choose to derive longer keys from this shared secret. Other side of
+    // communication should also be able to generate same 32 -byte shared secret, after successful decryption of cipher text.
+    //
+    // If invalid ML-KEM public key is input, this function execution will fail, returning false.
+    //
+    // See algorithm 17 defined in ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
+    [[nodiscard("Use result, it might fail because of malformed input public key")]] constexpr bool
+    ml_kem_encapsulate(std::span<const uint8_t, 32> m, std::span<const uint8_t, kem_pubkey_size> pubkey, std::span<uint8_t, pke_cipher_text_len> cipher,
+                       std::span<uint8_t, shared_secret_byte_len> shared_secret) {
+        array<m.size() + sha3<256>::digest_size_bytes> g_in{};
+        array<sha3<512>::digest_size_bytes> g_out{};
+
+        auto g_in_span = std::span(g_in);
+        auto g_in_span0 = g_in_span.template first<m.size()>();
+        auto g_in_span1 = g_in_span.template last<sha3<256>::digest_size_bytes>();
+
+        auto g_out_span = std::span(g_out);
+        auto g_out_span0 = g_out_span.template first<shared_secret.size()>();
+        auto g_out_span1 = g_out_span.template last<g_out_span.size() - g_out_span0.size()>();
+
+        std::copy(m.begin(), m.end(), g_in_span0.begin());
+
+        sha3<256> h256;
+        h256.update(pubkey);
+        auto dgst1 = h256.digest();
+        memcpy(g_in_span1.data(), dgst1.data(), dgst1.size());
+
+        sha3<512> h512;
+        h512.update(g_in_span);
+        auto dgst2 = h512.digest();
+        memcpy(g_out_span.data(), dgst2.data(), dgst2.size());
+
+        const auto has_mod_check_passed = k_pke_encrypt(pubkey, m, g_out_span1, cipher);
+        if (!has_mod_check_passed) {
+            // Got an invalid public key
+            return has_mod_check_passed;
+        }
+
+        std::copy(g_out_span0.begin(), g_out_span0.end(), shared_secret.begin());
+        return true;
+    }
+
+    // Given a *valid* K-PKE public key, 32 -bytes message ( to be encrypted ) and 32 -bytes random coin
+    // ( from where all randomness is deterministically sampled ), this routine encrypts message using
+    // K-PKE encryption algorithm, computing compressed cipher text.
+    //
+    // If modulus check, as described in point (2) of section 7.2 of ML-KEM standard, fails, it returns false.
+    //
+    // See algorithm 14 of K-PKE specification https://doi.org/10.6028/NIST.FIPS.203.
+    [[nodiscard("Use result of modulus check on public key")]] constexpr bool k_pke_encrypt(std::span<const uint8_t, kem_pubkey_size> pubkey,
+                                                                                            std::span<const uint8_t, 32> msg,
+                                                                                            std::span<const uint8_t, 32> rcoin,
+                                                                                            std::span<uint8_t, kem_cipher_text_len> ctxt) {
+        constexpr size_t pkoff = k * 12 * 32;
+        auto encoded_t_prime_in_pubkey = pubkey.template subspan<0, pkoff>();
+        auto rho = pubkey.template subspan<pkoff, 32>();
+
+        std::array<ml_kem_field::zq_t, k * ml_kem_ntt::N> t_prime{};
+        array<encoded_t_prime_in_pubkey.size()> encoded_tprime{};
+
+        ml_kem_utils::poly_vec_decode<k, 12>(encoded_t_prime_in_pubkey, t_prime);
+        ml_kem_utils::poly_vec_encode<k, 12>(t_prime, encoded_tprime);
+
+        using encoded_pkey_t = std::span<const uint8_t, encoded_t_prime_in_pubkey.size()>;
+        const auto are_equal = ml_kem_utils::ct_memcmp(encoded_pkey_t(encoded_t_prime_in_pubkey), encoded_pkey_t(encoded_tprime));
+        if (!are_equal) {
+            // Got an invalid public key
+            return false;
+        }
+
+        std::array<ml_kem_field::zq_t, k * k * ml_kem_ntt::N> A_prime{};
+        ml_kem_utils::generate_matrix<k, true>(A_prime, rho);
+
+        uint8_t N = 0;
+
+        std::array<ml_kem_field::zq_t, k * ml_kem_ntt::N> r{};
+        ml_kem_utils::generate_vector<k, eta1>(r, rcoin, N);
+        N += k;
+
+        std::array<ml_kem_field::zq_t, k * ml_kem_ntt::N> e1{};
+        ml_kem_utils::generate_vector<k, eta2>(e1, rcoin, N);
+        N += k;
+
+        std::array<ml_kem_field::zq_t, ml_kem_ntt::N> e2{};
+        ml_kem_utils::generate_vector<1, eta2>(e2, rcoin, N);
+
+        ml_kem_utils::poly_vec_ntt<k>(r);
+
+        std::array<ml_kem_field::zq_t, k * ml_kem_ntt::N> u{};
+
+        ml_kem_utils::matrix_multiply<k, k, k, 1>(A_prime, r, u);
+        ml_kem_utils::poly_vec_intt<k>(u);
+        ml_kem_utils::poly_vec_add_to<k>(e1, u);
+
+        std::array<ml_kem_field::zq_t, ml_kem_ntt::N> v{};
+
+        ml_kem_utils::matrix_multiply<1, k, k, 1>(t_prime, r, v);
+        ml_kem_utils::poly_vec_intt<1>(v);
+        ml_kem_utils::poly_vec_add_to<1>(e2, v);
+
+        std::array<ml_kem_field::zq_t, ml_kem_ntt::N> m{};
+        ml_kem_utils::decode<1>(msg, m);
+        ml_kem_utils::poly_decompress<1>(m);
+        ml_kem_utils::poly_vec_add_to<1>(m, v);
+
+        constexpr size_t ctxt_offset = k * du * 32;
+        auto polyvec_u_in_ctxt = ctxt.template first<ctxt_offset>();
+        auto poly_v_in_ctxt = ctxt.template last<dv * 32>();
+
+        ml_kem_utils::poly_vec_compress<k, du>(u);
+        ml_kem_utils::poly_vec_encode<k, du>(u, polyvec_u_in_ctxt);
+
+        ml_kem_utils::poly_compress<dv>(v);
+        ml_kem_utils::encode<dv>(v, poly_v_in_ctxt);
+
+        return true;
+    }
+
+    // Given a ML-KEM-512 secret key and a cipher text, this routine computes a fixed size shared secret.
+    constexpr void decapsulate(std::span<const uint8_t, kem_cipher_text_len> cipher, std::span<uint8_t, shared_secret_byte_len> shared_secret) {
+        ml_kem_decapsulate(std::span{private_key_}, cipher, shared_secret);
+    }
+
+    // Given ML-KEM secret key and cipher text, this routine recovers 32 -bytes plain text which was encrypted by sender,
+    // using ML-KEM public key, associated with this secret key.
+    //
+    // Recovered 32 -bytes plain text is used for deriving a 32 -bytes shared secret key, which can now be
+    // used for encrypting communication between two participating parties, using fast symmetric key algorithms.
+    //
+    // See algorithm 18 defined in ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
+    constexpr void ml_kem_decapsulate(std::span<const uint8_t, kem_privkey_size> seckey, std::span<const uint8_t, kem_cipher_text_len> cipher,
+                                      std::span<uint8_t, 32> shared_secret) {
+        constexpr size_t sklen = k * 12 * 32;
+        constexpr size_t pklen = k * 12 * 32 + 32;
+        constexpr size_t ctlen = cipher.size();
+
+        constexpr size_t skoff0 = sklen;
+        constexpr size_t skoff1 = skoff0 + pklen;
+        constexpr size_t skoff2 = skoff1 + 32;
+
+        auto pke_sk = seckey.template subspan<0, skoff0>();
+        auto pubkey = seckey.template subspan<skoff0, skoff1 - skoff0>();
+        auto h = seckey.template subspan<skoff1, skoff2 - skoff1>();
+        auto z = seckey.template subspan<skoff2, seckey.size() - skoff2>();
+
+        array<32 + h.size()> g_in{};
+        array<shared_secret.size() + 32> g_out{};
+        array<shared_secret.size()> j_out{};
+        array<cipher.size()> c_prime{};
+
+        auto g_in_span = std::span(g_in);
+        auto g_in_span0 = g_in_span.template first<32>();
+        auto g_in_span1 = g_in_span.template last<h.size()>();
+
+        auto g_out_span = std::span(g_out);
+        auto g_out_span0 = g_out_span.template first<shared_secret.size()>();
+        auto g_out_span1 = g_out_span.template last<32>();
+
+        k_pke_decrypt(pke_sk, cipher, g_in_span0);
+        std::copy(h.begin(), h.end(), g_in_span1.begin());
+
+        sha3<512> h512;
+        h512.absorb(g_in_span);
+        auto dgst1 = h512.digest();
+        memcpy(g_out_span.data(), dgst1.data(), dgst1.size());
+
+        shake<256> xof256;
+        xof256.absorb(z);
+        xof256.absorb(cipher);
+        xof256.finalize();
+        xof256.squeeze(j_out);
+
+        // Explicitly ignore return value, because public key, held as part of secret key is *assumed* to be valid.
+        (void)k_pke_encrypt(pubkey, g_in_span0, g_out_span1, c_prime);
+
+        // line 9-12 of algorithm 17, in constant-time
+        using kdf_t = std::span<const uint8_t, shared_secret.size()>;
+        const uint32_t cond = ml_kem_utils::ct_memcmp(cipher, std::span<const uint8_t, ctlen>(c_prime));
+        ml_kem_utils::ct_cond_memcpy(cond, shared_secret, kdf_t(g_out_span0), kdf_t(z));
+    }
+
+    // Given K-PKE secret key and cipher text, this routine recovers 32 -bytes plain text which
+    // was encrypted using K-PKE public key i.e. associated with this secret key.
+    //
+    // See algorithm 15 defined in K-PKE specification https://doi.org/10.6028/NIST.FIPS.203.
+    constexpr void k_pke_decrypt(std::span<const uint8_t, pke_privkey_size> seckey, std::span<const uint8_t, pke_cipher_text_len> ctxt,
+                                 std::span<uint8_t, 32> ptxt) {
+        constexpr size_t ctxt_offset = k * du * 32;
+        auto polyvec_u_in_ctxt = ctxt.template subspan<0, ctxt_offset>();
+        auto poly_v_in_ctxt = ctxt.template subspan<ctxt_offset, dv * 32>();
+
+        std::array<ml_kem_field::zq_t, k * ml_kem_ntt::N> u{};
+        std::array<ml_kem_field::zq_t, ml_kem_ntt::N> v{};
+
+        ml_kem_utils::poly_vec_decode<k, du>(polyvec_u_in_ctxt, u);
+        ml_kem_utils::poly_vec_decompress<k, du>(u);
+
+        ml_kem_utils::decode<dv>(poly_v_in_ctxt, v);
+        ml_kem_utils::poly_decompress<dv>(v);
+
+        std::array<ml_kem_field::zq_t, k * ml_kem_ntt::N> s_prime{};
+        ml_kem_utils::poly_vec_decode<k, 12>(seckey, s_prime);
+
+        ml_kem_utils::poly_vec_ntt<k>(u);
+
+        std::array<ml_kem_field::zq_t, ml_kem_ntt::N> t{};
+
+        ml_kem_utils::matrix_multiply<1, k, k, 1>(s_prime, u, t);
+        ml_kem_utils::poly_vec_intt<1>(t);
+        ml_kem_utils::poly_vec_sub_from<1>(t, v);
+
+        ml_kem_utils::poly_compress<1>(v);
+        ml_kem_utils::encode<1>(v, ptxt);
     }
 };
 
