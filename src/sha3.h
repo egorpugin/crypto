@@ -89,22 +89,22 @@ struct keccak_p {
 // Padding: bits are counted from right to left (01234567), not as usual (76543210)!
 // So, 0b10 in code means 01000000
 template <auto Capacity, auto Padding>
-struct keccak : keccak_p<1600> {
+struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding>> {
     static inline constexpr auto rate = StateBits - Capacity;
+
+    using hash_traits = hash_traits<keccak<Capacity, Padding>>;
+    using hash_traits::update;
 
     int blockpos{};
     u64 bitlen{};
 
-    template <auto N> void update(const char (&s)[N]) noexcept {
-        update((u8*)s, N-1);
-    }
-    void update(auto &&s) noexcept requires requires { s.size(); } {
-        update((const u8 *)s.data(), s.size());
-    }
     void absorb(auto &&s) noexcept requires requires { s.size(); } {
-        update((const u8 *)s.data(), s.size());
+        absorb((const u8 *)s.data(), s.size());
     }
-    void update(const u8 *buf, auto len) noexcept {
+    void absorb(const u8 *buf, size_t len) noexcept {
+        update(buf, len);
+    }
+    void update(const u8 *buf, size_t len) noexcept {
         bitlen += len * 8;
         auto *d = (u8 *)A;
         for (int i = 0; i < len; ++i) {
