@@ -101,6 +101,9 @@ struct keccak : keccak_p<1600> {
     void update(auto &&s) noexcept requires requires { s.size(); } {
         update((const u8 *)s.data(), s.size());
     }
+    void absorb(auto &&s) noexcept requires requires { s.size(); } {
+        update((const u8 *)s.data(), s.size());
+    }
     void update(const u8 *buf, auto len) noexcept {
         bitlen += len * 8;
         auto *d = (u8 *)A;
