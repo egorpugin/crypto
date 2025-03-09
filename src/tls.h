@@ -732,6 +732,7 @@ struct tls13_ {
     void read_handshake(be_stream s) {
         using namespace tls13;
 
+        bytes_concept first_cert;
         while (s) {
             Handshake &h = s.read();
             switch (h.msg_type) {
@@ -794,16 +795,6 @@ struct tls13_ {
                 length_type<3> len = s2.read();
                 int cert_number = 0;
                 x509_storage certs;
-                const decltype(x509_storage::index)::key_type *k{};
-
-                static int d = 0;
-                bytes_concept data;
-                auto write_cert = [&]() {
-                    path fn = format("d:/dev/crypto/.sw/cert/{}.der", ++d);
-                    fs::create_directories(fn.parent_path());
-                    std::ofstream of{fn, std::ios::binary};
-                    of.write((const char *)data.data(), data.size());
-                };
 
                 while (s2) {
                     // read one cert
@@ -817,9 +808,17 @@ struct tls13_ {
                     case tls13::CertificateType::X509: {
                         u32 len2 = len;
 
-                        data = s2.span(len2);
-                        write_cert();
+                        auto data = s2.span(len2);
                         asn1 a{data};
+
+                        /*auto write_cert = [&]() {
+                            static int d = 0;
+                            path fn = format("d:/dev/crypto/.sw/cert/{}.der", ++d);
+                            fs::create_directories(fn.parent_path());
+                            std::ofstream of{fn, std::ios::binary};
+                            of.write((const char *)data.data(), data.size());
+                        };
+                        write_cert();*/
 
                         if (cert_number++ == 0) {
                             bool servername_ok{};
@@ -851,7 +850,7 @@ struct tls13_ {
                                     servername_ok |= compare_servername(s);
                                 }
                             };
-                            for (auto &&seq : a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name)) {
+                            for (auto &&seq : x509{a.data}.get_tbs_field<asn1_sequence>(x509::subject_name)) {
                                 auto s = seq.get<asn1_set>();
                                 auto s2 = s.get<asn1_sequence>();
                                 auto string_name = s2.get<asn1_oid>(0);
@@ -861,7 +860,7 @@ struct tls13_ {
                                 }
                             }
                             if (!servername_ok) {
-                                auto cert = a.get<asn1_sequence>(x509::main, x509::certificate);
+                                auto cert = a.get<asn1_sequence>(x509::main, x509::tbs_certificate);
                                 if (auto exts = cert.get_next<asn1_x509_extensions>()) {
                                     constexpr auto subjectAltName = make_oid<2, 5, 29, 17>();
                                     if (auto sk = exts->get_extension(subjectAltName)) {
@@ -876,9 +875,9 @@ struct tls13_ {
                                 throw std::runtime_error{format("cannot match servername")};
                             }
                         }
-                        auto [it,_] = certs.add(data);
-                        if (!k) {
-                            k = &it->first;
+                        certs.add(data);
+                        if (first_cert.empty()) {
+                            first_cert = data;
                         }
                         read_extensions(s2);
                         break;
@@ -887,7 +886,7 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
-                if (!certs.verify_one(*k) && !ignore_server_certificate_check) {
+                if (!certs.verify(first_cert) && !ignore_server_certificate_check) {
                     throw std::runtime_error{"certificate verification failed"};
                 }
                 break;
@@ -895,7 +894,47 @@ struct tls13_ {
             case parameters::handshake_type::certificate_verify: {
                 parameters::signature_scheme scheme = s.read();
                 uint16_t len = s.read();
-                s.skip(len);
+                auto data = s.span(len);
+                asn1 a{data};
+                auto hs = visit(suite, [&](auto &&s) {
+                    const auto context_string = "TLS 1.3, server CertificateVerify"s;
+                    //constexpr auto context_string = "TLS 1.3, client CertificateVerify"s;
+                    auto h = s.h;
+                    auto d = h.digest();
+                    std::string hs(64 + context_string.size() + 1 + d.size(), ' ');
+                    memcpy(hs.data() + 64, context_string.data(), context_string.size() + 1);
+                    memcpy(hs.data() + 64 + context_string.size() + 1, d.data(), d.size());
+                    return hs;
+                });
+                switch (scheme) {
+                case parameters::signature_scheme::ecdsa_secp256r1_sha256:
+                case parameters::signature_scheme::ecdsa_secp384r1_sha384:
+                case parameters::signature_scheme::ecdsa_secp521r1_sha512: {
+                    auto r = a.get<asn1_integer>(0,0);
+                    auto s = a.get<asn1_integer>(0,1);
+
+                    x509 cert{first_cert};
+                    auto pubk_info = cert.get_tbs_field<asn1_sequence>(x509::subject_public_key_info);
+                    auto pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
+                    auto pubkey_data = pubkey.data.subspan(1);
+
+                    auto check = [&](auto &&c, auto &&h) {
+                        h.update(hs);
+                        if (!c.verify(h.digest(), pubkey_data, r.data, s.data)) {
+                            throw std::runtime_error{"bad signature"};
+                        }
+                    };
+                    if (scheme == parameters::signature_scheme::ecdsa_secp256r1_sha256)
+                    check(ec::secp256r1{}, sha2<256>{});
+                    if (scheme == parameters::signature_scheme::ecdsa_secp384r1_sha384)
+                    check(ec::secp384r1{}, sha2<384>{});
+                    if (scheme == parameters::signature_scheme::ecdsa_secp521r1_sha512)
+                    check(ec::secp521r1{}, sha2<512>{});
+                }
+                    break;
+                default:
+                    throw std::runtime_error{"not impl"};
+                }
                 break;
             }
             case parameters::handshake_type::finished: {
