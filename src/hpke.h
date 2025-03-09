@@ -24,7 +24,7 @@ auto hpke_derive_key_pair_ec(auto &&obj, bytes_concept version, auto &&input_key
         if (counter > 255) {
             throw std::runtime_error{"derive key pair error"};
         }
-        auto d = obj.labeled_expand<n_sk>(version, dkp_prk, "candidate"sv, bytes_concept{&counter, 1});
+        auto d = obj.template labeled_expand<n_sk>(version, dkp_prk, "candidate"sv, bytes_concept{&counter, 1});
         d[0] &= byte;
         memcpy(obj.c.private_key_.data(), d.data(), d.size());
         sk = bytes_to_bigint(obj.c.private_key_);
@@ -36,7 +36,7 @@ auto hpke_derive_key_pair_ec(auto &&obj, bytes_concept version, auto &&input_key
 template <auto n_sk>
 auto hpke_derive_key_pair_edwards(auto &&obj, bytes_concept version, auto &&input_key_material) {
     auto dkp_prk = obj.labeled_extract(version, ""sv, "dkp_prk"sv, input_key_material);
-    auto sk = obj.labeled_expand<n_sk>(version, dkp_prk, "sk"sv, ""sv);
+    auto sk = obj.template labeled_expand<n_sk>(version, dkp_prk, "sk"sv, ""sv);
     memcpy(obj.c.private_key_.data(), sk.data(), sk.size());
     auto pk = obj.c.public_key();
     return std::tuple{obj.c.private_key_,pk};
@@ -99,7 +99,7 @@ struct dhkem {
     static auto labeled_expand(bytes_concept version, bytes_concept prk, bytes_concept label, bytes_concept info) {
         auto len = std::byteswap(Len);
         auto labeled_info = concat(bytes_concept{&len, sizeof(len)}, version, suite_id(), label, info);
-        return Hkdf::expand<Len>(prk, labeled_info);
+        return Hkdf::template expand<Len>(prk, labeled_info);
     }
     static auto extract_and_expand(bytes_concept version, bytes_concept dh, bytes_concept kem_context) {
         auto eae_prk = labeled_extract(version, ""sv, "eae_prk"sv, dh);
@@ -108,7 +108,7 @@ struct dhkem {
     }
 
     auto derive_key_pair(bytes_concept version, auto &&input_key_material) {
-        return params_type::derive_key_pair<sizeof(Curve::private_key_type)>(*this, version, input_key_material);
+        return params_type::template derive_key_pair<sizeof(Curve::private_key_type)>(*this, version, input_key_material);
     }
 };
 
@@ -162,7 +162,7 @@ struct hpke {
     static auto labeled_expand(bytes_concept prk, bytes_concept label, bytes_concept info) {
         auto len = std::byteswap(Len);
         auto labeled_info = concat(bytes_concept{&len, sizeof(len)}, version, suite_id(), label, info);
-        return Hkdf::expand<Len>(prk, labeled_info);
+        return Hkdf::template expand<Len>(prk, labeled_info);
     }
 
     auto derive_key_pair(auto &&input_key_material) {

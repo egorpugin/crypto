@@ -1214,8 +1214,8 @@ struct mlkem_base {
         ml_kem_utils::poly_vec_add_to<k>(e, t_prime);
 
         constexpr size_t pubkey_offset = k * 12 * 32;
-        auto encoded_t_prime_in_pubkey = pubkey.subspan<0, pubkey_offset>();
-        auto rho_in_pubkey = pubkey.subspan<pubkey_offset, 32>();
+        auto encoded_t_prime_in_pubkey = pubkey.template subspan<0, pubkey_offset>();
+        auto rho_in_pubkey = pubkey.template subspan<pubkey_offset, 32>();
 
         ml_kem_utils::poly_vec_encode<k, 12>(t_prime, encoded_t_prime_in_pubkey);
         std::copy(rho.begin(), rho.end(), rho_in_pubkey.begin());

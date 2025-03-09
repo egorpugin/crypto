@@ -2437,7 +2437,7 @@ void test_hpke() {
             };
             test(ct256, 256);
         }
-        cmp_bytes(ctxE.export_<32>("TestContext"s), exp);
+        cmp_bytes(ctxE.template export_<32>("TestContext"s), exp);
     };
     // A.1
     check_simple(

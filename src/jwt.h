@@ -34,10 +34,10 @@ struct jwt {
             return std::format("RS{}", Bits);
         }
         auto sign(auto &&m, auto &&pkey) {
-            return pkey.sign<Bits>(m);
+            return pkey.template sign<Bits>(m);
         }
         bool verify(auto &&m, auto &&signature, auto &&pubkey) {
-            return pubkey.verify<Bits>(m, signature);
+            return pubkey.template verify<Bits>(m, signature);
         }
     };
     template <auto Bits>
