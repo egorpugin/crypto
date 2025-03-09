@@ -26,16 +26,22 @@ struct asn1_container {
     static auto get_tag(auto &&data) {
         auto tag = get_tag_raw(data);
         tag &= 0b0011'1111;
-        // Universal (00xxxxxx)
-        // Application(01xxxxxx)
-        // Context-specific(10xxxxxx)
-        // Private(11xxxxxx)
+        // Universal        (00xxxxxx)
+        // Application      (01xxxxxx)
+        // Context-specific (10xxxxxx)
+        // Private          (11xxxxxx)
+        //
+        // Primitive        (xx0xxxxx)
+        // Constructed      (xx1xxxxx)
         return tag;
     }
     static auto get_next_data(bytes_concept data) {
+        if (data.empty()) {
+            throw std::runtime_error{"empty object"};
+        }
         auto tag = get_tag(data);
-        int pos = 1;
-        u64 len = 0;
+        size_t pos = 1;
+        size_t len = 0;
         if (tag == 0x05) { // null
             return std::tuple{pos + 1, len};
         }
@@ -44,7 +50,7 @@ struct asn1_container {
         if (len > 0x80) {
             lenbytes = len ^ 0x80;
             len = 0;
-            int j = pos + 1;
+            auto j = pos + 1;
             for (int i = 0; i < lenbytes; ++i, ++j) {
                 len |= data[j] << ((lenbytes - 1 - i) * 8);
             }

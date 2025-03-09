@@ -21,12 +21,12 @@ struct x509 {
         main, // main object
     };
     enum {
-        certificate, // tbsCertificate
+        tbs_certificate, // tbs = to be signed
         certificate_signature_algorithm,
         certificate_signature,
     };
     enum {
-        version_number,
+        version_number, // optional?
         serial_number,
         signature_algorithm_id,
         issuer_name,
@@ -43,6 +43,17 @@ struct x509 {
         public_key_algorithm,
         subject_public_key,
     };
+
+    asn1 a;
+
+    x509(asn1 a) : a{a} {}
+    x509(std::string_view a) : a{a} {}
+
+    template <typename T>
+    auto get_tbs_field(auto f, auto && ... subfields) {
+        auto cert = a.get<asn1_sequence>(x509::main, x509::tbs_certificate);
+        return cert.get<T>(f - (cert.data[0] != 0xA0), subfields...);
+    }
 };
 
 struct asn1_x509_extensions : asn1_base {
@@ -60,24 +71,22 @@ struct asn1_x509_extensions : asn1_base {
 
 struct x509_storage {
     using clock = std::chrono::system_clock;
-    struct key {
-        bytes_concept subject;
-        bytes_concept keyid;
-
-        auto operator<=>(const key &rhs) const {
-            return std::tie(subject, keyid) <=> std::tie(rhs.subject, rhs.keyid);
-        }
-    };
     struct value {
         bytes_concept data;
         bool trusted{};
 
+        bool operator==(const value &rhs) const {
+            return data == rhs.data;
+        }
+        bool operator==(const bytes_concept &rhs) const {
+            return data == rhs;
+        }
         bool is_valid(auto &&now) const {
             if (!trusted) {
                 return false;
             }
-            asn1 a{data};
-            auto validity = a.get<asn1_sequence>(x509::main, x509::certificate, x509::validity);
+            x509 a{data};
+            auto validity = a.get_tbs_field<asn1_sequence>(x509::validity);
             auto decode_time = [&](int i) {
                 return visit(validity.get<asn1_utc_time,asn1_generalized_time>(i), [](auto &&at) {
                     tm t = at.decode();
@@ -90,12 +99,66 @@ struct x509_storage {
             return decode_time(0) <= now && now <= decode_time(1);
         }
     };
-    std::map<key, value> index;
+
+    using issuer_type = bytes_concept;
+    using keyid_type = bytes_concept;
+    std::map<issuer_type, std::map<keyid_type, std::vector<value>>> index;
     std::vector<std::string> storage;
 
     static auto &trusted_storage() {
         static x509_storage s;
         return s;
+    }
+
+    static auto extract_keyid(auto &&kid) {
+        bytes_concept keyid;
+        auto keystor = kid->get<asn1_octet_string>(0, 1);
+        if (keystor.get_tag() == asn1_octet_string::tag) {
+            keyid = keystor.get<asn1_octet_string>(0);
+        } else if (keystor.get_tag() == asn1_sequence::tag) {
+            keyid = keystor.get(0, 0);
+        }
+        return keyid;
+    }
+    auto get_subject_keyid(auto &&data) {
+        asn1 a{data};
+        bytes_concept keyid;
+        auto cert = a.get<asn1_sequence>(x509::main, x509::tbs_certificate);
+        if (auto exts = cert.get_next<asn1_x509_extensions>()) {
+            if (auto sk = exts->get_extension(oid::subject_keyid)) {
+                keyid = extract_keyid(sk);
+            }
+        }
+        if (keyid.empty()) {
+            // see 4.2.1.2.  Subject Key Identifier
+            auto spk = x509(data).get_tbs_field<asn1_bit_string>(x509::subject_public_key_info, x509::subject_public_key);
+            auto h = sha1::digest(spk.data.subspan(1));
+            keyid = storage.emplace_back(h.begin(), h.end());
+        }
+        return keyid;
+    }
+    value *find_valid_cert(auto &&issuer, auto &&keyid, auto &&now) {
+        auto &certs = index[issuer][keyid];
+        auto it = std::find_if(certs.begin(), certs.end(), [&](auto &&v) {
+            return v.is_valid(now);
+        });
+        if (it != certs.end()) {
+            return &*it;
+        }
+        return nullptr;
+    }
+
+    auto &add(auto &&data) {
+        x509 x{data};
+        auto subject = x.get_tbs_field<asn1_sequence>(x509::subject_name);
+        //auto issuer = x.get_tbs_field<asn1_sequence>(x509::issuer_name);
+        auto keyid = get_subject_keyid(data);
+        auto &certs = index[subject][keyid];
+        auto it = std::find(certs.begin(), certs.end(), data);
+        if (it != certs.end()) {
+            return *it;
+        }
+        return certs.emplace_back(data);
     }
     void load_pem(std::string_view data, bool trusted = false) {
         auto delim = "-----BEGIN CERTIFICATE-----"sv;
@@ -112,114 +175,55 @@ struct x509_storage {
             sv = sv.substr(0, sv.find("---"sv));
             auto decoded = base64::decode<true>(sv);
             std::string_view data = storage.emplace_back(decoded);
-            auto [it,_] = add(data);
-            it->second.trusted = trusted;
+            auto &p = add(data);
+            p.trusted = trusted;
         }
     }
-    auto load_der(std::string_view data, bool trusted = false) {
-        auto p = add(storage.emplace_back(data));
-        p.first->second.trusted = trusted;
+    decltype(auto) load_der(std::string_view data, bool trusted = false) {
+        auto &p = add(storage.emplace_back(data));
+        p.trusted = trusted;
         return p;
     }
-    auto add(auto &&data) {
-        asn1 a{data};
-        auto subject = a.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_name);
-        bytes_concept keyid;
-        auto cert = a.get<asn1_sequence>(x509::main, x509::certificate);
-        if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-            if (auto sk = exts->get_extension(oid::subject_keyid)) {
-                auto keystor = sk->get<asn1_octet_string>(0, 1);
-                if (keystor.get_tag() == asn1_octet_string::tag) {
-                    keyid = keystor.get<asn1_octet_string>(0);
-                } else if (keystor.get_tag() == asn1_sequence::tag) {
-                    keyid = keystor.get(0, 0);
-                }
-            }
-        }
-        if (keyid.empty()) {
-            // see 4.2.1.2.  Subject Key Identifier
-            auto [data,_] = a.get_raw(x509::main, x509::certificate, x509::subject_public_key_info, x509::subject_public_key);
-            if (asn1::get_tag(data) == asn1_bit_string::tag) {
-                auto spk = a.get<asn1_bit_string>(x509::main, x509::certificate, x509::subject_public_key_info, x509::subject_public_key);
-                auto h = sha1::digest(spk.data.subspan(1));
-                keyid = storage.emplace_back(h.begin(), h.end());
-            } else if (asn1::get_tag(data) == asn1_null::tag) {
-            } else {
-                throw std::runtime_error{"not impl"};
-            }
-        }
-        return index.emplace(key{subject,keyid}, data);
-    }
-    // TODO: add verify one
-    // verify all
-    bool verify() {
-        return verify(trusted_storage());
-    }
-    bool verify_one(auto &&sk) {
+
+    bool verify(auto &&cert) {
         auto now = clock::now();
-        return verify_one(trusted_storage(), sk, now);
+        return verify(trusted_storage(), cert, now);
     }
-    bool verify_one(auto &&trusted_storage, auto &&sk, auto &&now) {
-        auto vit = index.find(sk);
-        if (vit == index.end()) {
-            return false;
-        }
-        auto &v = vit->second;
+    bool verify(auto &&trusted_storage, auto &&in_data, auto &&now) {
+        auto &v = add(in_data);
         if (v.trusted) {
             return v.is_valid(now);
         }
         asn1 current_cert{v.data};
-        auto [cert_raw,cert_start] = current_cert.get_raw(x509::main, x509::certificate);
+        auto [cert_raw,cert_start] = current_cert.get_raw(x509::main, x509::tbs_certificate);
         asn1_sequence cert{cert_raw.subspan(cert_start)}; // tbsCertificate
 
         auto issuer = cert.get<asn1_sequence>(x509::issuer_name);
         auto subject = cert.get<asn1_sequence>(x509::subject_name);
         auto root_cert = issuer == subject;
         if (root_cert) {
-            if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-                constexpr auto subject_keyid = make_oid<2, 5, 29, 14>();
-                if (auto sk = exts->get_extension(subject_keyid)) {
-                    auto keystor = sk->get<asn1_octet_string>(0, 1);
-                    bytes_concept keyid;
-                    if (keystor.get_tag() == asn1_octet_string::tag) {
-                        keyid = keystor.get<asn1_octet_string>(0);
-                    } else if (keystor.get_tag() == asn1_sequence::tag) {
-                        keyid = keystor.get(0, 0);
-                    }
-                    bytes_concept issuer_cert_data;
-                    auto find = [&](auto &&store) {
-                        auto i = store.index.find(key{issuer,keyid});
-                        if (i != store.index.end() && i->second.is_valid(now)) {
-                            issuer_cert_data = i->second.data;
-                        }
-                    };
-                    find(trusted_storage);
-                    if (!issuer_cert_data.empty()) {
-                        v.trusted = true;
-                        return v.is_valid(now);
-                    }
-                }
+            if (!trusted_storage.index[issuer][get_subject_keyid(v.data)].empty()) {
+                v.trusted = true;
+                return v.is_valid(now);
             }
             return false;
         }
         if (auto exts = cert.get_next<asn1_x509_extensions>()) {
             constexpr auto old_authority_keyid = make_oid<2, 5, 29, 1>();
-            constexpr auto authority_keyid = make_oid<2, 5, 29, 35>(); // old authority_keyid = 1
+            constexpr auto authority_keyid = make_oid<2, 5, 29, 35>();
             if (auto sk = exts->get_extension(authority_keyid)) {
-                auto keystor = sk->get<asn1_octet_string>(0, 1);
-                bytes_concept keyid;
-                if (keystor.get_tag() == asn1_octet_string::tag) {
-                    keyid = keystor.get<asn1_octet_string>(0);
-                } else if (keystor.get_tag() == asn1_sequence::tag) {
-                    keyid = keystor.get(0, 0);
-                }
+                auto keyid = extract_keyid(sk);
                 bytes_concept issuer_cert_data;
                 auto find = [&](auto &&store) {
-                    auto i = store.index.find(key{issuer,keyid});
-                    if (i != store.index.end()) {
-                        if ((i->second.trusted || verify_one(trusted_storage, i->first, now)) && i->second.is_valid(now)) {
-                            issuer_cert_data = i->second.data;
+                    auto &certs = store.index[issuer][keyid];
+                    auto it = std::find_if(certs.begin(), certs.end(), [&](auto &&v) {
+                        if (!v.trusted) {
+                            verify(trusted_storage, v.data, now);
                         }
+                        return v.is_valid(now);
+                    });
+                    if (it != certs.end()) {
+                        issuer_cert_data = it->data;
                     }
                 };
                 find(*this);
@@ -229,8 +233,6 @@ struct x509_storage {
                 if (issuer_cert_data.empty()) {
                     return false;
                 }
-
-                asn1 issuer_cert{issuer_cert_data};
 
                 auto alg = current_cert.get<asn1_oid>(x509::main, x509::certificate_signature_algorithm, 0);
                 auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature).data.subspan(1);
@@ -253,7 +255,8 @@ struct x509_storage {
                 //constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
                 //constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
 
-                auto pubk_info = issuer_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_public_key_info);
+                x509 issuer_cert{issuer_cert_data};
+                auto pubk_info = issuer_cert.get_tbs_field<asn1_sequence>(x509::subject_public_key_info);
                 auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
                 auto issuer_pubkey_data = issuer_pubkey.data.subspan(1);
 
@@ -345,7 +348,7 @@ struct x509_storage {
         }
         return false;
     }
-    bool verify(auto &&trusted_storage) {
+    /*bool verify(auto &&trusted_storage) {
         auto now = clock::now();
         while (1) {
             bool did_verify{};
@@ -553,7 +556,7 @@ struct x509_storage {
                 return std::ranges::all_of(index | std::views::values, [](auto &&v){return v.trusted;});
             }
         }
-    }
+    }*/
 };
 
 } // namespace crypto
