@@ -327,46 +327,6 @@ struct grasshopper : grasshopper_data {
 
     vect round_keys[10];
 
-    void expand_key(const key_type &key) noexcept {
-        vect C[key_size_bytes];
-        for (int i = 0; i < key_size_bytes; ++i) {
-            vect iter_num{};
-            iter_num[15] = i + 1;
-            C[i] = l(iter_num, r);
-        }
-        vect iter[4];
-        memcpy(iter[0].data(), key.data(), key.size());
-        memcpy(round_keys[0].data(), key.data(), key.size());
-        for (int i = 0; i < 4; ++i) {
-            for (int j = 0; j < 4; ++j) {
-                f(iter[0], iter[1], iter[2], iter[3], C[j * 2 + 0 + 8 * i]);
-                f(iter[2], iter[3], iter[0], iter[1], C[j * 2 + 1 + 8 * i]);
-            }
-            round_keys[2 * i + 2] = iter[0];
-            round_keys[2 * i + 3] = iter[1];
-        }
-    }
-    auto encrypt(const vect &blk) noexcept {
-        auto out_blk = blk;
-        for (int i = 0; i < 9; ++i) {
-            x(round_keys[i], out_blk, out_blk);
-            out_blk = s(out_blk, Pi);
-            out_blk = l(out_blk, r);
-        }
-        x(round_keys[9], out_blk, out_blk);
-        return out_blk;
-    }
-    auto decrypt(const vect &blk) noexcept {
-        auto out_blk = blk;
-        x(round_keys[9], out_blk, out_blk);
-        for (int i = 8; i >= 0; i--) {
-            out_blk = l(out_blk, reverse_r);
-            out_blk = s(out_blk, reverse_Pi);
-            x(round_keys[i], out_blk, out_blk);
-        }
-        return out_blk;
-    }
-
     static auto s(const vect &in_data, auto &&table) noexcept {
         vect out_data;
         for (int i = 0; i < block_size_bytes; ++i) {
@@ -414,6 +374,47 @@ struct grasshopper : grasshopper_data {
         internal = l(internal, r);
         x(internal, in_key_2, out_key_1);
     }
+
+    void expand_key(const key_type &key) noexcept {
+        vect C[key_size_bytes];
+        for (int i = 0; i < key_size_bytes; ++i) {
+            vect iter_num{};
+            iter_num[15] = i + 1;
+            C[i] = l(iter_num, r);
+        }
+        vect iter[4];
+        memcpy(iter[0].data(), key.data(), key.size());
+        memcpy(round_keys[0].data(), key.data(), key.size());
+        for (int i = 0; i < 4; ++i) {
+            for (int j = 0; j < 4; ++j) {
+                f(iter[0], iter[1], iter[2], iter[3], C[j * 2 + 0 + 8 * i]);
+                f(iter[2], iter[3], iter[0], iter[1], C[j * 2 + 1 + 8 * i]);
+            }
+            round_keys[2 * i + 2] = iter[0];
+            round_keys[2 * i + 3] = iter[1];
+        }
+    }
+    auto encrypt(const vect &blk) noexcept {
+        auto out_blk = blk;
+        for (int i = 0; i < 9; ++i) {
+            x(round_keys[i], out_blk, out_blk);
+            out_blk = s(out_blk, Pi);
+            out_blk = l(out_blk, r);
+        }
+        x(round_keys[9], out_blk, out_blk);
+        return out_blk;
+    }
+    auto decrypt(const vect &blk) noexcept {
+        auto out_blk = blk;
+        x(round_keys[9], out_blk, out_blk);
+        for (int i = 8; i >= 0; i--) {
+            out_blk = l(out_blk, reverse_r);
+            out_blk = s(out_blk, reverse_Pi);
+            x(round_keys[i], out_blk, out_blk);
+        }
+        return out_blk;
+    }
+
 };
 
 } // namespace crypto
