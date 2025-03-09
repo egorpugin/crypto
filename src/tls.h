@@ -1134,6 +1134,9 @@ struct http_client {
     }
     http_client(auto &&url) : http_client{default_io_context(), url} {
     }
+    void run() {
+        run(default_io_context());
+    }
     void run(auto &&ctx) {
         boost::asio::co_spawn(ctx, run_coro(), [](auto eptr) {
             if (eptr) {

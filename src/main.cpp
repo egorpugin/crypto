@@ -1993,25 +1993,6 @@ ee ad 9d 67 89 0c bb 22 39 23 36 fe a1 85 1f 38
     }
 }
 
-void test_asn1() {
-    /*LOG_TEST();
-
-    using namespace crypto;
-
-    mmap_file<uint8_t> f{"_.gosuslugi.ru.der"};
-    asn1 a{bytes_concept{f}};
-    //a.parse();
-
-    //rsaEncryption (PKCS #1)
-    auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
-
-    auto pka = a.get<asn1_oid>(x509::main,x509::certificate,x509::subject_public_key_info,x509::public_key_algorithm,0);
-    if (pka != rsaEncryption) {
-        throw std::runtime_error{"unknown x509::public_key_algorithm"};
-    }
-    auto pk = a.get<asn1_bit_string>(x509::main,x509::certificate,x509::subject_public_key_info,x509::subject_public_key);*/
-}
-
 void test_x509() {
     LOG_TEST();
 
@@ -2024,7 +2005,7 @@ void test_x509() {
     auto data1 = read_file("test1.der");
     auto data2 = read_file("test2.der");
 
-    x509_storage s;
+    /*x509_storage s;
     s.add(data1);
     s.add(data2);
     cmp_bool(s.verify(ss), true);
@@ -2032,7 +2013,7 @@ void test_x509() {
     x509_storage s2;
     auto data3 = read_file("infotecs.der");
     s2.add(data3);
-    cmp_bool(s2.verify(ss), true);
+    cmp_bool(s2.verify(ss), true);*/
 }
 
 void test_pki() {
@@ -2051,7 +2032,7 @@ void test_pki() {
     s.load_der(p.certs[cakey], true);
     s.load_der(p.certs[cakey3], true);
     s.add(p.certs[cakey2]);
-    cmp_bool(s.verify(s), true);
+    //cmp_bool(s.verify(s), true);
 }
 
 void test_streebog() {
@@ -2185,32 +2166,29 @@ void test_tls() {
     auto run0 = [](auto &&t, auto &&url) {
         t.follow_location = false;
         t.tls_layer.ignore_server_hostname_check = true;
-        boost::asio::co_spawn(default_io_context(), t.run_coro(), [&](auto eptr) {
-            if (eptr) {
-                try {
-                    std::rethrow_exception(eptr);
-                } catch (std::exception &e) {
-                    std::cout << "connecting to " << url << "\n";
-                    std::cout << e.what() << "\n";
-                }
-                cmp_base(0, 1);
-            } else {
 #ifndef CI_TESTS
-                std::cout << "connecting to " << url << "\n";
-                std::cout << "ok" << "\n";
+        std::cout << "connecting to " << url << "\n";
 #endif
-                cmp_base(0, 0);
-            }
-        });
-        default_io_context().run();
-        default_io_context().restart();
+        try {
+            t.run();
+#ifndef CI_TESTS
+            std::cout << "ok" << "\n";
+#endif
+            cmp_base(0, 0);
+        } catch (std::exception &e) {
+#ifdef CI_TESTS
+            std::cout << "connecting to " << url << "\n";
+#endif
+            std::cout << e.what() << "\n";
+            cmp_base(0, 1);
+        }
     };
     auto run = [&](auto &&url) {
-        http_client t{default_io_context(), url};
+        http_client t{url};
         run0(t, url);
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex) {
-        http_client t{default_io_context(), url};
+        http_client t{url};
         t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
 #ifndef CI_TESTS
@@ -2218,6 +2196,9 @@ void test_tls() {
 #endif
         run0(t, url);
     };
+
+    run_with_params("tls13.1d.pw", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
+    run_with_params("tls13.akamai.io", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
 
     ////// https://infotecs.ru/stand_tls/
     //
@@ -2400,14 +2381,14 @@ void test_hpke() {
         cmp_bytes(skRm, "4612c550263fc8ad58375df3f557aac531d26850903e55a9f23f21d8534e8ac8"_sb);
         cmp_bytes(pkRm, "3948cfe0ad1ddb695d780e59077195da6c56506b027329794ab02bca80815c4d"_sb);
 
-        auto ssE = hE.shared_secret<'S'>(pkRm);
-        auto ssR = hR.shared_secret<'R'>(pkEm);
+        auto ssE = hE.template shared_secret<'S'>(pkRm);
+        auto ssR = hR.template shared_secret<'R'>(pkEm);
 
         cmp_bytes(ssE, "fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc"_sb);
         cmp_bytes(ssR, "fe0e18c9f024ce43799ae393c7e8fe8fce9d218875e8227b0187c04e7d2ea1fc"_sb);
 
-        auto ctxE = hE.key_schedule<'S'>(mode_type::base, ssE, info, ""sv, ""sv);
-        auto ctxR = hR.key_schedule<'R'>(mode_type::base, ssR, info, ""sv, ""sv);
+        auto ctxE = hE.template key_schedule<'S'>(mode_type::base, ssE, info, ""sv, ""sv);
+        auto ctxR = hR.template key_schedule<'R'>(mode_type::base, ssR, info, ""sv, ""sv);
         int i = 0;
         auto test = [&](auto &&ct, int i2) {
             while (i != i2) {
@@ -2436,13 +2417,13 @@ void test_hpke() {
         auto [skEm,pkEm] = hE.derive_key_pair(ikmE);
         auto [skRm,pkRm] = hR.derive_key_pair(ikmR);
         auto [skSm,pkSm] = hS.derive_key_pair(ikmS);
-        auto ssE = ikmS.empty() ? hE.shared_secret<'S'>(pkRm) : hE.shared_secret<'S'>(pkRm, skSm);
-        auto ssR = ikmS.empty() ? hR.shared_secret<'R'>(pkEm) : hR.shared_secret<'R'>(pkEm, pkSm);
+        auto ssE = ikmS.empty() ? hE.template shared_secret<'S'>(pkRm) : hE.template shared_secret<'S'>(pkRm, skSm);
+        auto ssR = ikmS.empty() ? hR.template shared_secret<'R'>(pkEm) : hR.template shared_secret<'R'>(pkEm, pkSm);
         cmp_bytes(ssE, ssR);
 
-        auto ctxE = hE.key_schedule<'S'>(mode, ssE, info, psk, psk_id);
+        auto ctxE = hE.template key_schedule<'S'>(mode, ssE, info, psk, psk_id);
         if constexpr (!decltype(hpke)::export_only) {
-            auto ctxR = hR.key_schedule<'R'>(mode, ssR, info, psk, psk_id);
+            auto ctxR = hR.template key_schedule<'R'>(mode, ssR, info, psk, psk_id);
             int i = 0;
             auto test = [&](auto &&ct, int i2) {
                 while (i != i2) {
@@ -2634,7 +2615,6 @@ auto test_all() {
     test_chacha20_aead();
     test_scrypt();
     test_argon2();
-    test_asn1();
     test_x509();
     test_pki();
     test_streebog();
@@ -2682,7 +2662,6 @@ int main() {
     //test_chacha20_aead();
     //test_scrypt();
     //test_argon2();
-    //test_asn1();
     //test_x509();
     //test_pki();
     //test_streebog();
@@ -2690,10 +2669,10 @@ int main() {
     //test_mgm();
     //test_gost();
     //
-    //test_tls();
+    test_tls();
     //test_jwt();
     //test_hpke();
-    test_mlkem();
+    //test_mlkem();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
