@@ -18,7 +18,6 @@ struct point {
 };
 
 // y^2 = x^3 + ax + b
-// prime field only
 struct weierstrass_prime_field {
     bigint a, b, p;
 };
@@ -35,10 +34,10 @@ struct twisted_edwards_field {
 
 template <typename Curve>
 struct ec_field_point : point<bigint> {
-    Curve &ec;
+    Curve ec; // TODO: not a ref atm, slow
 
-    ec_field_point(Curve &ec) : ec{ec} {}
-    ec_field_point(Curve &ec, auto &&x, auto &&y) : ec{ec} {
+    ec_field_point(const Curve &ec) : ec{ec} {}
+    ec_field_point(const Curve &ec, auto &&x, auto &&y) : ec{ec} {
         this->x = x;
         this->y = y;
     }
@@ -105,15 +104,13 @@ struct ec_field_point : point<bigint> {
         r.y %= ec.p;
         return r;
     }
-    ec_field_point double_() const
+    /*ec_field_point double_() const
         requires std::same_as<Curve, weierstrass_binary_field>
     {
-        /*
-        * TODO: binary field checks for doubling
-        if (y == 0) {
-            return ec_field_point{ec};
-        }
-        */
+        //TODO: binary field checks for doubling
+        //if (y == 0) {
+        //    return ec_field_point{ec};
+        //}
         bigint temp = x;
         mpz_invert(temp, temp, ec.p);
         bigint slope = x + y * temp;
@@ -128,25 +125,24 @@ struct ec_field_point : point<bigint> {
     ec_field_point operator+(const ec_field_point &q)
         requires std::same_as<Curve, weierstrass_binary_field>
     {
-        /*
-        * TODO: binary field checks for addition
-        if (*this == 0) {
-            return q;
-        }
-        if (q == 0) {
-            return *this;
-        }
-        bigint temp1;
-        if (q.y != 0) {
-            temp1 = (q.y - ec.p);
-            temp1 %= ec.p;
-        }
-        if (y == temp1 && x == q.x) {
-            return {ec};
-        }
-        if (*this == q) {
-            return double_();
-        }*/
+        //TODO: binary field checks for addition
+        //if (*this == 0) {
+        //    return q;
+        //}
+        //if (q == 0) {
+        //    return *this;
+        //}
+        //bigint temp1;
+        //if (q.y != 0) {
+        //    temp1 = (q.y - ec.p);
+        //    temp1 %= ec.p;
+        //}
+        //if (y == temp1 && x == q.x) {
+        //    return {ec};
+        //}
+        //if (*this == q) {
+        //    return double_();
+        //}
         bigint temp = x + q.x;
         temp %= ec.p;
         mpz_invert(temp, temp, ec.p);
@@ -207,7 +203,7 @@ struct ec_field_point : point<bigint> {
         r.y = slope * (x - r.x) - y;
         r.y %= ec.p;
         return r;
-    }
+    }*/
 };
 
 template <typename Curve>
@@ -220,7 +216,7 @@ std::ostream &operator<<(std::ostream &o, const ec_field_point<Curve> &v) {
 template <typename Curve>
 ec_field_point<Curve> operator*(const bigint &m, const ec_field_point<Curve> &p) {
     if (m == 0) {
-        return {p.ec};
+        return ec_field_point<Curve>{p.ec};
     }
     // https://en.wikipedia.org/wiki/Elliptic_curve_point_multiplication#Montgomery_ladder
     // prevent timing attack
@@ -277,6 +273,7 @@ struct parameters<T, weierstrass_prime_field> {
         c.ec.p = p;
         c.ec.a = a;
         c.ec.b = b;
+        c.G.ec = c.ec;
         c.G.x = G.x;
         c.G.y = G.y;
         c.order = order;
@@ -307,6 +304,7 @@ struct parameters<T, twisted_edwards_field> {
         c.ec.p = p;
         c.ec.a = a;
         c.ec.d = d;
+        c.G.ec = c.ec;
         c.G.x = G.x;
         c.G.y = G.y;
         c.order = order;
