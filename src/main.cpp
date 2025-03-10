@@ -153,7 +153,9 @@ auto cacert_pem() {
     if (!std::filesystem::exists(name)) {
         crypto::http_client t{"https://curl.se/ca/cacert.pem"};
         t.tls_layer.ignore_server_certificate_check = true;
-        t.run(crypto::default_io_context());
+        t.run(
+            //crypto::default_io_context()
+        );
         write_file(name, t.m.body);
     }
     auto &tcs = crypto::x509_storage::trusted_storage();

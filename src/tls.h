@@ -924,18 +924,18 @@ struct tls13_ {
                 auto ecdsa_check = [&](auto &&c, auto &&h) {
                     auto r = a.get<asn1_integer>(0,0);
                     auto s = a.get<asn1_integer>(0,1);
-                        h.update(hs);
-                        if (!c.verify(h.digest(), pubkey_data, r.data, s.data)) {
-                            throw std::runtime_error{"bad signature"};
-                        }
-                    };
+                    h.update(hs);
+                    if (!c.verify(h.digest(), pubkey_data, r.data, s.data)) {
+                        throw std::runtime_error{"bad signature"};
+                    }
+                };
                 auto gost_check = [&](auto &&c, auto &&h) {
                     h.update(hs);
                     std::vector<u8> sig2{std::from_range, data | std::views::reverse};
                     std::vector<u8> h2{std::from_range, h.digest() | std::views::reverse};
                     if (!c.verify(h2, asn1{pubkey_data}.get<asn1_octet_string>().data, sig2)) {
                         throw std::runtime_error{"bad signature"};
-                }
+                    }
                 };
 
                 switch (scheme) {
@@ -1041,8 +1041,9 @@ struct http_client {
     template <typename T>
     using awaitable = boost::asio::awaitable<T>;
 
+    boost::asio::io_context ctx;
     std::string url_internal;
-    socket_type s;
+    socket_type s{ctx};
     tls13_<socket_type, awaitable> tls_layer{&s};
     bool follow_location{true}; // for now
     bool redirected{};
@@ -1150,21 +1151,21 @@ struct http_client {
     };
     http_message m;
 
-    http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {
-    }
-    http_client(auto &&url) : http_client{default_io_context(), url} {
-    }
+    //http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {}
+    //http_client(auto &&url) : http_client{default_io_context(), url} {}
+    http_client(const std::string &url) : url_internal{url} {}
     void run() {
-        run(default_io_context());
-    }
-    void run(auto &&ctx) {
+        //run(default_io_context());
+        //run(ctx);
+    //}
+    //void run(auto &&ctx) {
         boost::asio::co_spawn(ctx, run_coro(), [](auto eptr) {
             if (eptr) {
                 std::rethrow_exception(eptr);
             }
         });
         ctx.run();
-        ctx.restart();
+        //ctx.restart();
     }
     awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
@@ -1177,7 +1178,7 @@ struct http_client {
         using boost::asio::use_awaitable;
         auto ex = co_await boost::asio::this_coro::executor;
 
-        string host{url};
+        string host{url_internal};
         string port = "443";
         if (host.starts_with("http://")) {
             host = host.substr(7);
