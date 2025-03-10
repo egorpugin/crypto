@@ -305,6 +305,7 @@ struct tls13_ {
     u8 legacy_session_id[32];
     tls13::Random random;
     std::string cookie;
+    std::string server_certificate;
 
     all_suites::variant_type suite;
     all_key_exchanges::variant_type kex;
@@ -732,7 +733,6 @@ struct tls13_ {
     void read_handshake(be_stream s) {
         using namespace tls13;
 
-        bytes_concept first_cert;
         while (s) {
             Handshake &h = s.read();
             switch (h.msg_type) {
@@ -876,8 +876,8 @@ struct tls13_ {
                             }
                         }
                         certs.add(data);
-                        if (first_cert.empty()) {
-                            first_cert = data;
+                        if (server_certificate.empty()) {
+                            server_certificate.assign_range(data);
                         }
                         read_extensions(s2);
                         break;
@@ -886,7 +886,7 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
-                if (!certs.verify(first_cert) && !ignore_server_certificate_check) {
+                if (!certs.verify(server_certificate) && !ignore_server_certificate_check) {
                     throw std::runtime_error{"certificate verification failed"};
                 }
                 break;
@@ -895,6 +895,12 @@ struct tls13_ {
                 parameters::signature_scheme scheme = s.read();
                 uint16_t len = s.read();
                 auto data = s.span(len);
+
+                x509 cert{server_certificate};
+                auto pubk_info = cert.get_tbs_field<asn1_sequence>(x509::subject_public_key_info);
+                auto pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
+                auto pubkey_data = pubkey.data.subspan(1);
+
                 asn1 a{data};
                 auto hs = visit(suite, [&](auto &&s) {
                     const auto context_string = "TLS 1.3, server CertificateVerify"s;
@@ -906,34 +912,48 @@ struct tls13_ {
                     memcpy(hs.data() + 64 + context_string.size() + 1, d.data(), d.size());
                     return hs;
                 });
-                switch (scheme) {
-                case parameters::signature_scheme::ecdsa_secp256r1_sha256:
-                case parameters::signature_scheme::ecdsa_secp384r1_sha384:
-                case parameters::signature_scheme::ecdsa_secp521r1_sha512: {
+
+                auto rsa_sha2 = [&]<auto Bits>() {
+                    sha2<Bits> h;
+                    h.update(hs);
+                    auto pubk = rsa::public_key::load(pubkey_data);
+                    if (!pubk.verify_pss_mgf1<Bits>(hs, data)) {
+                        throw std::runtime_error{"bad signature"};
+                    }
+                };
+                auto ecdsa_check = [&](auto &&c, auto &&h) {
                     auto r = a.get<asn1_integer>(0,0);
                     auto s = a.get<asn1_integer>(0,1);
-
-                    x509 cert{first_cert};
-                    auto pubk_info = cert.get_tbs_field<asn1_sequence>(x509::subject_public_key_info);
-                    auto pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
-                    auto pubkey_data = pubkey.data.subspan(1);
-
-                    auto check = [&](auto &&c, auto &&h) {
                         h.update(hs);
                         if (!c.verify(h.digest(), pubkey_data, r.data, s.data)) {
                             throw std::runtime_error{"bad signature"};
                         }
                     };
-                    if (scheme == parameters::signature_scheme::ecdsa_secp256r1_sha256)
-                    check(ec::secp256r1{}, sha2<256>{});
-                    if (scheme == parameters::signature_scheme::ecdsa_secp384r1_sha384)
-                    check(ec::secp384r1{}, sha2<384>{});
-                    if (scheme == parameters::signature_scheme::ecdsa_secp521r1_sha512)
-                    check(ec::secp521r1{}, sha2<512>{});
+                auto gost_check = [&](auto &&c, auto &&h) {
+                    h.update(hs);
+                    std::vector<u8> sig2{std::from_range, data | std::views::reverse};
+                    std::vector<u8> h2{std::from_range, h.digest() | std::views::reverse};
+                    if (!c.verify(h2, asn1{pubkey_data}.get<asn1_octet_string>().data, sig2)) {
+                        throw std::runtime_error{"bad signature"};
                 }
-                    break;
+                };
+
+                switch (scheme) {
+                case parameters::signature_scheme::ecdsa_secp256r1_sha256: ecdsa_check(ec::secp256r1{}, sha2<256>{}); break;
+                case parameters::signature_scheme::ecdsa_secp384r1_sha384: ecdsa_check(ec::secp384r1{}, sha2<384>{}); break;
+                case parameters::signature_scheme::ecdsa_secp521r1_sha512: ecdsa_check(ec::secp521r1{}, sha2<512>{}); break;
+                case parameters::signature_scheme::gostr34102012_256a: gost_check(ec::gost::r34102012::ec256a{}, streebog<256>{}); break;
+                case parameters::signature_scheme::gostr34102012_256b: gost_check(ec::gost::r34102012::ec256b{}, streebog<256>{}); break;
+                case parameters::signature_scheme::gostr34102012_256c: gost_check(ec::gost::r34102012::ec256c{}, streebog<256>{}); break;
+                case parameters::signature_scheme::gostr34102012_256d: gost_check(ec::gost::r34102012::ec256d{}, streebog<256>{}); break;
+                case parameters::signature_scheme::gostr34102012_512a: gost_check(ec::gost::r34102012::ec512a{}, streebog<512>{}); break;
+                case parameters::signature_scheme::gostr34102012_512b: gost_check(ec::gost::r34102012::ec512b{}, streebog<512>{}); break;
+                case parameters::signature_scheme::gostr34102012_512c: gost_check(ec::gost::r34102012::ec512c{}, streebog<512>{}); break;
+                case parameters::signature_scheme::rsa_pss_rsae_sha256: rsa_sha2.template operator()<256>(); break;
+                case parameters::signature_scheme::rsa_pss_rsae_sha384: rsa_sha2.template operator()<384>(); break;
+                case parameters::signature_scheme::rsa_pss_rsae_sha512: rsa_sha2.template operator()<512>(); break;
                 default:
-                    throw std::runtime_error{"not impl"};
+                    throw std::runtime_error{"not impl: parameters::signature_scheme certificate verify"};
                 }
                 break;
             }
