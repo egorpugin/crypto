@@ -107,11 +107,74 @@ struct private_key {
         return em;
     }
     template <auto Bits>
-    auto sign(auto &&m) {
+    auto sign_pkcs1(auto &&m) {
         auto em = op<Bits>(m, n);
         auto h = bytes_to_bigint(em);
         h = h.powm(d, n);
         return h.to_string(em.size());
+    }
+
+    template <auto Bits>
+    static auto mgf1(auto &&p, auto &&sz, auto &&seed) {
+        for (u32 i = 0, outlen = 0; outlen < sz; ++i) {
+            sha2<Bits> h;
+            h.update(seed);
+            auto counter = std::byteswap(i);
+            h.update((const u8 *)&counter, 4);
+            auto r = h.digest();
+            auto to_copy = std::min<int>(sz - outlen, r.size());
+            memcpy(p + outlen, r.data(), to_copy);
+            outlen += to_copy;
+        }
+    }
+    template <auto Bits>
+    auto sign_pss_mgf1(auto &&m) {
+        static constexpr unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+        // PKCS1_PSS_mgf1
+        // RSA_PKCS1_PSS_PADDING; salt size = hash size
+        auto mhash = sha2<Bits>::digest(m);
+        auto hlen = mhash.size();
+        auto slen = hlen; // same size
+        auto emlen = n.size();
+        std::string em(emlen, 0);
+        auto embits = (emlen * 8 - 1) & 0x7;
+        auto EM = em.data();
+        if (embits == 0) {
+            *EM++ = 0;
+            --emlen;
+        }
+        if (emlen < hlen + slen + 2) {
+            throw std::runtime_error{"encoding error"};
+        }
+        std::string salt(hlen, 0);
+        get_random_secure_bytes(salt);
+
+        auto masked_db_len = emlen - hlen - 1;
+        auto H = EM + masked_db_len;
+        sha2<Bits> hh;
+        hh.update(zeroes);
+        hh.update(mhash);
+        hh.update(salt);
+        auto mseed = hh.digest();
+        memcpy(H, mseed.data(), mseed.size());
+
+        mgf1<Bits>(EM, masked_db_len, mseed);
+
+        auto p = EM;
+        p += emlen - hlen - slen - 2;
+        *p++ ^= 0x01;
+        for (int i = 0; i < slen; ++i) {
+            *p++ ^= salt[i];
+        }
+        if (embits) {
+            EM[0] &= 0xFF >> (8 - embits);
+        }
+        EM[emlen - 1] = 0xbc;
+
+        //
+        auto h = bytes_to_bigint(em);
+        return encrypt(h).to_string(em.size());
     }
 };
 struct public_key {
@@ -166,11 +229,58 @@ struct public_key {
     }
 
     template <auto Bits>
-    bool verify(auto &&message, auto &&signature) {
+    bool verify_pkcs1(auto &&message, auto &&signature) {
         auto em = private_key::op<Bits>(message, n);
         auto h = bytes_to_bigint(signature);
         h = h.powm(e, n);
         return bytes_concept{em} == bytes_concept{h.to_string(n.size())};
+    }
+
+    template <auto Bits>
+    bool verify_pss_mgf1(auto &&m, auto &&signature) {
+        static constexpr unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+        auto h = bytes_to_bigint(signature);
+        auto em = decrypt(h).to_string(signature.size());
+
+        auto mhash = sha2<Bits>::digest(m);
+        auto hlen = mhash.size();
+        auto slen = hlen;
+        auto emlen = em.size();
+        auto embits = (emlen * 8 - 1) & 0x7;
+        auto EM = em.data();
+        if (embits == 0) {
+            *EM++ = 0;
+            --emlen;
+        }
+        if (emlen < hlen + slen + 2) {
+            return false; // inconsistent
+        }
+        if ((u8)EM[emlen - 1] != 0xbc) {
+            return false; // inconsistent
+        }
+        auto masked_db_len = emlen - hlen - 1;
+        auto H = EM + masked_db_len;
+        std::string db(masked_db_len, 0);
+        std::string_view mseed{H, hlen};
+        private_key::mgf1<Bits>(db.data(), masked_db_len, mseed);
+        for (int i = 0; i < masked_db_len; ++i) {
+            db[i] ^= EM[i];
+        }
+        if (embits) {
+            db[0] &= 0xFF >> (8 - embits);
+        }
+        int i;
+        for (i = 0; db[i] == 0 && i < masked_db_len - 1; i++){}
+        if (db[i++] != 0x1) {
+            return false;
+        }
+
+        sha2<Bits> hh;
+        hh.update(zeroes);
+        hh.update(mhash);
+        hh.update((const u8 *)db.data() + i, masked_db_len - i);
+        return bytes_concept{mseed} == bytes_concept{hh.digest()};
     }
 };
 

@@ -34,118 +34,22 @@ struct jwt {
             return std::format("RS{}", Bits);
         }
         auto sign(auto &&m, auto &&pkey) {
-            return pkey.template sign<Bits>(m);
+            return pkey.template sign_pkcs1<Bits>(m);
         }
         bool verify(auto &&m, auto &&signature, auto &&pubkey) {
-            return pubkey.template verify<Bits>(m, signature);
+            return pubkey.template verify_pkcs1<Bits>(m, signature);
         }
     };
     template <auto Bits>
     struct pkcs1_pss_mgf1_sha2 {
-        static inline constexpr unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
         static auto name() {
             return std::format("PS{}", Bits);
         }
-        static auto pkcs1_mgf1(auto &&p, auto &&sz, auto &&seed) {
-            for (u32 i = 0, outlen = 0; outlen < sz; ++i) {
-                sha2<Bits> h;
-                h.update(seed);
-                auto counter = std::byteswap(i);
-                h.update((const u8 *)&counter, 4);
-                auto r = h.digest();
-                auto to_copy = std::min<int>(sz - outlen, r.size());
-                memcpy(p + outlen, r.data(), to_copy);
-                outlen += to_copy;
-            }
-        }
         auto sign(auto &&m, auto &&pkey) {
-            // PKCS1_PSS_mgf1
-            // RSA_PKCS1_PSS_PADDING; salt size = hash size
-            auto mhash = sha2<Bits>::digest(m);
-            auto hlen = mhash.size();
-            auto slen = hlen; // same size
-            auto emlen = pkey.n.size();
-            std::string em(emlen, 0);
-            auto embits = (emlen * 8 - 1) & 0x7;
-            auto EM = em.data();
-            if (embits == 0) {
-                *EM++ = 0;
-                --emlen;
-            }
-            if (emlen < hlen + slen + 2) {
-                throw std::runtime_error{"encoding error"};
-            }
-            std::string salt(hlen, 0);
-            get_random_secure_bytes(salt);
-
-            auto masked_db_len = emlen - hlen - 1;
-            auto H = EM + masked_db_len;
-            sha2<Bits> hh;
-            hh.update(zeroes);
-            hh.update(mhash);
-            hh.update(salt);
-            auto mseed = hh.digest();
-            memcpy(H, mseed.data(), mseed.size());
-
-            pkcs1_mgf1(EM, masked_db_len, mseed);
-
-            auto p = EM;
-            p += emlen - hlen - slen - 2;
-            *p++ ^= 0x01;
-            for (int i = 0; i < slen; ++i) {
-                *p++ ^= salt[i];
-            }
-            if (embits) {
-                EM[0] &= 0xFF >> (8 - embits);
-            }
-            EM[emlen - 1] = 0xbc;
-
-            //
-            auto h = bytes_to_bigint(em);
-            return pkey.encrypt(h).to_string(em.size());
+            return pkey.template sign_pss_mgf1<Bits>(m);
         }
         bool verify(auto &&m, auto &&signature, auto &&pubkey) {
-            auto h = bytes_to_bigint(signature);
-            auto em = pubkey.decrypt(h).to_string(signature.size());
-
-            auto mhash = sha2<Bits>::digest(m);
-            auto hlen = mhash.size();
-            auto slen = hlen;
-            auto emlen = em.size();
-            auto embits = (emlen * 8 - 1) & 0x7;
-            auto EM = em.data();
-            if (embits == 0) {
-                *EM++ = 0;
-                --emlen;
-            }
-            if (emlen < hlen + slen + 2) {
-                return false; // inconsistent
-            }
-            if ((u8)EM[emlen - 1] != 0xbc) {
-                return false; // inconsistent
-            }
-            auto masked_db_len = emlen - hlen - 1;
-            auto H = EM + masked_db_len;
-            std::string db(masked_db_len, 0);
-            std::string_view mseed{H, hlen};
-            pkcs1_mgf1(db.data(), masked_db_len, mseed);
-            for (int i = 0; i < masked_db_len; ++i) {
-                db[i] ^= EM[i];
-            }
-            if (embits) {
-                db[0] &= 0xFF >> (8 - embits);
-            }
-            int i;
-            for (i = 0; db[i] == 0 && i < masked_db_len - 1; i++){}
-            if (db[i++] != 0x1) {
-                return false;
-            }
-
-            sha2<Bits> hh;
-            hh.update(zeroes);
-            hh.update(mhash);
-            hh.update((const u8 *)db.data() + i, masked_db_len - i);
-            return bytes_concept{mseed} == bytes_concept{hh.digest()};
+            return pubkey.template verify_pss_mgf1<Bits>(m, signature);
         }
     };
 
