@@ -72,6 +72,8 @@ struct tls13_ {
                 return bump_nonce();
             }
             void make_keys(auto &&input_secret, auto &&h) {
+                using namespace tls13;
+
                 auto s = std::format("{} {} traffic", (string_view)Peer, (string_view)Type);
                 secret = derive_secret<hash>(input_secret, s, h);
                 key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
@@ -83,6 +85,8 @@ struct tls13_ {
                 }
             }
             void update_keys() {
+                using namespace tls13;
+
                 record_id = 0;
                 secret = hkdf_expand_label<hash, hash::digest_size_bytes>(secret, "traffic upd");
                 key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
@@ -124,6 +128,8 @@ struct tls13_ {
         peer_pair<"ap"_s> traffic;
 
         auto make_handshake_keys(auto &&shared) {
+            using namespace tls13;
+
             std::array<u8, hash::digest_size_bytes> zero_bytes{};
             auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
             auto derived = derive_secret<hash>(early_secret, "derived"s);
@@ -131,6 +137,8 @@ struct tls13_ {
             handshake.make_keys(handshake_secret, h);
         }
         auto make_master_keys() {
+            using namespace tls13;
+
             std::array<u8, hash::digest_size_bytes> zero_bytes{};
             auto derived = derive_secret<hash>(handshake.secret, "derived"s);
             auto master_secret = hkdf_extract<hash>(derived, zero_bytes);
@@ -256,7 +264,9 @@ struct tls13_ {
                               // cn
                               suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>>;
     using all_key_exchanges =
-        key_exchanges<key_exchange<curve25519, parameters::supported_groups::x25519>, key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
+        key_exchanges<
+                      key_exchange<curve25519, parameters::supported_groups::x25519>,
+                      key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
                       key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
                       // ru
                       key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,
@@ -278,7 +288,7 @@ struct tls13_ {
         //
         parameters::signature_scheme::ecdsa_secp384r1_sha384,
         parameters::signature_scheme::ed25519,
-        parameters::signature_scheme::ecdsa_sha1, // remove? some sha1 certs may have long time period
+        parameters::signature_scheme::ecdsa_sha1, // remove? some sha1 certs may have long time period. ca only?
         parameters::signature_scheme::rsa_pss_pss_sha256,
         // ru
         parameters::signature_scheme::gostr34102012_256a,
@@ -342,9 +352,6 @@ struct tls13_ {
                 co_await receive(s);
                 break;
             }
-            /*if (crypted_exchange && h.type != parameters::content_type::application_data) {
-                throw std::runtime_error{"bad tls message"};
-            }*/
             switch (h.type) {
             case parameters::content_type::handshake:
                 crypted_exchange = true;
@@ -558,7 +565,7 @@ struct tls13_ {
             key_share &k = w;
             {
                 visit(kex, [&](auto &&ke) {
-                    using key_exchange = std::decay_t<decltype(ke)>::type;
+                    using key_exchange_type = std::decay_t<decltype(ke)>::type;
 
                     ube16 &len = w;
                     k.length += sizeof(len);
@@ -567,8 +574,8 @@ struct tls13_ {
                     ube16 &scheme = w;
                     scheme = ke.group_name;
                     ube16 &length = w;
-                    length = key_exchange::key_size;
-                    array<key_exchange::key_size> &key = w;
+                    length = key_exchange_type::key_size;
+                    array<key_exchange_type::key_size> &key = w;
                     ke.private_key.private_key();
                     ke.private_key.public_key(key);
 
@@ -699,7 +706,7 @@ struct tls13_ {
                         }
                     }
                 });
-                if (len2)
+                if (len2) {
                     visit(kex, [&](auto &&k) {
                         uint16_t len = s.read();
                         if (len != 0 && !hello_retry_request) {
@@ -710,6 +717,7 @@ struct tls13_ {
                         }
                         s.step(len);
                     });
+                }
                 break;
             }
             case tls13::ExtensionType::supported_versions: {
@@ -921,6 +929,14 @@ struct tls13_ {
                         throw std::runtime_error{"bad signature"};
                     }
                 };
+                auto rsa_pkcs1_sha2 = [&]<auto Bits>() {
+                    sha2<Bits> h;
+                    h.update(hs);
+                    auto pubk = rsa::public_key::load(pubkey_data);
+                    if (!pubk.verify_pkcs1<Bits>(hs, data)) {
+                        throw std::runtime_error{"bad signature"};
+                    }
+                };
                 auto ecdsa_check = [&](auto &&c, auto &&h) {
                     auto r = a.get<asn1_integer>(0,0);
                     auto s = a.get<asn1_integer>(0,1);
@@ -949,9 +965,11 @@ struct tls13_ {
                 case parameters::signature_scheme::gostr34102012_512a: gost_check(ec::gost::r34102012::ec512a{}, streebog<512>{}); break;
                 case parameters::signature_scheme::gostr34102012_512b: gost_check(ec::gost::r34102012::ec512b{}, streebog<512>{}); break;
                 case parameters::signature_scheme::gostr34102012_512c: gost_check(ec::gost::r34102012::ec512c{}, streebog<512>{}); break;
+                //case parameters::signature_scheme::rsa_pkcs1_sha256: rsa_pkcs1_sha2.template operator()<256>(); break; // not tested
                 case parameters::signature_scheme::rsa_pss_rsae_sha256: rsa_sha2.template operator()<256>(); break;
                 case parameters::signature_scheme::rsa_pss_rsae_sha384: rsa_sha2.template operator()<384>(); break;
                 case parameters::signature_scheme::rsa_pss_rsae_sha512: rsa_sha2.template operator()<512>(); break;
+                //case parameters::signature_scheme::sm2sig_sm3: break; // check examples in wolfssl
                 default:
                     throw std::runtime_error{"not impl: parameters::signature_scheme certificate verify"};
                 }

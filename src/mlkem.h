@@ -6,6 +6,9 @@
 #include "random.h"
 #include "sha3.h"
 
+// check mlkem in boring ssl
+// https://boringssl.googlesource.com/boringssl.git/+/chromium-stable/crypto/mlkem/mlkem.cc
+
 namespace crypto {
 
 namespace ml_kem_field {
@@ -36,7 +39,7 @@ private:
     // Note, v is always kept in its canonical form i.e. v ∈ [0, Q).
     uint32_t v = 0u;
 
-    // Given a 32 -bit unsigned integer `v` such that `v` ∈ [0, 2*Q), this routine can be invoked for reducing `v` modulo prime Q.
+    // Given a 32-bit unsigned integer `v` such that `v` ∈ [0, 2*Q), this routine can be invoked for reducing `v` modulo prime Q.
     static constexpr uint32_t reduce_once(const uint32_t v) {
         const uint32_t t0 = v - Q;
         const uint32_t t1 = -(t0 >> 31);
@@ -560,10 +563,6 @@ constexpr void generate_vector(std::span<ml_kem_field::zq_t, k * ml_kem_ntt::N> 
     }
 }
 
-} // namespace ml_kem_utils
-
-namespace ml_kem_utils {
-
 // Given a degree-255 polynomial, where significant portion of each ( total 256 of them ) coefficient ∈ [0, 2^l),
 // this routine serializes the polynomial to a byte array of length 32 * l -bytes.
 //
@@ -837,10 +836,6 @@ constexpr void decode(std::span<const uint8_t, 32 * l> arr, std::span<ml_kem_fie
     }
 }
 
-} // namespace ml_kem_utils
-
-namespace ml_kem_utils {
-
 // Given an element x ∈ Z_q | q = 3329, this routine compresses it by discarding some low-order bits, computing y ∈ [0, 2^d) | d < round(log2(q)).
 //
 // See formula 4.7 on page 21 of ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
@@ -897,10 +892,6 @@ constexpr void poly_decompress(std::span<ml_kem_field::zq_t, ml_kem_ntt::N> poly
         poly[i] = decompress<d>(poly[i]);
     }
 }
-
-} // namespace ml_kem_utils
-
-namespace ml_kem_utils {
 
 // Given two matrices ( in NTT domain ) of compatible dimension, where each matrix element is a degree-255 polynomial over Z_q | q = 3329,
 // this routine multiplies them, computing a resulting matrix.
@@ -1123,8 +1114,8 @@ constexpr void ct_cond_memcpy(const uint32_t cond, std::span<uint8_t, n> sink, s
 
 template <auto k, auto eta1, auto du, auto dv>
 struct mlkem_base {
-    static inline constexpr auto n = 256;
-    static inline constexpr auto q = 3329;
+    static inline constexpr auto n = 256; // degree
+    static inline constexpr auto q = 3329; // prime
     static inline constexpr auto eta2 = 2;
 
     static inline constexpr auto pke_privkey_size = k * 12 * 32;

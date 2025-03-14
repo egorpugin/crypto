@@ -48,18 +48,17 @@ struct sm3 {
         return h.digest();
     }
 
-#define rol(x,y) std::rotl(x,y)
 /*
   Transform the message X which consists of 16 32-bit-words. See
   GM/T 004-2012 for details.  */
 #define R(i,a,b,c,d,e,f,g,h,t,w1,w2) do                               \
           {                                                           \
-            ss1 = rol ((rol ((a), 12) + (e) + (t)), 7);               \
-            ss2 = ss1 ^ rol ((a), 12);                                \
+            ss1 = std::rotl ((std::rotl ((a), 12) + (e) + (t)), 7);               \
+            ss2 = ss1 ^ std::rotl ((a), 12);                                \
             d += FF##i(a,b,c) + ss2 + ((w1) ^ (w2));                  \
             h += GG##i(e,f,g) + ss1 + (w1);                           \
-            b = rol ((b), 9);                                         \
-            f = rol ((f), 19);                                        \
+            b = std::rotl ((b), 9);                                         \
+            f = std::rotl ((f), 19);                                        \
             h = P0 ((h));                                             \
           } while (0)
 
@@ -73,12 +72,12 @@ struct sm3 {
 #define GG2(x, y, z) ((x & y) | (~x & z))
 
 /* Message expansion */
-#define P0(x) ((x) ^ rol((x), 9) ^ rol((x), 17))
-#define P1(x) ((x) ^ rol((x), 15) ^ rol((x), 23))
+#define P0(x) ((x) ^ std::rotl((x), 9) ^ std::rotl((x), 17))
+#define P1(x) ((x) ^ std::rotl((x), 15) ^ std::rotl((x), 23))
 #define I(i) (w[i] = std::byteswap(*(u32 *)(m_data + i * 4)))
 #define W1(i) (w[i & 0x0f])
 #define W2(i)                                                                                                          \
-    (w[i & 0x0f] = P1(w[i & 0x0f] ^ w[(i - 9) & 0x0f] ^ rol(w[(i - 3) & 0x0f], 15)) ^ rol(w[(i - 13) & 0x0f], 7) ^     \
+    (w[i & 0x0f] = P1(w[i & 0x0f] ^ w[(i - 9) & 0x0f] ^ std::rotl(w[(i - 3) & 0x0f], 15)) ^ std::rotl(w[(i - 13) & 0x0f], 7) ^     \
                    w[(i - 6) & 0x0f])
 
     void transform() {
@@ -181,13 +180,11 @@ struct sm3 {
         this->h[6] ^= g;
         this->h[7] ^= h;
     }
-#undef rol
 #undef P0
 #undef P1
 #undef R
 #undef R1
 #undef R2
-#undef rol
 #undef FF1
 #undef FF2
 #undef GG1

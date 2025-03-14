@@ -221,7 +221,8 @@ struct hkdf {
     }
 };
 
-// tls 1.3
+namespace tls13 {
+
 template <typename Hash, auto Len = Hash::digest_size_bytes>
 auto hkdf_expand_label(auto &&secret, auto &&label, auto &&ctx) {
     auto protocol = "tls13 "s;
@@ -243,6 +244,8 @@ template <typename Hash>
 auto derive_secret(auto &&secret, auto &&label, Hash h = {}) {
     return hkdf_expand_label<Hash>(secret, label, h.digest());
 }
+
+} // namespace tls13
 
 namespace gost {
 

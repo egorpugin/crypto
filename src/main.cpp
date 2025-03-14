@@ -111,12 +111,12 @@ auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right) {
         std::cout << left;
         std::cout << "right:" << "\n";
         std::cout << right;
-        std::cout << "xored:" << "\n";
-        auto sz = std::min(left.size(), right.size());
-        for (int i = 0; i < sz; ++i) {
-            right[i] ^= left[i];
-        }
-        std::cout << right;
+        //std::cout << "xored:" << "\n";
+        //auto sz = std::min(left.size(), right.size());
+        //for (int i = 0; i < sz; ++i) {
+        //    right[i] ^= left[i];
+        //}
+        //std::cout << right;
     }
     return r;
 };
@@ -2199,6 +2199,10 @@ void test_tls() {
         run0(t, url);
     };
 
+    run("nalog.gov.ru");
+    run("gmail.com");
+    run_with_params("gmail.com", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
+
     run_with_params("tls13.1d.pw", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
     run_with_params("tls13.akamai.io", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
 
@@ -2665,10 +2669,10 @@ auto test_all() {
     test_grasshopper();
     test_mgm();
     test_gost();
-    test_tls();
     test_jwt();
     test_hpke();
     test_mlkem();
+    test_tls();
     return success != total;
 }
 
@@ -2712,11 +2716,11 @@ int main() {
     //test_grasshopper();
     //test_mgm();
     //test_gost();
-    //
-    test_tls();
     //test_jwt();
     //test_hpke();
     //test_mlkem();
+    //
+    test_tls();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
