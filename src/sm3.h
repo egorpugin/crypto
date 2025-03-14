@@ -51,16 +51,16 @@ struct sm3 {
 /*
   Transform the message X which consists of 16 32-bit-words. See
   GM/T 004-2012 for details.  */
-#define R(i,a,b,c,d,e,f,g,h,t,w1,w2) do                               \
-          {                                                           \
-            ss1 = std::rotl ((std::rotl ((a), 12) + (e) + (t)), 7);               \
-            ss2 = ss1 ^ std::rotl ((a), 12);                                \
-            d += FF##i(a,b,c) + ss2 + ((w1) ^ (w2));                  \
-            h += GG##i(e,f,g) + ss1 + (w1);                           \
-            b = std::rotl ((b), 9);                                         \
-            f = std::rotl ((f), 19);                                        \
-            h = P0 ((h));                                             \
-          } while (0)
+#define R(i, a, b, c, d, e, f, g, h, t, w1, w2)                                                                                                                \
+    do {                                                                                                                                                       \
+        ss1 = std::rotl((std::rotl((a), 12) + (e) + (t)), 7);                                                                                                  \
+        ss2 = ss1 ^ std::rotl((a), 12);                                                                                                                        \
+        d += FF##i(a, b, c) + ss2 + ((w1) ^ (w2));                                                                                                             \
+        h += GG##i(e, f, g) + ss1 + (w1);                                                                                                                      \
+        b = std::rotl((b), 9);                                                                                                                                 \
+        f = std::rotl((f), 19);                                                                                                                                \
+        h = P0((h));                                                                                                                                           \
+    } while (0)
 
 #define R1(a, b, c, d, e, f, g, h, t, w1, w2) R(1, a, b, c, d, e, f, g, h, t, w1, w2)
 #define R2(a, b, c, d, e, f, g, h, t, w1, w2) R(2, a, b, c, d, e, f, g, h, t, w1, w2)
@@ -76,20 +76,16 @@ struct sm3 {
 #define P1(x) ((x) ^ std::rotl((x), 15) ^ std::rotl((x), 23))
 #define I(i) (w[i] = std::byteswap(*(u32 *)(m_data + i * 4)))
 #define W1(i) (w[i & 0x0f])
-#define W2(i)                                                                                                          \
-    (w[i & 0x0f] = P1(w[i & 0x0f] ^ w[(i - 9) & 0x0f] ^ std::rotl(w[(i - 3) & 0x0f], 15)) ^ std::rotl(w[(i - 13) & 0x0f], 7) ^     \
-                   w[(i - 6) & 0x0f])
+#define W2(i) (w[i & 0x0f] = P1(w[i & 0x0f] ^ w[(i - 9) & 0x0f] ^ std::rotl(w[(i - 3) & 0x0f], 15)) ^ std::rotl(w[(i - 13) & 0x0f], 7) ^ w[(i - 6) & 0x0f])
 
     void transform() {
-        static const u32 K[64] = {
-            0x79cc4519, 0xf3988a32, 0xe7311465, 0xce6228cb, 0x9cc45197, 0x3988a32f, 0x7311465e, 0xe6228cbc,
-            0xcc451979, 0x988a32f3, 0x311465e7, 0x6228cbce, 0xc451979c, 0x88a32f39, 0x11465e73, 0x228cbce6,
-            0x9d8a7a87, 0x3b14f50f, 0x7629ea1e, 0xec53d43c, 0xd8a7a879, 0xb14f50f3, 0x629ea1e7, 0xc53d43ce,
-            0x8a7a879d, 0x14f50f3b, 0x29ea1e76, 0x53d43cec, 0xa7a879d8, 0x4f50f3b1, 0x9ea1e762, 0x3d43cec5,
-            0x7a879d8a, 0xf50f3b14, 0xea1e7629, 0xd43cec53, 0xa879d8a7, 0x50f3b14f, 0xa1e7629e, 0x43cec53d,
-            0x879d8a7a, 0x0f3b14f5, 0x1e7629ea, 0x3cec53d4, 0x79d8a7a8, 0xf3b14f50, 0xe7629ea1, 0xcec53d43,
-            0x9d8a7a87, 0x3b14f50f, 0x7629ea1e, 0xec53d43c, 0xd8a7a879, 0xb14f50f3, 0x629ea1e7, 0xc53d43ce,
-            0x8a7a879d, 0x14f50f3b, 0x29ea1e76, 0x53d43cec, 0xa7a879d8, 0x4f50f3b1, 0x9ea1e762, 0x3d43cec5};
+        static const u32 K[64] = {0x79cc4519, 0xf3988a32, 0xe7311465, 0xce6228cb, 0x9cc45197, 0x3988a32f, 0x7311465e, 0xe6228cbc, 0xcc451979, 0x988a32f3,
+                                  0x311465e7, 0x6228cbce, 0xc451979c, 0x88a32f39, 0x11465e73, 0x228cbce6, 0x9d8a7a87, 0x3b14f50f, 0x7629ea1e, 0xec53d43c,
+                                  0xd8a7a879, 0xb14f50f3, 0x629ea1e7, 0xc53d43ce, 0x8a7a879d, 0x14f50f3b, 0x29ea1e76, 0x53d43cec, 0xa7a879d8, 0x4f50f3b1,
+                                  0x9ea1e762, 0x3d43cec5, 0x7a879d8a, 0xf50f3b14, 0xea1e7629, 0xd43cec53, 0xa879d8a7, 0x50f3b14f, 0xa1e7629e, 0x43cec53d,
+                                  0x879d8a7a, 0x0f3b14f5, 0x1e7629ea, 0x3cec53d4, 0x79d8a7a8, 0xf3b14f50, 0xe7629ea1, 0xcec53d43, 0x9d8a7a87, 0x3b14f50f,
+                                  0x7629ea1e, 0xec53d43c, 0xd8a7a879, 0xb14f50f3, 0x629ea1e7, 0xc53d43ce, 0x8a7a879d, 0x14f50f3b, 0x29ea1e76, 0x53d43cec,
+                                  0xa7a879d8, 0x4f50f3b1, 0x9ea1e762, 0x3d43cec5};
 
         u32 a, b, c, d, e, f, g, h, ss1, ss2;
         u32 w[16];
@@ -191,18 +187,18 @@ struct sm3 {
 #undef GG2
 
     void pad() {
-      if (blockpos < 56) {
+        if (blockpos < 56) {
             m_data[blockpos++] = 0x80;
             memset(m_data + blockpos, 0, 56 - blockpos);
             blockpos = 56;
-      } else {
+        } else {
             m_data[blockpos++] = 0x80;
             memset(m_data + blockpos, 0, 64 - blockpos);
             transform();
             memset(m_data, 0, blockpos = 56);
-      }
-      *(u64 *)(m_data + blockpos) = std::byteswap(bitlen);
-      transform();
+        }
+        *(u64 *)(m_data + blockpos) = std::byteswap(bitlen);
+        transform();
     }
 };
 

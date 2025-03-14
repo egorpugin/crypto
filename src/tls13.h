@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include <array>
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <ranges>
 #include <type_traits>
@@ -26,7 +26,7 @@ template <auto Bytes>
 using length_type = bigendian_unsigned<Bytes>;
 
 using ube16 = bigendian_unsigned<2>;
-using Random = std::array<u8,32>;
+using Random = std::array<u8, 32>;
 
 // selected ciphers:
 // aes+gcm, chacha20+poly1305, russian gost, chineese sm4
@@ -62,9 +62,9 @@ enum class ExtensionType : uint16_t {
     client_certificate_type = 19,                /* RFC 7250 */
     server_certificate_type = 20,                /* RFC 7250 */
 
-    pre_shared_key = 41,         /* RFC 8446 */
-    early_data = 42,             /* RFC 8446 */
-    cookie = 44,                 /* RFC 8446 */
+    pre_shared_key = 41, /* RFC 8446 */
+    early_data = 42,     /* RFC 8446 */
+    cookie = 44,         /* RFC 8446 */
 
     certificate_authorities = 47,   /* RFC 8446 */
     oid_filters = 48,               /* RFC 8446 */
@@ -146,7 +146,9 @@ struct TLSPlaintext {
     ProtocolVersion legacy_record_version = tls_version::tls12;
     length_type<2> length;
 
-    size_t size() const { return length; }
+    size_t size() const {
+        return length;
+    }
 };
 
 struct TLSCiphertext {
@@ -185,4 +187,4 @@ enum class KeyUpdateRequest : u8 {
 
 #pragma pack(pop)
 
-} // namespace crypto::tls::tls13
+} // namespace crypto::tls13

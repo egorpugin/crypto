@@ -14,13 +14,13 @@
 #include "hmac.h"
 #include "magma.h"
 #include "mgm.h"
+#include "mlkem.h"
 #include "random.h"
 #include "sm3.h"
 #include "sm4.h"
 #include "streebog.h"
 #include "tls13.h"
 #include "x509.h"
-#include "mlkem.h"
 
 #include <boost/asio.hpp>
 
@@ -190,9 +190,12 @@ struct tls13_ {
         using type = T;
         static inline constexpr auto group_name = Value;
 
-        template <typename U> struct type_v {using type = U;};
+        template <typename U>
+        struct type_v {
+            using type = U;
+        };
         static consteval auto pkt() {
-            if constexpr (requires {typename type::peer_key_type;}) {
+            if constexpr (requires { typename type::peer_key_type; }) {
                 return type_v<type::peer_key_type>{};
             } else {
                 return type_v<type::public_key_type>{};
@@ -223,15 +226,15 @@ struct tls13_ {
         }
         void public_key(auto &&key) {
             memcpy(key.data(), m.public_key_.data(), m.public_key_.size());
-            ec.public_key(bytes_concept{key.data() + m.public_key_.size(),sizeof(curve25519::public_key_type)});
+            ec.public_key(bytes_concept{key.data() + m.public_key_.size(), sizeof(curve25519::public_key_type)});
         }
         auto shared_secret(const peer_key_type &peer_public_key) {
-            array<32+32> shared_secret;
+            array<32 + 32> shared_secret;
             array<mlkem_type::shared_secret_byte_len> ss;
             m.decapsulate(std::span{peer_public_key}.first<mlkem_type::kem_cipher_text_len>(), ss);
-            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len,sizeof(curve25519::public_key_type)});
+            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len, sizeof(curve25519::public_key_type)});
             memcpy(shared_secret.data(), ss.data(), 32);
-            memcpy(shared_secret.data()+32, ss2.data(), 32);
+            memcpy(shared_secret.data() + 32, ss2.data(), 32);
             return shared_secret;
         }
     };
@@ -264,9 +267,7 @@ struct tls13_ {
                               // cn
                               suite_<gcm<sm4_encrypt>, sm3, tls13::CipherSuite::TLS_SM4_GCM_SM3>>;
     using all_key_exchanges =
-        key_exchanges<
-                      key_exchange<curve25519, parameters::supported_groups::x25519>,
-                      key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
+        key_exchanges<key_exchange<curve25519, parameters::supported_groups::x25519>, key_exchange<ec::secp256r1, parameters::supported_groups::secp256r1>,
                       key_exchange<ec::secp384r1, parameters::supported_groups::secp384r1>,
                       // ru
                       key_exchange<ec::gost::r34102012::ec256a, parameters::supported_groups::GC256A>,
@@ -279,8 +280,7 @@ struct tls13_ {
                       // cn
                       key_exchange<ec::sm2, parameters::supported_groups::curveSM2>,
                       // ml-kem
-                      key_exchange<X25519MLKEM768, parameters::supported_groups::X25519MLKEM768>
-        >;
+                      key_exchange<X25519MLKEM768, parameters::supported_groups::X25519MLKEM768>>;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory
         parameters::signature_scheme::rsa_pkcs1_sha256,       // mandatory
@@ -511,8 +511,8 @@ struct tls13_ {
                     su = s.suite();
                     ++n_suites;
                     if (!hello_retry_request && visit(suite, [&](auto &&s) {
-                            return s.suite();
-                        }) != force_suite) {
+                                                    return s.suite();
+                                                }) != force_suite) {
                         suite = s;
                     }
                 }
@@ -912,7 +912,7 @@ struct tls13_ {
                 asn1 a{data};
                 auto hs = visit(suite, [&](auto &&s) {
                     const auto context_string = "TLS 1.3, server CertificateVerify"s;
-                    //constexpr auto context_string = "TLS 1.3, client CertificateVerify"s;
+                    // constexpr auto context_string = "TLS 1.3, client CertificateVerify"s;
                     auto h = s.h;
                     auto d = h.digest();
                     std::string hs(64 + context_string.size() + 1 + d.size(), ' ');
@@ -938,8 +938,8 @@ struct tls13_ {
                     }
                 };
                 auto ecdsa_check = [&](auto &&c, auto &&h) {
-                    auto r = a.get<asn1_integer>(0,0);
-                    auto s = a.get<asn1_integer>(0,1);
+                    auto r = a.get<asn1_integer>(0, 0);
+                    auto s = a.get<asn1_integer>(0, 1);
                     h.update(hs);
                     if (!c.verify(h.digest(), pubkey_data, r.data, s.data)) {
                         throw std::runtime_error{"bad signature"};
@@ -955,21 +955,47 @@ struct tls13_ {
                 };
 
                 switch (scheme) {
-                case parameters::signature_scheme::ecdsa_secp256r1_sha256: ecdsa_check(ec::secp256r1{}, sha2<256>{}); break;
-                case parameters::signature_scheme::ecdsa_secp384r1_sha384: ecdsa_check(ec::secp384r1{}, sha2<384>{}); break;
-                case parameters::signature_scheme::ecdsa_secp521r1_sha512: ecdsa_check(ec::secp521r1{}, sha2<512>{}); break;
-                case parameters::signature_scheme::gostr34102012_256a: gost_check(ec::gost::r34102012::ec256a{}, streebog<256>{}); break;
-                case parameters::signature_scheme::gostr34102012_256b: gost_check(ec::gost::r34102012::ec256b{}, streebog<256>{}); break;
-                case parameters::signature_scheme::gostr34102012_256c: gost_check(ec::gost::r34102012::ec256c{}, streebog<256>{}); break;
-                case parameters::signature_scheme::gostr34102012_256d: gost_check(ec::gost::r34102012::ec256d{}, streebog<256>{}); break;
-                case parameters::signature_scheme::gostr34102012_512a: gost_check(ec::gost::r34102012::ec512a{}, streebog<512>{}); break;
-                case parameters::signature_scheme::gostr34102012_512b: gost_check(ec::gost::r34102012::ec512b{}, streebog<512>{}); break;
-                case parameters::signature_scheme::gostr34102012_512c: gost_check(ec::gost::r34102012::ec512c{}, streebog<512>{}); break;
-                //case parameters::signature_scheme::rsa_pkcs1_sha256: rsa_pkcs1_sha2.template operator()<256>(); break; // not tested
-                case parameters::signature_scheme::rsa_pss_rsae_sha256: rsa_sha2.template operator()<256>(); break;
-                case parameters::signature_scheme::rsa_pss_rsae_sha384: rsa_sha2.template operator()<384>(); break;
-                case parameters::signature_scheme::rsa_pss_rsae_sha512: rsa_sha2.template operator()<512>(); break;
-                //case parameters::signature_scheme::sm2sig_sm3: break; // check examples in wolfssl
+                case parameters::signature_scheme::ecdsa_secp256r1_sha256:
+                    ecdsa_check(ec::secp256r1{}, sha2<256>{});
+                    break;
+                case parameters::signature_scheme::ecdsa_secp384r1_sha384:
+                    ecdsa_check(ec::secp384r1{}, sha2<384>{});
+                    break;
+                case parameters::signature_scheme::ecdsa_secp521r1_sha512:
+                    ecdsa_check(ec::secp521r1{}, sha2<512>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_256a:
+                    gost_check(ec::gost::r34102012::ec256a{}, streebog<256>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_256b:
+                    gost_check(ec::gost::r34102012::ec256b{}, streebog<256>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_256c:
+                    gost_check(ec::gost::r34102012::ec256c{}, streebog<256>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_256d:
+                    gost_check(ec::gost::r34102012::ec256d{}, streebog<256>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_512a:
+                    gost_check(ec::gost::r34102012::ec512a{}, streebog<512>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_512b:
+                    gost_check(ec::gost::r34102012::ec512b{}, streebog<512>{});
+                    break;
+                case parameters::signature_scheme::gostr34102012_512c:
+                    gost_check(ec::gost::r34102012::ec512c{}, streebog<512>{});
+                    break;
+                // case parameters::signature_scheme::rsa_pkcs1_sha256: rsa_pkcs1_sha2.template operator()<256>(); break; // not tested
+                case parameters::signature_scheme::rsa_pss_rsae_sha256:
+                    rsa_sha2.template operator()<256>();
+                    break;
+                case parameters::signature_scheme::rsa_pss_rsae_sha384:
+                    rsa_sha2.template operator()<384>();
+                    break;
+                case parameters::signature_scheme::rsa_pss_rsae_sha512:
+                    rsa_sha2.template operator()<512>();
+                    break;
+                // case parameters::signature_scheme::sm2sig_sm3: break; // check examples in wolfssl
                 default:
                     throw std::runtime_error{"not impl: parameters::signature_scheme certificate verify"};
                 }
@@ -1169,21 +1195,22 @@ struct http_client {
     };
     http_message m;
 
-    //http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {}
-    //http_client(auto &&url) : http_client{default_io_context(), url} {}
-    http_client(const std::string &url) : url_internal{url} {}
+    // http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {}
+    // http_client(auto &&url) : http_client{default_io_context(), url} {}
+    http_client(const std::string &url) : url_internal{url} {
+    }
     void run() {
-        //run(default_io_context());
-        //run(ctx);
-    //}
-    //void run(auto &&ctx) {
+        // run(default_io_context());
+        // run(ctx);
+        //}
+        // void run(auto &&ctx) {
         boost::asio::co_spawn(ctx, run_coro(), [](auto eptr) {
             if (eptr) {
                 std::rethrow_exception(eptr);
             }
         });
         ctx.run();
-        //ctx.restart();
+        // ctx.restart();
     }
     awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
@@ -1251,12 +1278,12 @@ struct http_client {
         // std::cout << ss << "\n";
 
         tls_layer = decltype(tls_layer){
-                .s = &s,
-                .servername = host,
-                .ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
-                .ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
-                .force_suite = tls_layer.force_suite,
-                .force_kex = tls_layer.force_kex,
+            .s = &s,
+            .servername = host,
+            .ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
+            .ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
+            .force_suite = tls_layer.force_suite,
+            .force_kex = tls_layer.force_kex,
         };
 
         // http layer

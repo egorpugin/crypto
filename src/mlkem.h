@@ -1114,7 +1114,7 @@ constexpr void ct_cond_memcpy(const uint32_t cond, std::span<uint8_t, n> sink, s
 
 template <auto k, auto eta1, auto du, auto dv>
 struct mlkem_base {
-    static inline constexpr auto n = 256; // degree
+    static inline constexpr auto n = 256;  // degree
     static inline constexpr auto q = 3329; // prime
     static inline constexpr auto eta2 = 2;
 
