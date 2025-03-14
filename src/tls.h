@@ -503,7 +503,7 @@ struct tls13_ {
                     ube16 &su = w;
                     su = s.suite();
                     ++n_suites;
-                    if (visit(suite, [&](auto &&s) {
+                    if (!hello_retry_request && visit(suite, [&](auto &&s) {
                             return s.suite();
                         }) != force_suite) {
                         suite = s;
