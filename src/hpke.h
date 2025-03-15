@@ -4,6 +4,7 @@
 #include "ec.h"
 #include "ec25519.h"
 #include "chacha20_poly1305.h"
+#include "gcm.h"
 
 namespace crypto {
 
