@@ -7,7 +7,11 @@
 
 namespace crypto {
 
-struct sm3 {
+struct sm3 : hash_traits<sm3> {
+    using hash_traits = hash_traits<sm3>;
+    using hash_traits::digest;
+    using hash_traits::update;
+
     static inline constexpr auto digest_size_bytes = 256 / 8;
     static inline constexpr auto chunk_size_bytes = 64;
 
@@ -18,21 +22,11 @@ struct sm3 {
     u64 bitlen{};
     int blockpos{};
 
-    void update(bytes_concept b) noexcept {
-        update(b.data(), b.size());
-    }
     void update(const u8 *data, size_t length) noexcept {
         bitlen += length * 8;
-        return update_slow(data, length);
-    }
-    void update_slow(const u8 *data, size_t length) noexcept {
-        for (size_t i = 0; i < length; ++i) {
-            m_data[blockpos++] = data[i];
-            if (blockpos == chunk_size_bytes) {
-                transform();
-                blockpos = 0;
-            }
-        }
+        hash_traits::update_fast_post(data, length, m_data, sizeof(m_data), blockpos, [&]() {
+            transform();
+        });
     }
     auto digest() {
         pad();
@@ -41,11 +35,6 @@ struct sm3 {
             *(u32 *)(r.data() + i * 4) = std::byteswap(h[i]);
         }
         return r;
-    }
-    static auto digest(auto &&v) noexcept {
-        sm3 h;
-        h.update(v);
-        return h.digest();
     }
 
 /*
