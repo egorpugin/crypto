@@ -2090,11 +2090,11 @@ void test_tls() {
         run0(t, url);
     };
 
-    tcs.load_pem(read_file("d:/dev/wolfssl/certs/sm2/root-sm2.pem"), true);
-    run("127.0.0.1:11111");
-    run("nalog.gov.ru");
-    run("gmail.com");
-    run_with_params("gmail.com", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
+    //tcs.load_pem(read_file("d:/dev/wolfssl/certs/sm2/root-sm2.pem"), true);
+    //run("127.0.0.1:11111");
+    //run("nalog.gov.ru");
+    //run("gmail.com");
+    //run_with_params("gmail.com", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
 
     run_with_params("tls13.1d.pw", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
     run_with_params("tls13.akamai.io", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
