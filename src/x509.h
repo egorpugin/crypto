@@ -246,6 +246,7 @@ struct x509_storage {
                 constexpr auto ecdsa_with_SHA256 = make_oid<1,2,840,10045,4,3,2>();
                 constexpr auto ecdsa_with_SHA384 = make_oid<1,2,840,10045,4,3,3>();
                 constexpr auto ecdsa_with_SHA512 = make_oid<1,2,840,10045,4,3,4>();
+                constexpr auto sm2sm3 = make_oid<1, 2, 156, 10197, 1, 501>();
 
                 // rsaEncryption (PKCS #1)
                 //constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
@@ -253,7 +254,6 @@ struct x509_storage {
                 //constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
                 //constexpr auto GOST_R3410_12_256 = make_oid<1, 2, 643, 7, 1, 1, 1, 1>();
                 //constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
-                //constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
 
                 x509 issuer_cert{issuer_cert_data};
                 auto pubk_info = issuer_cert.get_tbs_field<asn1_sequence>(x509::subject_public_key_info);
@@ -335,6 +335,23 @@ struct x509_storage {
                     }
                 } else if (alg == oid::gost2012Signature512) {
                     throw std::runtime_error{"gost2012Signature512 is not impl"};
+                } else if (alg == sm2sm3) {
+                    auto r = asn1_sequence{sig}.get<asn1_integer>(0,0).data;
+                    auto s = asn1_sequence{sig}.get<asn1_integer>(0,1).data;
+                    if (!(0
+                        || ec::sm2::verify<sm3>("1234567812345678"sv, cert_raw, issuer_pubkey_data, r, s)
+                        || ec::sm2::verify<sm3>(""sv, cert_raw, issuer_pubkey_data, r, s) // test certs only?
+                        // rfc8998
+                        // In practice, the SM2 identifier used in a certificate signature
+                        // depends on the certificate authority (CA) who signs that certificate.
+                        // CAs may choose values other than the ones mentioned above.
+                        // Implementations of this document SHOULD confirm this information by
+                        // themselves.
+                        )) {
+                        throw std::runtime_error{"bad signature"};
+                    }
+                    v.trusted = true;
+                    return v.is_valid(now);
                 } else {
                     string s = alg;
                     std::cerr << "unknown x509::signature_algorithm: " << s << "\n";

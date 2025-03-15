@@ -953,6 +953,13 @@ struct tls13_ {
                         throw std::runtime_error{"bad signature"};
                     }
                 };
+                auto sm2sm3_check = [&]() {
+                    auto r = a.get<asn1_integer>(0, 0).data;
+                    auto s = a.get<asn1_integer>(0, 1).data;
+                    if (!ec::sm2::verify<sm3>("TLSv1.3+GM+Cipher+Suite"sv, hs, pubkey_data, r, s)) {
+                        throw std::runtime_error{"bad signature"};
+                    }
+                };
 
                 switch (scheme) {
                 case parameters::signature_scheme::ecdsa_secp256r1_sha256:
@@ -995,7 +1002,9 @@ struct tls13_ {
                 case parameters::signature_scheme::rsa_pss_rsae_sha512:
                     rsa_sha2.template operator()<512>();
                     break;
-                // case parameters::signature_scheme::sm2sig_sm3: break; // check examples in wolfssl
+                case parameters::signature_scheme::sm2sig_sm3:
+                    sm2sm3_check();
+                    break;
                 default:
                     throw std::runtime_error{"not impl: parameters::signature_scheme certificate verify"};
                 }

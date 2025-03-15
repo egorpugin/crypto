@@ -787,7 +787,102 @@ using ec256xchb = ec256c;
 // ShangMi (SM) Cipher Suites for TLS 1.3
 // https://www.rfc-editor.org/rfc/rfc8998.html
 
-using sm2 = secp<256, "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF"_s,
+template <auto PointSizeBits, auto ... Params>
+struct sm2_base : secp<PointSizeBits, Params...> {
+    using base = secp<PointSizeBits, Params...>;
+
+    template <typename Hash>
+    static auto za(auto &&id, auto &&pubk) {
+        Hash h;
+        uint16_t entla = id.size() * 8;
+        entla = std::byteswap(entla);
+        h.update((u8*)&entla, 2);
+        h.update(id);
+        auto add_param = [&](auto &&v) {
+            array<PointSizeBits / 8> a = bigint{v};
+            h.update(a);
+        };
+        add_param(base::parameters.a);
+        add_param(base::parameters.b);
+        add_param(base::parameters.G.x);
+        add_param(base::parameters.G.y);
+        h.update(pubk.x);
+        h.update(pubk.y);
+        return h.digest();
+    }
+
+    template <typename Hash>
+    auto sign(auto &&id, auto &&message) {
+        auto pubkey = base::public_key();
+
+        Hash h;
+        h.update(za<Hash>(id, pubkey));
+        h.update(message);
+        auto hash = h.digest();
+
+        auto ec = base::parameters.curve();
+        auto q = bigint{base::parameters.order};
+        auto e = bytes_to_bigint(hash);
+
+        bigint k = q, r, s;
+        while (1) {
+            get_random_secure_bytes(k.data(), k.size());
+            if (0 < k && k < q) {
+                auto x1 = (k * ec.G).x;
+                r = (e + x1) % q;
+                if (r == 0 || r + k == q) {
+                    continue;
+                }
+                auto da = bytes_to_bigint(base::private_key_);
+                s = (da + 1).invert(q) * (k - r * da) % q;
+                if (s == 0) {
+                    continue;
+                }
+                break;
+            }
+        }
+        return std::tuple{r.to_string(bitlen{PointSizeBits}),s.to_string(bitlen{PointSizeBits})};
+    }
+    template <typename Hash>
+    static auto verify(auto &&id, auto &&message, const base::key_type &pubkey, auto &&r, auto &&s) {
+        auto q = bigint{base::parameters.order};
+
+        auto rb = bytes_to_bigint(r);
+        auto sb = bytes_to_bigint(s);
+        if (!(0 < rb && rb < q && 0 < sb && sb < q)) {
+            return false;
+        }
+
+        Hash h;
+        h.update(za<Hash>(id, pubkey));
+        h.update(message);
+        auto hash = h.digest();
+
+        auto ec = base::parameters.curve();
+        auto e = bytes_to_bigint(hash);
+
+        auto t = (rb + sb) % q;
+        if (t == 0) {
+            return false;
+        }
+
+        decltype(ec.G) Q{ec.G.ec};
+        Q.x = bytes_to_bigint(pubkey.x);
+        Q.y = bytes_to_bigint(pubkey.y);
+
+        auto p = sb * ec.G + t * Q;
+        auto R = (e + p.x) % q;
+        return rb == R;
+    }
+    template <typename Hash>
+    static auto verify(auto &&id, auto &&message, bytes_concept pubkey_in, auto &&r, auto &&s) {
+        auto &pubkey = *(typename base::key_type *)pubkey_in.data();
+        return verify<sm3>(id,message,pubkey,r,s);
+    }
+};
+
+using sm2 = sm2_base<256,
+                 "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFF"_s,
                  "0xFFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00000000FFFFFFFFFFFFFFFC"_s,
                  "0x28E9FA9E9D9F5E344D5A9E4BCF6509A7F39789F515AB8F92DDBCBD414D940E93"_s,
 
