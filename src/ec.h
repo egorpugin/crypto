@@ -810,19 +810,19 @@ struct sm2_base : secp<PointSizeBits, Params...> {
         h.update(pubk.y);
         return h.digest();
     }
-
     template <typename Hash>
-    auto sign(auto &&id, auto &&message) {
-        auto pubkey = base::public_key();
-
+    static auto hash(auto &&id, auto &&message, auto &&pubkey) {
         Hash h;
         h.update(za<Hash>(id, pubkey));
         h.update(message);
-        auto hash = h.digest();
+        return h.digest();
+    }
 
+    template <typename Hash>
+    auto sign(auto &&id, auto &&message) {
         auto ec = base::parameters.curve();
         auto q = bigint{base::parameters.order};
-        auto e = bytes_to_bigint(hash);
+        auto e = bytes_to_bigint(hash<Hash>(id, message, base::public_key()));
 
         bigint k = q, r, s;
         while (1) {
@@ -853,13 +853,8 @@ struct sm2_base : secp<PointSizeBits, Params...> {
             return false;
         }
 
-        Hash h;
-        h.update(za<Hash>(id, pubkey));
-        h.update(message);
-        auto hash = h.digest();
-
         auto ec = base::parameters.curve();
-        auto e = bytes_to_bigint(hash);
+        auto e = bytes_to_bigint(hash<Hash>(id, message, pubkey));
 
         auto t = (rb + sb) % q;
         if (t == 0) {
