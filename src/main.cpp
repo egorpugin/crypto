@@ -2096,8 +2096,7 @@ void test_tls() {
     //run("gmail.com");
     //run_with_params("gmail.com", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
 
-    run_with_params("tls13.1d.pw", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
-    run_with_params("tls13.akamai.io", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
+    //run_with_params("tls13.1d.pw", (tls13::CipherSuite)0, parameters::supported_groups::X25519MLKEM768);
 
     ////// https://infotecs.ru/stand_tls/
     //
