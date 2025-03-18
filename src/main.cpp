@@ -26,6 +26,7 @@
 #include "sm4.h"
 #include "streebog.h"
 #include "tls.h"
+#include "dns.h"
 
 #define LOG_TEST()                                                                                                                                             \
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
@@ -2038,6 +2039,31 @@ void test_gost() {
               "a1 aa 5f 7d e4 02 d7 b3 d3 23 f2 99 1c 8d 45 34 01 31 37 01 0a 83 75 4f d0 af 6d 7c d4 92 2e d9"_sb);
 }
 
+void test_dns() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    dns_resolver serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    auto res = serv.query("gql.twitch.tv"s);
+    auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A) {
+        auto res = serv.query(what, type);
+        cmp_base(!res.empty(), true);
+        //char buf[20]{};
+        //inet_ntop(AF_INET, &res, buf, sizeof(buf));
+        //std::println("{}, type {} -> {}", what, type, buf);
+    };
+    res_and_print("twitch.tv"s);
+    res_and_print("www.youtube.com"s);
+    res_and_print("google.com"s);
+    res_and_print("google.com"s, dns_packet::qtype::MX);
+    res_and_print("google.com"s, dns_packet::qtype::AAAA);
+    res_and_print("gmail.com"s);
+    res_and_print("gmail.com"s, dns_packet::qtype::MX);
+    res_and_print("egorpugin.ru"s);
+    res_and_print("aspia.egorpugin.ru"s);
+}
+
 void test_tls() {
     LOG_TEST();
 
@@ -2498,6 +2524,7 @@ auto test_all() {
     test_jwt();
     test_hpke();
     test_mlkem();
+    test_dns();
     test_tls();
     return success != total;
 }
@@ -2525,7 +2552,7 @@ int main() {
         // test_sha3();
         // test_blake2();
         // test_blake3();
-        test_sm3();
+        // test_sm3();
         // test_sm4();
         // test_ec();
         // test_ecdsa();
@@ -2546,7 +2573,8 @@ int main() {
         // test_hpke();
         // test_mlkem();
         //
-        test_tls();
+        test_dns();
+        //test_tls();
 
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
