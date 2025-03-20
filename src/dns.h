@@ -1,3 +1,5 @@
+#pragma once
+
 #include "helpers.h"
 
 #include <boost/asio.hpp>
@@ -249,6 +251,7 @@ struct dns_packet {
             auto name = string_at(p);
             auto &res = *(resource::resource_end*)p;
             p += sizeof(res);
+            // see rfc1035 for more types
             switch (res.type) {
             case qtype::A: {
                 a r;
