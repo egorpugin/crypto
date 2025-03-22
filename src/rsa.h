@@ -45,44 +45,39 @@ struct public_key {
         return m.powm(e, n);
     }
 
-    static auto load(asn1 asn) {
+    static auto load_raw(bytes_concept data) {
+        asn1 a{data};
         auto get = [&](auto &&pkey, auto...args){
             return bytes_to_bigint(pkey.template get<asn1_integer>(args...).data);
         };
         public_key pubk;
-        auto pubkey = asn.get<asn1_sequence>(pkcs8::private_key::main);
+        auto pubkey = a.get<asn1_sequence>(0);
         pubk.n = get(pubkey, pkcs1::public_key::modulus);
         pubk.e = get(pubkey, pkcs1::public_key::public_exponent);
         return pubk;
     }
+    static auto load_pkcs8(bytes_concept data) {
+        asn1 a{data};
+        auto pka = a.get<asn1_oid>(pkcs8::public_key::main,pkcs8::public_key::algorithm,pkcs8::public_key::algorithm_oid);
+
+        //rsaEncryption (PKCS #1)
+        auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
+        if (pka != rsaEncryption) {
+            throw std::runtime_error{"unknown pkcs8::public_key_algorithm"};
+        }
+
+        auto pubkey = a.get<asn1_bit_string>(pkcs8::public_key::main,pkcs8::public_key::publickey);
+        return load_raw(pubkey.data.subspan(1));
+    }
     static auto load_from_string_container(std::string s) {
         auto [raw,type] = prepare_string(s);
-        asn1 a{raw};
-
-        auto get = [&](auto &&pkey, auto...args){
-            return bytes_to_bigint(pkey.template get<asn1_integer>(args...).data);
-        };
-        asn1_sequence pubkey;
         if (type == pkcs8_pubkey) {
-            auto pka = a.get<asn1_oid>(pkcs8::public_key::main,pkcs8::public_key::algorithm,pkcs8::public_key::algorithm_oid);
-
-            //rsaEncryption (PKCS #1)
-            auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
-            if (pka != rsaEncryption) {
-                throw std::runtime_error{"unknown pkcs8::public_key_algorithm"};
-            }
-
-            pubkey = a.get<asn1_bit_string>(pkcs8::public_key::main,pkcs8::public_key::publickey);
-            pubkey = pubkey.get<asn1_sequence>(pkcs8::private_key::main);
+            return load_pkcs8(raw);
         } else if (type == pkcs1_pubkey) {
-            pubkey = a.get<asn1_sequence>(pkcs8::private_key::main);
+            return load_raw(raw);
         } else {
             throw;
         }
-        public_key pubk;
-        pubk.n = get(pubkey, pkcs1::public_key::modulus);
-        pubk.e = get(pubkey, pkcs1::public_key::public_exponent);
-        return pubk;
     }
 
     template <auto Bits>
@@ -93,11 +88,10 @@ struct public_key {
         throw;
     }
     template <auto Bits>
-    static auto op_pkcs1(auto &&m, auto &&modulus) {
+    auto op_pkcs1_digest(auto &&mhash) {
         // rsassa_pkcs1_v1_5_sha2
         // RSA_PKCS1
         // RSA_PKCS1_PADDING
-        auto mhash = sha2<Bits>::digest(m);
         auto t = asn1_sequence::make(
             asn1_sequence::make(
                 asn1_oid::make(make_oid<2,16,840,1,101,3,4,2,sha_id<Bits>()>()),
@@ -106,7 +100,7 @@ struct public_key {
             asn1_octet_string::make(mhash)
         );
         auto tlen = t.size();
-        auto emlen = modulus.size();
+        auto emlen = n.size();
         constexpr auto RSA_PKCS1_PADDING_SIZE = 11;
         if (emlen < tlen + RSA_PKCS1_PADDING_SIZE) {
             throw std::runtime_error{"intended encoded message length too short"};
@@ -133,11 +127,16 @@ struct public_key {
     }
 
     template <auto Bits>
-    bool verify_pkcs1(auto &&message, auto &&signature) {
-        auto em = op_pkcs1<Bits>(message, n);
+    bool verify_pkcs1_digest(auto &&mhash, auto &&signature) {
+        auto em = op_pkcs1_digest<Bits>(mhash);
         auto h = bytes_to_bigint(signature);
         h = h.powm(e, n);
         return bytes_concept{em} == bytes_concept{h.to_string(n.size())};
+    }
+    template <auto Bits>
+    bool verify_pkcs1(auto &&message, auto &&signature) {
+        auto mhash = sha2<Bits>::digest(message);
+        return verify_pkcs1_digest<Bits>(mhash, signature);
     }
 
     template <auto Bits>
@@ -232,7 +231,8 @@ struct private_key : public_key {
 
     template <auto Bits>
     auto sign_pkcs1(auto &&m) {
-        auto em = op_pkcs1<Bits>(m, n);
+        auto mhash = sha2<Bits>::digest(m);
+        auto em = op_pkcs1_digest<Bits>(mhash);
         auto h = bytes_to_bigint(em);
         h = h.powm(d, n);
         return h.to_string(em.size());

@@ -924,7 +924,7 @@ struct tls13_ {
                 auto rsa_sha2 = [&]<auto Bits>() {
                     sha2<Bits> h;
                     h.update(hs);
-                    auto pubk = rsa::public_key::load(pubkey_data);
+                    auto pubk = rsa::public_key::load_raw(pubkey_data);
                     if (!pubk.verify_pss_mgf1<Bits>(hs, data)) {
                         throw std::runtime_error{"bad signature"};
                     }
@@ -932,7 +932,7 @@ struct tls13_ {
                 auto rsa_pkcs1_sha2 = [&]<auto Bits>() {
                     sha2<Bits> h;
                     h.update(hs);
-                    auto pubk = rsa::public_key::load(pubkey_data);
+                    auto pubk = rsa::public_key::load_raw(pubkey_data);
                     if (!pubk.verify_pkcs1<Bits>(hs, data)) {
                         throw std::runtime_error{"bad signature"};
                     }

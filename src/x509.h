@@ -261,7 +261,7 @@ struct x509_storage {
                 auto issuer_pubkey_data = issuer_pubkey.data.subspan(1);
 
                 auto rsa_sha2 = [&]<auto Bits>() {
-                    auto pubk = rsa::public_key::load(issuer_pubkey_data);
+                    auto pubk = rsa::public_key::load_raw(issuer_pubkey_data);
                     if (pubk.verify_pkcs1<Bits>(cert_raw, sig)) {
                         v.trusted = true;
                         return v.is_valid(now);
