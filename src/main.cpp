@@ -2321,6 +2321,11 @@ void test_email() {
         auto priv = rsa::private_key::load_from_string_container(privtext);
         rsa::public_key pubk{priv};
 
+        auto sig = base64::decode(
+"AuUoFEfDxTDkHlLXSZEpZj79LICEps6eda7W3deTVFOk4yAUoqOB"
+"4nujc7YopdG5dWLSdNg6xNAZpOPr+kHxt1IrE+NahM6L/LbvaHut"
+"KVdkLLkpVaVVQPzeRDI009SO2Il5Lu7rDNH6mZckBdrIx0orEtZV"
+"4bmp/YzhwvcubU4="sv);
         auto sigtext =
 "Received: from client1.football.example.com  [192.0.2.1]\r\n"
 "      by submitserver.example.com with SUBMISSION;\r\n"
@@ -2334,18 +2339,14 @@ void test_email() {
 "      c=simple/simple; q=dns/txt; i=joe@football.example.com;\r\n"
 "      h=Received : From : To : Subject : Date : Message-ID;\r\n"
 "      bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;\r\n"
-"      b="
-""s;
-        cmp_base(pubk.verify_pkcs1<256>(sigtext, base64::decode(
-"AuUoFEfDxTDkHlLXSZEpZj79LICEps6eda7W3deTVFOk4yAUoqOB"
-"4nujc7YopdG5dWLSdNg6xNAZpOPr+kHxt1IrE+NahM6L/LbvaHut"
-"KVdkLLkpVaVVQPzeRDI009SO2Il5Lu7rDNH6mZckBdrIx0orEtZV"
-"4bmp/YzhwvcubU4="sv)
-), true);
+"      b=;" // notice last ';'
+""sv;
+        auto res = pubk.verify_pkcs1<256>(sigtext, sig);
+        cmp_base(res, true);
 
         input_email ie{msg};
         cmp_bytes(base64::encode(sha256::digest(ie.body)), "2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8="sv);
-        cmp_base(ie.verify_dkim(), true);
+        cmp_base(ie.verify_dkim(pubk), true);
     }
 
     email e;
