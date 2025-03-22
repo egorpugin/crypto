@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include "base64.h"
 #include "dns.h"
+#include "rsa.h"
 #include "sha2.h"
 
 namespace crypto {
@@ -39,11 +41,36 @@ struct input_email {
         auto it = std::ranges::find_if(headers, [&](auto &&v){return v.starts_with(header);});
         return it == headers.end() ? std::optional<std::string_view>{} : std::optional<std::string_view>{*it};
     }
+    static auto extract_fields(auto &&data, auto &&delim) {
+        std::vector<std::string_view> fields;
+        for (auto &&v : std::views::split(data, delim)) {
+            auto &f = fields.emplace_back(v);
+            while (!f.empty() && (f[0] == ' ' || f[0] == '\t' || f[0] == '\r' || f[0] == '\n')) {
+                f.remove_prefix(1);
+            }
+        }
+        return fields;
+    }
+    static std::string_view get_field(auto &&fields, std::string_view f) {
+        for (auto &&s : fields) {
+            if (s.starts_with(f)) {
+                return s.substr(f.size());
+            }
+        }
+        return {};
+    }
     auto dkim() const {
         struct dkim {
             std::string_view header;
+            std::string_view body;
+            std::vector<std::string_view> fields;
 
-            void hash() const {
+            dkim(std::string_view d) : header{d} {
+                body = header.substr(header.find(':') + 1);
+                fields = extract_fields(body, ";"sv);
+            }
+            std::string_view get_field(std::string_view f) {
+                return input_email::get_field(fields, f);
             }
         };
         if (auto sig = find("DKIM-Signature"sv)) {
@@ -51,7 +78,101 @@ struct input_email {
         }
         return std::optional<dkim>{};
     }
-    bool verify_dkim() {
+    bool verify_dkim() const {
+        auto dko = dkim();
+        if (!dko) {
+            return false;
+        }
+        auto &dk = *dko;
+        auto v = dk.get_field("v="sv);
+        auto a = dk.get_field("a="sv);
+        auto d = dk.get_field("d="sv);
+        auto s = dk.get_field("s="sv);
+        auto c = dk.get_field("c="sv);
+        auto bh = dk.get_field("bh="sv);
+        auto h = dk.get_field("h="sv);
+        auto b = dk.get_field("b="sv);
+
+        if (v != "1"sv) {
+            return false;
+        }
+        if (a != "rsa-sha256"sv) {
+            return false;
+        }
+
+        auto c_headers_simple = c.empty() || c.starts_with("simple");
+        auto c_body_simple = c.empty() || c == "simple" || c.contains("/simple");
+
+        auto &dns = get_default_dns();
+        auto txt = dns.query_one<dns_packet::txt>(std::format("{}._domainkey.{}", s, d));
+        auto txt_fields = extract_fields(txt.data, ";"sv);
+        auto tv = get_field(txt_fields, "v="sv);
+        auto tk = get_field(txt_fields, "k="sv);
+        auto tp = get_field(txt_fields, "p="sv);
+
+        if (tv != "DKIM1"sv) {
+            return false;
+        }
+        if (tk != "rsa"sv) {
+            return false;
+        }
+
+        auto pubk = rsa::public_key::load_pkcs8(base64::decode(tp));
+        if (bytes_concept{base64::decode(bh)} != sha256::digest(body)) {
+            if (c_body_simple) {
+                throw std::runtime_error{"not impl or bad hash"};
+            } else {
+                throw std::runtime_error{"not impl or bad hash"};
+            }
+            return false;
+        }
+        sha256 h_headers;
+        auto add_to_hash = [&](auto &&what) {
+            //std::print("{}", what);
+            h_headers.update(what);
+        };
+        auto add_to_hash_byte = [&](auto &&what) {
+            //std::print("{}", what);
+            h_headers.update(bytes_concept{&what, 1});
+        };
+        if (c_headers_simple) {
+            throw std::runtime_error{"not impl"};
+        } else {
+            auto process_header = [&](std::string_view s) {
+                auto p = s.find(':') + 1;
+                std::string name(s.substr(0, p));
+                for (auto &&c : name) {
+                    c = tolower(c);
+                }
+                add_to_hash(name);
+                bool skip_spaces{true};
+                auto is_space = [](auto &&c){return c == ' ' || c == '\t' || c == '\r' || c == '\n';};
+                while (!s.empty() && is_space(s.back())) {
+                    s.remove_suffix(1);
+                }
+                for (auto it = s.begin() + p; it != s.end(); ++it) {
+                    if (is_space(*it)) {
+                        if (skip_spaces) {
+                            continue;
+                        } else {
+                            add_to_hash(" "sv);
+                            skip_spaces = true;
+                        }
+                    } else {
+                        add_to_hash_byte(*it);
+                        skip_spaces = false;
+                    }
+                }
+            };
+            for (auto &&v : std::views::split(h, ":"sv)) {
+                if (auto f = find(std::string_view{v})) {
+                    process_header(*f);
+                    add_to_hash("\r\n"sv);
+                }
+            }
+            process_header(dk.header.substr(0, b.data() - dk.header.data()));
+        }
+        return pubk.verify_pkcs1_digest<256>(h_headers.digest(), base64::decode<true>(b));
     }
 };
 
