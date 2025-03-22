@@ -242,7 +242,12 @@ struct dns_packet {
         std::string name;
         std::string cname;
     };
-    using record_type = std::variant<a, mx, aaaa, cname>;
+    struct txt {
+        static inline constexpr auto type = qtype::TXT;
+
+        std::string data;
+    };
+    using record_type = std::variant<a, cname, mx, txt, aaaa>;
     auto answers() {
         std::vector<record_type> results;
         auto p = question().end(*this);
@@ -276,6 +281,14 @@ struct dns_packet {
                 r.ttl = res.ttl;
                 r.name = std::move(name);
                 r.cname = string_at(p);
+                results.push_back(r);
+                break;
+            }
+            case qtype::TXT: {
+                txt r;
+                auto len = *p;
+                r.data.assign(p+1,p+1+len);
+                p += res.rdlength;
                 results.push_back(r);
                 break;
             }
