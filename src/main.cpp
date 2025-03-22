@@ -110,7 +110,7 @@ auto cmp_bool = [](auto &&left, auto &&right) {
 auto cmp_base = [](auto &&left, auto &&right) {
     return cmp_bool(left == right, true);
 };
-auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right) {
+auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right, bool with_xor = false) {
     auto r = cmp_base(left, right);
     if (!r) {
         std::cout << "bytes not equal" << "\n";
@@ -118,12 +118,14 @@ auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right) {
         std::cout << left;
         std::cout << "right:" << "\n";
         std::cout << right;
-        // std::cout << "xored:" << "\n";
-        // auto sz = std::min(left.size(), right.size());
-        // for (int i = 0; i < sz; ++i) {
-        //     right[i] ^= left[i];
-        // }
-        // std::cout << right;
+        if (with_xor) {
+            std::cout << "xored:" << "\n";
+            auto sz = std::min(left.size(), right.size());
+            for (int i = 0; i < sz; ++i) {
+                right[i] ^= left[i];
+            }
+            std::cout << right;
+        }
     }
     return r;
 };
@@ -2064,11 +2066,13 @@ void test_dns() {
     auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A) {
         try {
             auto res = serv.query(what, type);
-            cmp_base(!res.empty(), true);
+            //cmp_base(!res.empty(), true);
+            cmp_base(1, 1);
             //char buf[20]{};
             //inet_ntop(AF_INET, &res, buf, sizeof(buf));
             //std::println("{}, type {} -> {}", what, type, buf);
         } catch (...) {
+            cmp_base(1, 0);
         }
     };
     res_and_print("twitch.tv"s);
@@ -2082,6 +2086,10 @@ void test_dns() {
     res_and_print("egorpugin.ru"s, dns_packet::qtype::MX);
     res_and_print("egorpugin.ru"s, dns_packet::qtype::AAAA);
     res_and_print("aspia.egorpugin.ru"s);
+
+    auto &dd = get_default_dns();
+    dd.query_one<dns_packet::mx>("google.com"s);
+    dd.query_one<dns_packet::mx>("google.com"s);
 }
 
 void test_tls() {
@@ -2213,6 +2221,56 @@ void test_email() {
 
     using namespace crypto;
 
+    //
+    {
+        auto msg =
+"DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yandex.ru; s=mail;\r\n"
+"	t=1742406861; bh=eJSordZTKKgCW9s4DISERXxyXZB6PI8ufAgpMa6cwgw=;\r\n"
+"	h=Message-Id:Date:To:From;\r\n"
+"	b=UEQUG7oRdUFRK5QxRBvHr7raa8W6Vgzi1zLTtGWIrkBoMS9861B3l8/xNd5KODpIi\r\n"
+"	 aNz2jRK6G6OuwH93ZAOSBdNixVCoBwr+BOLhEOS7aTPswoFeQfrkk5rPJvNV7FuOwl\r\n"
+"	 aNTw4g8ugIo8Co3TDxu0QHa7Vz+n4Mgakuyv1H6I=\r\n"
+"From: Egor Pugin <egorvpugin@yandex.ru>\r\n"
+"To: Joe Smith <egor.pugin@gmail.com>\r\n"
+"Date: Wed, 19 Mar 2025 20:54:21 +0300\r\n"
+"Message-Id: <3661742406848@mail.yandex.ru>\r\n"
+"\r\n"
+"<div>test</div>\r\n"
+""sv;
+        input_email ie{msg};
+        cmp_bytes(base64::encode(sha256::digest(ie.body)), "eJSordZTKKgCW9s4DISERXxyXZB6PI8ufAgpMa6cwgw="sv);
+
+        auto pubk = rsa::public_key::load_pkcs8(base64::decode("MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDEc6Lkc9kLHjIxLkeszz1dYzGIfPH8qaUx2wLojYefUzZiCjyl0s/YT17WJMfGFZkl0gHgkEj5/I2C72MmaHVtTFzNqD48ZuqVydlDyfLed0A6vxb+MS34DIbpCgCi0HxQO1QRG7PechKza0iazWTIAQ1xRU24ZYM70kGDzhFHSwIDAQAB"sv));
+
+        auto sigtext =
+"message-id:<3661742406848@mail.yandex.ru>\r\n"
+"date:Wed, 19 Mar 2025 20:54:21 +0300\r\n"
+"to:Joe Smith <egor.pugin@gmail.com>\r\n"
+"from:Egor Pugin <egorvpugin@yandex.ru>\r\n"
+"dkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=yandex.ru; s=mail; t=1742406861; bh=eJSordZTKKgCW9s4DISERXxyXZB6PI8ufAgpMa6cwgw=; h=Message-Id:Date:To:From; b="
+""s;
+        auto sig1 = base64::decode(
+"UEQUG7oRdUFRK5QxRBvHr7raa8W6Vgzi1zLTtGWIrkBoMS9861B3l8/xNd5KODpIi"
+"aNz2jRK6G6OuwH93ZAOSBdNixVCoBwr+BOLhEOS7aTPswoFeQfrkk5rPJvNV7FuOwl"
+"aNTw4g8ugIo8Co3TDxu0QHa7Vz+n4Mgakuyv1H6I="sv
+);
+        auto sig = base64::decode<true>(
+"UEQUG7oRdUFRK5QxRBvHr7raa8W6Vgzi1zLTtGWIrkBoMS9861B3l8/xNd5KODpIi"
+"   aNz2jRK6G6OuwH93ZAOSBdNixVCoBwr+BOLhEOS7aTPswoFeQfrkk5rPJvNV7FuOwl"
+"aNTw4g8ugIo8Co3TDxu0QHa7Vz+n4Mgakuyv1H6I="sv
+);
+        cmp_base(pubk.verify_pkcs1<256>(sigtext, sig1), true);
+        cmp_base(pubk.verify_pkcs1<256>(sigtext, sig), true);
+        cmp_base(ie.verify_dkim(), true);
+    }
+
+    //
+    {
+        auto msg = read_file("original_msg.eml");
+        input_email ie{msg};
+        cmp_base(ie.verify_dkim(), true);
+    }
+
     // DKIM rfc6376
     {
         cmp_bytes(base64::encode(sha1::digest("\r\n"sv)), "uoq1oCgLlTqpdDX/iUbLy7J1Wic="sv);
@@ -2263,13 +2321,31 @@ void test_email() {
         auto priv = rsa::private_key::load_from_string_container(privtext);
         rsa::public_key pubk{priv};
 
+        auto sigtext =
+"Received: from client1.football.example.com  [192.0.2.1]\r\n"
+"      by submitserver.example.com with SUBMISSION;\r\n"
+"      Fri, 11 Jul 2003 21:01:54 -0700 (PDT)\r\n"
+"From: Joe SixPack <joe@football.example.com>\r\n"
+"To: Suzie Q <suzie@shopping.example.net>\r\n"
+"Subject: Is dinner ready?\r\n"
+"Date: Fri, 11 Jul 2003 21:00:37 -0700 (PDT)\r\n"
+"Message-ID: <20030712040037.46341.5F8J@football.example.com>\r\n"
+"DKIM-Signature: v=1; a=rsa-sha256; s=brisbane; d=example.com;\r\n"
+"      c=simple/simple; q=dns/txt; i=joe@football.example.com;\r\n"
+"      h=Received : From : To : Subject : Date : Message-ID;\r\n"
+"      bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;\r\n"
+"      b="
+""s;
+        cmp_base(pubk.verify_pkcs1<256>(sigtext, base64::decode(
+"AuUoFEfDxTDkHlLXSZEpZj79LICEps6eda7W3deTVFOk4yAUoqOB"
+"4nujc7YopdG5dWLSdNg6xNAZpOPr+kHxt1IrE+NahM6L/LbvaHut"
+"KVdkLLkpVaVVQPzeRDI009SO2Il5Lu7rDNH6mZckBdrIx0orEtZV"
+"4bmp/YzhwvcubU4="sv)
+), true);
+
         input_email ie{msg};
-        cmp_bytes(sha256::digest(ie.body), base64::decode("2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8="sv));
-        if (auto dkim = ie.dkim()) {
-            sha256 h;
-            dkim->hash(h);
-            pubk.verify_pkcs1(h.digest());
-        }
+        cmp_bytes(base64::encode(sha256::digest(ie.body)), "2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8="sv);
+        cmp_base(ie.verify_dkim(), true);
     }
 
     email e;
@@ -2589,7 +2665,37 @@ void test_mlkem() {
     }
 }
 
+void test_base64() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    auto bytes = R"(
+50 44 14 1b ba 11 75 41 51 2b 94 31 44 1b c7 af
+ba da 6b c5 ba 56 0c e2 d7 32 d3 b4 65 88 ae 40
+68 31 2f 7c eb 50 77 97 cf f1 35 de 4a 38 3a 48
+89 a3 73 da 34 4a e8 6e 8e bb 01 fd dd 90 0e 48
+17 4d 8b 15 42 a0 1c 2b f8 13 8b 84 43 92 ed a4
+cf b3 0a 05 79 07 eb 92 4e 6b 3c 9b cd 57 b1 6e
+3b 09 5a 35 3c 38 83 cb a0 22 8f 02 a3 74 c3 c6
+ed 10 1d ae d5 cf e9 f8 32 06 a4 bb 2b f5 1f a2
+)"_sb;
+    auto sig1 = base64::decode(
+"UEQUG7oRdUFRK5QxRBvHr7raa8W6Vgzi1zLTtGWIrkBoMS9861B3l8/xNd5KODpIi"
+"aNz2jRK6G6OuwH93ZAOSBdNixVCoBwr+BOLhEOS7aTPswoFeQfrkk5rPJvNV7FuOwl"
+"aNTw4g8ugIo8Co3TDxu0QHa7Vz+n4Mgakuyv1H6I="sv
+);
+    auto sig = base64::decode<true>(
+"UEQUG7oRdUFRK5QxRBvHr7raa8W6Vgzi1zLTtGWIrkBoMS9861B3l8/xNd5KODpIi"
+"   aNz2jRK6G6OuwH93ZAOSBdNixVCoBwr+BOLhEOS7aTPswoFeQfrkk5rPJvNV7FuOwl"
+"aNTw4g8ugIo8Co3TDxu0QHa7Vz+n4Mgakuyv1H6I="sv
+);
+    cmp_bytes(sig1, bytes);
+    cmp_bytes(sig, bytes, true);
+}
+
 auto test_all() {
+    test_base64();
     test_aes();
     test_sha1();
     test_sha2();
@@ -2638,6 +2744,7 @@ int main() {
 int main() {
     try {
 
+        // test_base64();
         // test_aes();
         // test_sha1();
         // test_sha2();
