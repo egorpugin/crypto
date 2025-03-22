@@ -52,12 +52,8 @@ struct input_email {
         return fields;
     }
     static std::string_view get_field(auto &&fields, std::string_view f) {
-        for (auto &&s : fields) {
-            if (s.starts_with(f)) {
-                return s.substr(f.size());
-            }
-        }
-        return {};
+        auto it = std::ranges::find_if(fields, [&](auto &&v){return v.starts_with(f);});
+        return it == fields.end() ? std::string_view{} : it->substr(f.size());
     }
     auto dkim() const {
         struct dkim {
@@ -88,10 +84,6 @@ struct input_email {
         auto a = dk.get_field("a="sv);
         auto d = dk.get_field("d="sv);
         auto s = dk.get_field("s="sv);
-        auto c = dk.get_field("c="sv);
-        auto bh = dk.get_field("bh="sv);
-        auto h = dk.get_field("h="sv);
-        auto b = dk.get_field("b="sv);
 
         if (v != "1"sv) {
             return false;
@@ -99,9 +91,6 @@ struct input_email {
         if (a != "rsa-sha256"sv) {
             return false;
         }
-
-        auto c_headers_simple = c.empty() || c.starts_with("simple");
-        auto c_body_simple = c.empty() || c == "simple" || c.contains("/simple");
 
         auto &dns = get_default_dns();
         auto txt = dns.query_one<dns_packet::txt>(std::format("{}._domainkey.{}", s, d));
@@ -118,6 +107,24 @@ struct input_email {
         }
 
         auto pubk = rsa::public_key::load_pkcs8(base64::decode(tp));
+        return verify_dkim(pubk);
+    }
+    bool verify_dkim(auto &&pubk) const {
+        auto dko = dkim();
+        if (!dko) {
+            return false;
+        }
+        auto &dk = *dko;
+        auto v = dk.get_field("v="sv);
+        auto a = dk.get_field("a="sv);
+        auto c = dk.get_field("c="sv);
+        auto bh = dk.get_field("bh="sv);
+        auto h = dk.get_field("h="sv);
+        auto b = dk.get_field("b="sv);
+
+        auto c_headers_simple = c.empty() || c.starts_with("simple");
+        auto c_body_simple = c.empty() || c == "simple" || c.contains("/simple");
+
         if (bytes_concept{base64::decode(bh)} != sha256::digest(body)) {
             if (c_body_simple) {
                 throw std::runtime_error{"not impl or bad hash"};
@@ -135,8 +142,28 @@ struct input_email {
             //std::print("{}", what);
             h_headers.update(bytes_concept{&what, 1});
         };
+        auto is_space = [](auto &&c){return c == ' ' || c == '\t';};
         if (c_headers_simple) {
-            throw std::runtime_error{"not impl"};
+            bool has_from{};
+            for (auto &&v : std::views::split(h, ":"sv)) {
+                std::string_view sv{v};
+                while (!sv.empty() && is_space(sv.front())) {
+                    sv.remove_prefix(1);
+                }
+                while (!sv.empty() && is_space(sv.back())) {
+                    sv.remove_suffix(1);
+                }
+                has_from |= sv == "From"sv;
+                if (auto f = find(sv)) {
+                    add_to_hash(*f);
+                    add_to_hash("\r\n"sv);
+                }
+            }
+            if (!has_from) {
+                return false;
+            }
+            add_to_hash(dk.header.substr(0, b.data() - dk.header.data()));
+            add_to_hash_byte(';');
         } else {
             auto process_header = [&](std::string_view s) {
                 auto p = s.find(':') + 1;
@@ -164,11 +191,23 @@ struct input_email {
                     }
                 }
             };
+            bool has_from{};
             for (auto &&v : std::views::split(h, ":"sv)) {
-                if (auto f = find(std::string_view{v})) {
+                std::string_view sv{v};
+                while (!sv.empty() && is_space(sv.front())) {
+                    sv.remove_prefix(1);
+                }
+                while (!sv.empty() && is_space(sv.back())) {
+                    sv.remove_suffix(1);
+                }
+                has_from |= sv == "From"sv;
+                if (auto f = find(sv)) {
                     process_header(*f);
                     add_to_hash("\r\n"sv);
                 }
+            }
+            if (!has_from) {
+                return false;
             }
             process_header(dk.header.substr(0, b.data() - dk.header.data()));
         }
