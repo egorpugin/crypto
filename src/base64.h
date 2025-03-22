@@ -171,7 +171,7 @@ struct base_raw {
         int skipped{};
         for (int i = 0; i < sz;) {
             if constexpr (IgnoreNonAlphabetChars) {
-                if (!alph.contains(data[i])) {
+                if (!alph.contains(data[i]) && data[i] != padding) {
                     ++i;
                     ++skipped;
                     continue;
