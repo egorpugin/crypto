@@ -9,11 +9,7 @@
 #include <ranges>
 #include <variant>
 
-using namespace std::literals;
-namespace ip = boost::asio::ip;
-
-template <typename T = void>
-using task = boost::asio::awaitable<T>;
+namespace crypto {
 
 // https://www.ietf.org/rfc/rfc1035.txt
 struct dns_packet {
@@ -223,29 +219,37 @@ struct dns_packet {
         return start;
     }
 
-    struct a {
+    struct base {
         uint32_t ttl;
+    };
+    struct a : base {
+        static inline constexpr auto type = qtype::A;
+
         std::string name;
         uint32_t address; // ipv4, be
     };
-    struct mx {
-        be<uint16_t> preference;
-        std::string exchange_host;
-    };
-    struct aaaa {
-        uint32_t ttl;
-        std::string name;
-        uint8_t address[16]; // ipv6, be
-    };
-    struct cname {
-        uint32_t ttl;
+    struct cname : base {
+        static inline constexpr auto type = qtype::CNAME;
+
         std::string name;
         std::string cname;
     };
-    struct txt {
+    struct mx : base {
+        static inline constexpr auto type = qtype::MX;
+
+        be<uint16_t> preference;
+        std::string exchange_host;
+    };
+    struct txt : base {
         static inline constexpr auto type = qtype::TXT;
 
         std::string data;
+    };
+    struct aaaa : base {
+        static inline constexpr auto type = qtype::AAAA;
+
+        std::string name;
+        uint8_t address[16]; // ipv6, be
     };
     using record_type = std::variant<a, cname, mx, txt, aaaa>;
     auto answers() {
@@ -286,6 +290,7 @@ struct dns_packet {
             }
             case qtype::TXT: {
                 txt r;
+                r.ttl = res.ttl;
                 auto len = *p;
                 r.data.assign(p+1,p+1+len);
                 p += res.rdlength;
@@ -294,6 +299,7 @@ struct dns_packet {
             }
             case qtype::MX: {
                 mx r;
+                r.ttl = res.ttl;
                 r.preference = *(uint16_t*)p;
                 p += sizeof(r.preference);
                 r.exchange_host = string_at(p);
@@ -313,6 +319,7 @@ struct dns_packet {
 };
 
 struct dns_resolver {
+    using results_type = std::vector<dns_packet::record_type>;
     struct server {
         std::string ip;
         uint16_t port{53};
@@ -331,7 +338,7 @@ struct dns_resolver {
     }
     auto query(auto &server, const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         // asio transport for now
-        std::vector<dns_packet::record_type> results;
+        results_type results;
         boost::asio::io_context ctx;
         boost::asio::co_spawn(ctx, query_udp(results, server, domain, type, class_), [](auto eptr) {
             if (eptr) {
@@ -354,7 +361,11 @@ struct dns_resolver {
     }
 
 private:
+    template <typename T = void> using task = boost::asio::awaitable<T>;
+
     task<> query_udp(auto &results, auto &server, const std::string &domain, uint16_t type, uint16_t class_) {
+        namespace ip = boost::asio::ip;
+
         auto ex = co_await boost::asio::this_coro::executor;
         ip::udp::endpoint e(ip::make_address_v4(server.ip), server.port);
         ip::udp::socket s(ex);
@@ -373,3 +384,50 @@ private:
         results = p.answers();
     }
 };
+
+struct dns_cache {
+    struct query_type {
+        std::string domain;
+        int t;
+
+        auto operator<=>(const query_type &) const = default;
+    };
+    struct results_type {
+        std::chrono::system_clock::time_point last_query;
+        std::chrono::seconds ttl{};
+        dns_resolver::results_type results;
+
+        bool outdated(auto &&now) const {return last_query + ttl < now;}
+    };
+
+    dns_resolver r;
+    std::map<query_type, results_type> cache;
+
+    dns_cache(std::initializer_list<const char *> list) : r{list} {
+    }
+
+    template <typename T>
+    auto query_one(const std::string &domain) {
+        auto now = std::chrono::system_clock::now();
+        query_type qt{domain, T::type};
+        auto it = cache.find(qt);
+        if (it == cache.end() || it->second.outdated(now)) {
+            auto [it2,_] = cache.emplace(qt, results_type{});
+            it = it2;
+            auto &res = it->second;
+            res.results = r.query(domain, T::type);
+            res.last_query = now;
+            if (!res.results.empty()) {
+                visit(res.results[0], [&](auto &&v){res.ttl = std::chrono::seconds{v.ttl};});
+            }
+        }
+        return std::get<T>(it->second.results.at(0));
+    }
+};
+
+auto &get_default_dns() {
+    static dns_cache serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    return serv;
+}
+
+}
