@@ -23,12 +23,12 @@ struct base_raw {
     static inline constexpr auto n_bits = std::countr_zero(std::bit_ceil(base_type));
 
     static inline constexpr auto lcm = std::lcm(byte_bits, n_bits);
-    static inline constexpr auto b_size = lcm / byte_bits;
-    static inline constexpr auto b_chars = lcm / n_bits;
-    static inline constexpr auto max_tail = b_chars - (byte_bits / n_bits + (byte_bits % n_bits ? 1 : 0));
+    static inline constexpr auto input_block_size = lcm / byte_bits;
+    static inline constexpr auto output_block_size = lcm / n_bits;
+    static inline constexpr auto max_tail = output_block_size - (byte_bits / n_bits + (byte_bits % n_bits ? 1 : 0));
 
     static consteval auto make_decoder() {
-        std::array<u8, 128> alph{};
+        array<128> alph{};
         for (int i = 0; auto &&c : Alphabet) {
             alph[c] = i++;
         }
@@ -76,12 +76,12 @@ struct base_raw {
             }
         }
 
-        // b_size -> b_chars bytes
+        // input_block_size -> output_block_size bytes
         template <auto N> constexpr void encode(auto &s, bool data_minus_one) {
 #define X(v)                                                \
             if constexpr (N > v)                            \
                 s[v] = Alphabet[get_bits<n_bits * v>(data_minus_one && N - 1 == v)];\
-            else if constexpr (v < b_chars && Pad)          \
+            else if constexpr (v < output_block_size && Pad)          \
                 s[v] = padding
 
             X(0);
@@ -94,7 +94,7 @@ struct base_raw {
             X(7);
 #undef X
         }
-        // b_chars -> b_size bytes
+        // output_block_size -> input_block_size bytes
         template <auto N> constexpr void decode(auto data) {
 #define X(v) if constexpr (N > v) set_bits<n_bits * v>(DecodeAlphabet[data[v]])
             X(0);
@@ -117,17 +117,17 @@ struct base_raw {
         }
         size_t outsz;
         if (Pad) {
-            outsz = (sz / b_size + (sz % b_size ? 1 : 0)) * b_chars;
+            outsz = (sz / input_block_size + (sz % input_block_size ? 1 : 0)) * output_block_size;
         } else {
             outsz = (sz * byte_bits + n_bits - 1) / n_bits;
         }
         s.resize(outsz);
         auto out = s.data();
-        auto until = sz - sz % b_size;
+        auto until = sz - sz % input_block_size;
         auto p = (b*)data.data();
         int i{};
-        for (; i < until; i += b_size, out += b_chars, p += b_size) {
-            p->template encode<b_chars>(out, false);
+        for (; i < until; i += input_block_size, out += output_block_size, p += input_block_size) {
+            p->template encode<output_block_size>(out, false);
         }
         if constexpr (max_tail) {
             auto tail = sz - i;
@@ -158,31 +158,40 @@ struct base_raw {
     template <bool IgnoreNonAlphabetChars>
     static auto decode(auto &&data) {
         auto sz = data.size();
-        if ((sz % b_chars) && Pad && !IgnoreNonAlphabetChars) {
+        if ((sz % output_block_size) && Pad && !IgnoreNonAlphabetChars) {
             throw std::runtime_error{std::format("bad {}: incorrect length", name())};
         }
         std::string s;
         if (sz == 0) {
             return s;
         }
-        s.resize(sz * b_size / b_chars);
+        s.resize(sz * input_block_size / output_block_size);
         auto p = (b*)s.data();
         std::string_view alph = Alphabet;
         int skipped{};
-        for (int i = 0; i < sz;) {
+        char buf[output_block_size];
+        for (int i = 0, bi = 0; i < sz;) {
             if constexpr (IgnoreNonAlphabetChars) {
                 if (!alph.contains(data[i]) && data[i] != padding) {
                     ++i;
                     ++skipped;
                     continue;
+                } else {
+                    buf[bi++] = data[i++];
+                    if (bi == output_block_size) {
+                        p->template decode<output_block_size>(buf);
+                        p += input_block_size;
+                        bi = 0;
+                    }
                 }
+            } else {
+                p->template decode<output_block_size>(&data[i]);
+                i += output_block_size;
+                p += input_block_size;
             }
-            p->template decode<b_chars>(&data[i]);
-            i += b_chars;
-            p += b_size;
         }
         if constexpr (IgnoreNonAlphabetChars) {
-            s.resize((sz - skipped) * b_size / b_chars);
+            s.resize((sz - skipped) * input_block_size / output_block_size);
         }
         if constexpr (max_tail) {
             int tailsize{};
