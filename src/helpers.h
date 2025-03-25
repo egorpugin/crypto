@@ -48,12 +48,14 @@ using i8 = int8_t;
 using u8 = uint8_t;
 using u32 = uint32_t;
 using u64 = uint64_t;
+using i64 = int64_t;
 
 template <auto N>
 using array = std::array<u8, N>;
 template <auto N>
-struct array_gost : array<N> {
-};
+struct array_gost : array<N> {};
+template <auto N>
+using array_little = array_gost<N>;
 
 template <typename... Types>
 struct types {
