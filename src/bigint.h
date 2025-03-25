@@ -105,7 +105,7 @@ struct bigint {
         auto count = N;
         A<N> d{};
         auto p = d.data();
-        if (count > count1) {
+        if (count > count1 && Order == 1) {
             p += count - count1;
         }
         mpz_export(p, 0, Order, 1, 0, 0, *this);
