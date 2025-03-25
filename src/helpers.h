@@ -10,6 +10,7 @@
 #undef small
 
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
