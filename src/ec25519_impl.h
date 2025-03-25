@@ -22,6 +22,8 @@
  * from the sample implementation.
  */
 
+#pragma once
+
 #include <string.h>
 #include <stdint.h>
 

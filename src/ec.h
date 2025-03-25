@@ -61,12 +61,12 @@ struct ec_field_point : point<bigint> {
         if (y == 0) {
             return ec_field_point{ec};
         }
-        bigint temp = y * 2u;
+        bigint temp = y * 2;
         mpz_invert(temp, temp, ec.p);
-        bigint slope = (x * x * 3u + ec.a) * temp;
+        bigint slope = (x * x * 3 + ec.a) * temp;
         slope %= ec.p;
         ec_field_point r{ec};
-        r.x = slope * slope - x * 2u;
+        r.x = slope * slope - x * 2;
         r.x %= ec.p;
         r.y = slope * (x - r.x) - y;
         r.y %= ec.p;

@@ -19,7 +19,7 @@ struct bigint {
     bigint(u64 v) {
         mpz_init_set_ui(*this, v);
     }
-    bigint(int64_t v) {
+    bigint(i64 v) {
         mpz_init_set_si(*this, v);
     }
     bigint(int v) {
@@ -163,6 +163,16 @@ struct bigint {
         mpz_mul_ui(b, b, p);
         return b;
     }
+    bigint operator*(i64 p) const {
+        auto b = *this;
+        mpz_mul_si(b, b, p);
+        return b;
+    }
+    bigint operator*(int p) const {
+        auto b = *this;
+        mpz_mul_si(b, b, p);
+        return b;
+    }
     bigint operator+(auto &&p) const {
         auto b = *this;
         if constexpr (requires { mpz_add(b, b, p); }) {
@@ -181,6 +191,10 @@ struct bigint {
         }
         return b;
     }
+    bigint operator>>(u64 p) {
+        mpz_fdiv_q_2exp(*this, *this, p);
+        return *this;
+    }
     bigint &operator=(const bigint &p) {
         mpz_init_set(*this, p);
         return *this;
@@ -189,13 +203,21 @@ struct bigint {
         mpz_init_set_ui(*this, p);
         return *this;
     }
+    bigint &operator=(i64 p) {
+        mpz_init_set_si(*this, p);
+        return *this;
+    }
+    bigint &operator=(int p) {
+        mpz_init_set_si(*this, p);
+        return *this;
+    }
     bool operator==(const bigint &p) const {
         return mpz_cmp(*this, p) == 0;
     }
     bool operator==(u64 p) const {
         return mpz_cmp_ui(*this, p) == 0;
     }
-    bool operator==(int64_t p) const {
+    bool operator==(i64 p) const {
         return mpz_cmp_si(*this, p) == 0;
     }
     bool operator==(int p) const {
@@ -207,7 +229,7 @@ struct bigint {
     auto operator<=>(u64 p) const {
         return mpz_cmp_ui(*this, p) <=> 0;
     }
-    auto operator<=>(int64_t p) const {
+    auto operator<=>(i64 p) const {
         return mpz_cmp_si(*this, p) <=> 0;
     }
     auto operator<=>(int p) const {
