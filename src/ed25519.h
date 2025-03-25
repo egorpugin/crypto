@@ -9,6 +9,7 @@
 
 namespace crypto {
 
+// rfc8032, also ed448 is there; or NIST.FIPS.186-5
 struct ed25519 {
     struct edwards_point {
         bigint x,y,z,t;
