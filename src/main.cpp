@@ -29,6 +29,7 @@
 #include "dns.h"
 #include "http.h"
 #include "email.h"
+#include "ed25519.h"
 
 #define LOG_TEST()                                                                                                                                             \
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
@@ -1047,6 +1048,27 @@ void test_ecdsa() {
     LOG_TEST();
 
     using namespace crypto;
+
+    {
+        ed25519 ed;
+        ed.private_key_ = bytes_concept{R"(
+   9d61b19deffd5a60ba844af492ec2cc4
+   4449c5697b326919703bac031cae7f60
+)"_sb};
+        auto pubk = ed.public_key();
+        cmp_bytes(pubk, R"(
+   d75a980182b10ab7d54bfed3c964073a
+   0ee172f3daa62325af021a68f707511a
+)"_sb);
+        auto sig = ed.sign(""sv);
+        cmp_bytes(sig, R"(
+   e5564300c360ac729086e2cc806e828a
+   84877f1eb8e5d974d873e06522490155
+   5fb8821590a33bacc61e39701cf9b46b
+   d25bf5f0595bbe24655141438e7a100b
+)"_sb);
+        cmp_base(ed.verify(pubk, ""sv, sig), true);
+    }
 
     // sign & verify
     // rfc6979
@@ -2349,6 +2371,43 @@ void test_email() {
         cmp_base(ie.verify_dkim(pubk), true);
     }
 
+    //
+    {
+
+        auto dnsEd25519PublicKey = "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="s;
+
+        auto msg = R"(DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+ d=football.example.com; i=@football.example.com;
+ q=dns/txt; s=test; t=1528637909; h=from : to : subject :
+ date : message-id : from : subject : date;
+ bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;
+ b=F45dVWDfMbQDGHJFlXUNB2HKfbCeLRyhDXgFpEL8GwpsRe0IeIixNTe3
+ DhCVlUrSjV4BwcVcOF6+FF3Zo9Rpo1tFOeS9mPYQTnGdaSGsgeefOsk2Jz
+ dA+L10TeYt9BgDfQNZtKdN1WO//KgIqXP7OdEFE4LjFYNcUxZQ4FADY+8=
+From: Joe SixPack <joe@football.example.com>
+To: Suzie Q <suzie@shopping.example.net>
+Subject: Is dinner ready?
+Date: Fri, 11 Jul 2003 21:00:37 -0700 (PDT)
+Message-ID: <20030712040037.46341.5F8J@football.example.com>
+
+Hi.
+
+We lost the game.  Are you hungry yet?
+
+Joe.)"s;
+        replace_all(msg, "\n"sv, "\r\n"sv);
+
+        auto fields = input_email::extract_fields(dnsEd25519PublicKey, ";"sv);
+        input_email::get_field(fields, "p="sv);
+
+        ed25519 ec;
+        ec.private_key_ = bytes_concept{base64::decode("nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A="sv)};
+        cmp_bytes(ec.public_key(), base64::decode("11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="sv));
+
+        input_email ie{msg};
+        //cmp_base(ie.verify_dkim(pubk), true);
+    }
+
     email e;
     e.from = "egor@egorpugin.ru";
     e.to = "egor.pugin@gmail.com";
@@ -2755,7 +2814,7 @@ int main() {
         // test_sm3();
         // test_sm4();
         // test_ec();
-        // test_ecdsa();
+        test_ecdsa();
         // test_hmac();
         // test_hkdf();
         // test_pbkdf2();
