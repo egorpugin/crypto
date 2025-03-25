@@ -238,5 +238,6 @@ template <> struct sha2<512,224> : sha2_base<512,224> {};
 template <> struct sha2<512,256> : sha2_base<512,256> {};
 
 using sha256 = sha2<256>;
+using sha512 = sha2<512>;
 
 } // namespace crypto
