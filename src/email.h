@@ -163,7 +163,9 @@ struct input_email {
                 return false;
             }
             add_to_hash(dk.header.substr(0, b.data() - dk.header.data()));
-            add_to_hash_byte(';');
+            if (!dk.fields.empty() && dk.fields.back().empty()) {
+                add_to_hash_byte(';'); // respect last ';'
+            }
         } else {
             auto process_header = [&](std::string_view s) {
                 auto p = s.find(':') + 1;
