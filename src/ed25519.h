@@ -15,6 +15,8 @@ struct ed25519 {
     };
     struct edwards_calc {
         bigint p, q, d;
+        //static inline constexpr auto cofactor{8u};
+        //static inline constexpr auto c{std::countr_zero(cofactor)};
 
         edwards_calc() {
             p = 2;
@@ -132,13 +134,28 @@ struct ed25519 {
         edwards_calc c;
         return c.point_compress(c.point_mul(h.a, c.g()));
     }
-    auto sign(auto &&msg) {
+
+    static auto dom2(u8 f, auto &ctx) {
+        return [f, &ctx](auto &&...vals){
+            sha512 h;
+            h.update("SigEd25519 no Ed25519 collisions"sv);
+            u8 v = f;
+            h.update(bytes_concept{&v,1});
+            v = ctx.size();
+            h.update(bytes_concept{&v,1});
+            h.update(ctx);
+            h.update(vals...);
+            return h.digest();
+        };
+    }
+
+    auto sign(auto &&msg, auto &&hash, auto &&ph) {
         auto [a,prefix] = private_key_expand();
         edwards_calc c;
         auto A = c.point_compress(c.point_mul(a, c.g()));
-        auto r = bytes_to_bigint(sha512::digest(prefix, msg), -1) % c.q;
+        auto r = bytes_to_bigint(hash(prefix, ph(msg)), -1) % c.q;
         auto Rs = c.point_compress(c.point_mul(r, c.g()));
-        auto h = bytes_to_bigint(sha512::digest(Rs, A, msg), -1) % c.q;
+        auto h = bytes_to_bigint(hash(Rs, A, ph(msg)), -1) % c.q;
         auto s = (r + h * a) % c.q;
         array<64> ret;
         array_little<32> ret1 = Rs;
@@ -147,7 +164,17 @@ struct ed25519 {
         memcpy(ret.data() + 0x20, ret2.data(), ret2.size());
         return ret;
     }
-    static bool verify(auto &&pubk, auto &&msg, bytes_concept sig) {
+    auto sign(auto &&msg) {
+        return sign(msg, [](auto &&...vals){return sha512::digest(vals...);}, [](auto &&v){return v;});
+    }
+    auto sign(auto &&msg, auto &&ctx) {
+        return sign(msg, dom2(0, ctx), [](auto &&v){return v;});
+    }
+    auto sign_ph(auto &&msg, auto &&ctx) {
+        return sign(msg, dom2(1, ctx), [](auto &&v){return sha512::digest(v);});
+    }
+
+    static bool verify(auto &&pubk, auto &&msg, auto &&hash, auto &&ph, bytes_concept sig) {
         edwards_calc c;
         auto A = c.point_decompress(pubk);
         auto R = c.point_decompress(sig.subspan(0,32));
@@ -155,10 +182,19 @@ struct ed25519 {
         if (s > c.q) {
             return false;
         }
-        auto h = bytes_to_bigint(sha512::digest(sig.subspan(0,32), pubk, msg), -1) % c.q;
+        auto h = bytes_to_bigint(hash(sig.subspan(0,32), pubk, ph(msg)), -1) % c.q;
         auto sB = c.point_mul(s, c.g());
         auto hA = c.point_mul(h, A);
         return c.point_equal(sB, c.point_add(R, hA));
+    }
+    static bool verify(auto &&pubk, auto &&msg, bytes_concept sig) {
+        return verify(pubk, msg, [](auto &&...vals){return sha512::digest(vals...);}, [](auto &&v){return v;}, sig);
+    }
+    static bool verify(auto &&pubk, auto &&msg, auto &&ctx, bytes_concept sig) {
+        return verify(pubk, msg, dom2(0, ctx), [](auto &&v){return v;}, sig);
+    }
+    static bool verify_ph(auto &&pubk, auto &&msg, auto &&ctx, bytes_concept sig) {
+        return verify(pubk, msg, dom2(1, ctx), [](auto &&v){return sha512::digest(v);}, sig);
     }
 };
 

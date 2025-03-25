@@ -1050,15 +1050,15 @@ void test_ecdsa() {
     using namespace crypto;
 
     {
-    auto check_ed25519 = [](bytes_concept priv, auto &&in_pubk, auto &&msg, auto &&in_sig) {
-        ed25519 ed;
-        ed.private_key_ = priv;
-        auto pubk = ed.public_key();
-        cmp_bytes(pubk, in_pubk);
-        auto sig = ed.sign(msg);
-        cmp_bytes(sig, in_sig);
-        cmp_base(ed.verify(pubk, msg, sig), true);
-    };
+        auto check_ed25519 = [](bytes_concept priv, auto &&in_pubk, auto &&msg, auto &&in_sig) {
+            ed25519 ed;
+            ed.private_key_ = priv;
+            auto pubk = ed.public_key();
+            cmp_bytes(pubk, in_pubk);
+            auto sig = ed.sign(msg);
+            cmp_bytes(sig, in_sig);
+            cmp_base(ed.verify(pubk, msg, sig), true);
+        };
         check_ed25519(R"(
    9d61b19deffd5a60ba844af492ec2cc4
    4449c5697b326919703bac031cae7f60
@@ -1184,6 +1184,80 @@ void test_ecdsa() {
    201009a3efbf3ecb69bea2186c26b589
    09351fc9ac90b3ecfdfbc7c66431e030
    3dca179c138ac17ad9bef1177331a704
+)"_sb);
+
+        auto check_ed25519_ctx = [](bytes_concept priv, auto &&in_pubk, auto &&msg, auto &&ctx, auto &&in_sig) {
+            ed25519 ed;
+            ed.private_key_ = priv;
+            auto pubk = ed.public_key();
+            cmp_bytes(pubk, in_pubk);
+            auto sig = ed.sign(msg, ctx);
+            cmp_bytes(sig, in_sig);
+            cmp_base(ed.verify(pubk, msg, ctx, sig), true);
+        };
+        auto check_ed25519_ctx1 = [&](auto &&msg, auto &&ctx, auto &&in_sig) {
+            check_ed25519_ctx(R"(
+   0305334e381af78f141cb666f6199f57
+   bc3495335a256a95bd2a55bf546663f6
+)"_sb, R"(
+   dfc9425e4f968f7f0c29f0259cf5f9ae
+   d6851c2bb4ad8bfb860cfee0ab248292
+)"_sb, msg, ctx, in_sig);
+        };
+        check_ed25519_ctx1(
+            "f726936d19c800494e3fdaff20b276a8"_sb, "foo"sv, R"(
+   55a4cc2f70a54e04288c5f4cd1e45a7b
+   b520b36292911876cada7323198dd87a
+   8b36950b95130022907a7fb7c4e9b2d5
+   f6cca685a587b4b21f4b888e4e7edb0d
+)"_sb);
+        check_ed25519_ctx1(
+            "f726936d19c800494e3fdaff20b276a8"_sb, "bar"sv, R"(
+   fc60d5872fc46b3aa69f8b5b4351d580
+   8f92bcc044606db097abab6dbcb1aee3
+   216c48e8b3b66431b5b186d1d28f8ee1
+   5a5ca2df6668346291c2043d4eb3e90d
+)"_sb);
+        check_ed25519_ctx1(
+            "508e9e6882b979fea900f62adceaca35"_sb, "foo"sv, R"(
+   8b70c1cc8310e1de20ac53ce28ae6e72
+   07f33c3295e03bb5c0732a1d20dc6490
+   8922a8b052cf99b7c4fe107a5abb5b2c
+   4085ae75890d02df26269d8945f84b0b
+)"_sb);
+        check_ed25519_ctx(R"(
+   ab9c2853ce297ddab85c993b3ae14bca
+   d39b2c682beabc27d6d4eb20711d6560
+)"_sb, R"(
+   0f1d1274943b91415889152e893d80e9
+   3275a1fc0b65fd71b4b0dda10ad7d772
+)"_sb, "f726936d19c800494e3fdaff20b276a8"_sb, "foo"sv, R"(
+   21655b5f1aa965996b3f97b3c849eafb
+   a922a0a62992f73b3d1b73106a84ad85
+   e9b86a7b6005ea868337ff2d20a7f5fb
+   d4cd10b0be49a68da2b2e0dc0ad8960f
+)"_sb);
+
+        auto check_ed25519_ctx_ph = [](bytes_concept priv, auto &&in_pubk, auto &&msg, auto &&ctx, auto &&in_sig) {
+            ed25519 ed;
+            ed.private_key_ = priv;
+            auto pubk = ed.public_key();
+            cmp_bytes(pubk, in_pubk);
+            auto sig = ed.sign_ph(msg, ctx);
+            cmp_bytes(sig, in_sig);
+            cmp_base(ed.verify_ph(pubk, msg, ctx, sig), true);
+        };
+        check_ed25519_ctx_ph(R"(
+   833fe62409237b9d62ec77587520911e
+   9a759cec1d19755b7da901b96dca3d42
+)"_sb, R"(
+   ec172b93ad5e563bf4932c70e1245034
+   c35467ef2efd4d64ebf819683467e2bf
+)"_sb, "abc"sv, ""sv, R"(
+   98a70222f0b8121aa9d30f813d683f80
+   9e462b469c7ff87639499bb94e6dae41
+   31f85042463c2a355a2003d062adf5aa
+   a10b8c61e636062aaad11c2a26083406
 )"_sb);
     }
 
