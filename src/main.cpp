@@ -2559,22 +2559,20 @@ void test_email() {
 
         input_email ie{msg};
         cmp_bytes(base64::encode(sha256::digest(ie.body)), "2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8="sv);
-        cmp_base(ie.verify_dkim(pubk), true);
+        cmp_base(ie.verify_dkim_rsa(pubk), true);
     }
 
     //
     {
-
         auto dnsEd25519PublicKey = "v=DKIM1; k=ed25519; p=11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="s;
 
-        auto msg = R"(DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        auto msg = R"(DKIM-Signature: v=1; a=ed25519-sha256; c=relaxed/relaxed;
  d=football.example.com; i=@football.example.com;
- q=dns/txt; s=test; t=1528637909; h=from : to : subject :
- date : message-id : from : subject : date;
+ q=dns/txt; s=brisbane; t=1528637909; h=from : to :
+ subject : date : message-id : from : subject : date;
  bh=2jUSOH9NhtVGCQWNr9BrIAPreKQjO6Sn7XIkfJVOzv8=;
- b=F45dVWDfMbQDGHJFlXUNB2HKfbCeLRyhDXgFpEL8GwpsRe0IeIixNTe3
- DhCVlUrSjV4BwcVcOF6+FF3Zo9Rpo1tFOeS9mPYQTnGdaSGsgeefOsk2Jz
- dA+L10TeYt9BgDfQNZtKdN1WO//KgIqXP7OdEFE4LjFYNcUxZQ4FADY+8=
+ b=/gCrinpcQOoIfuHNQIbq4pgh9kyIK3AQUdt9OdqQehSwhEIug4D11Bus
+ Fa3bT3FY5OsU7ZbnKELq+eXdp1Q1Dw==
 From: Joe SixPack <joe@football.example.com>
 To: Suzie Q <suzie@shopping.example.net>
 Subject: Is dinner ready?
@@ -2585,18 +2583,19 @@ Hi.
 
 We lost the game.  Are you hungry yet?
 
-Joe.)"s;
+Joe.
+)"s;
         replace_all(msg, "\n"sv, "\r\n"sv);
 
         auto fields = input_email::extract_fields(dnsEd25519PublicKey, ";"sv);
-        input_email::get_field(fields, "p="sv);
+        auto pubk = base64::decode(input_email::get_field(fields, "p="sv));
 
         ed25519 ec;
         ec.private_key_ = bytes_concept{base64::decode("nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A="sv)};
-        cmp_bytes(ec.public_key(), base64::decode("11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo="sv));
+        cmp_bytes(ec.public_key(), pubk);
 
         input_email ie{msg};
-        //cmp_base(ie.verify_dkim(pubk), true);
+        cmp_base(ie.verify_dkim_ed25519(pubk), true);
     }
 
     email e;

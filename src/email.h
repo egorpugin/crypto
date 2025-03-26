@@ -7,6 +7,7 @@
 #include "dns.h"
 #include "rsa.h"
 #include "sha2.h"
+#include "ed25519.h"
 
 namespace crypto {
 
@@ -37,8 +38,19 @@ struct input_email {
             }
         }
     }
+    auto find(auto &&begin, auto &&end, std::string_view header) const {
+        auto it = std::ranges::find_if(begin, end, [&](auto &&v){
+            return v.size() >= header.size() && std::ranges::equal(
+                header.begin(), header.end(),
+                v.begin(), v.begin() + header.size(),
+                {}, ::tolower, ::tolower
+            );
+            return v.starts_with(header);
+        });
+        return it;
+    }
     std::optional<std::string_view> find(std::string_view header) const {
-        auto it = std::ranges::find_if(headers, [&](auto &&v){return v.starts_with(header);});
+        auto it = find(headers.begin(), headers.end(), header);
         return it == headers.end() ? std::optional<std::string_view>{} : std::optional<std::string_view>{*it};
     }
     static auto extract_fields(auto &&data, auto &&delim) {
@@ -88,7 +100,7 @@ struct input_email {
         if (v != "1"sv) {
             return false;
         }
-        if (a != "rsa-sha256"sv) {
+        if (a != "rsa-sha256"sv && a != "ed25519-sha256"sv) {
             return false;
         }
 
@@ -102,14 +114,27 @@ struct input_email {
         if (tv != "DKIM1"sv) {
             return false;
         }
-        if (tk != "rsa"sv) {
-            return false;
+        if (tk == "rsa"sv) {
+            auto pubk = rsa::public_key::load_pkcs8(base64::decode(tp));
+            return verify_dkim_rsa(pubk);
         }
-
-        auto pubk = rsa::public_key::load_pkcs8(base64::decode(tp));
-        return verify_dkim(pubk);
+        if (tk == "ed25519"sv) {
+            return verify_dkim_ed25519(base64::decode(tp));
+        }
+        return false;
     }
-    bool verify_dkim(auto &&pubk) const {
+    bool verify_dkim_rsa(auto &&pubk) const {
+        return verify_dkim([&](auto &&digest, auto &&sig){
+            return pubk.verify_pkcs1_digest<256>(digest, sig);
+        });
+    }
+    bool verify_dkim_ed25519(auto &&pubk) const {
+        return verify_dkim([&](auto &&digest, auto &&sig){
+            ed25519 ed;
+            return ed.verify(pubk, digest, sig);
+        });
+    }
+    bool verify_dkim(auto &&f) const {
         auto dko = dkim();
         if (!dko) {
             return false;
@@ -125,25 +150,56 @@ struct input_email {
         auto c_headers_simple = c.empty() || c.starts_with("simple");
         auto c_body_simple = c.empty() || c == "simple" || c.contains("/simple");
 
-        if (bytes_concept{base64::decode(bh)} != sha256::digest(body)) {
-            if (c_body_simple) {
-                throw std::runtime_error{"not impl or bad hash"};
-            } else {
+        auto add_to_hash = [&](auto &&h, auto &&what) {
+            //std::print("{}", what);
+            h.update(what);
+        };
+        auto add_to_hash_byte = [&](auto &&h, auto &&what) {
+            //std::print("{}", what);
+            h.update(bytes_concept{&what, 1});
+        };
+
+        // normalization is not 100% correct
+        if (c_body_simple) {
+            if (bytes_concept{base64::decode(bh)} != sha256::digest(body)) {
                 throw std::runtime_error{"not impl or bad hash"};
             }
-            return false;
+        } else {
+            constexpr auto delim = "\r\n"sv;
+            auto is_space = [](auto &&c){return c == ' ' || c == '\t';};
+            std::vector<std::string_view> lines;
+            for (auto &&line : std::views::split(body, delim)) {
+                auto &l = lines.emplace_back(line);
+                while (!l.empty() && is_space(l.back())) {
+                    l.remove_suffix(1);
+                }
+            }
+            while (!lines.empty() && lines.back().empty()) {
+                lines.pop_back();
+            }
+            sha256 h;
+            bool skip_spaces{false};
+            for (auto &&line : lines) {
+                for (auto &&c : line) {
+                    if (is_space(c)) {
+                        if (!skip_spaces) {
+                            add_to_hash_byte(h, ' ');
+                            skip_spaces = true;
+                        }
+                    } else {
+                        add_to_hash_byte(h, c);
+                        skip_spaces = false;
+                    }
+                }
+                add_to_hash(h, delim);
+            }
+            if (bytes_concept{base64::decode(bh)} != h.digest()) {
+                throw std::runtime_error{"bad hash"};
+            }
         }
         sha256 h_headers;
-        auto add_to_hash = [&](auto &&what) {
-            //std::print("{}", what);
-            h_headers.update(what);
-        };
-        auto add_to_hash_byte = [&](auto &&what) {
-            //std::print("{}", what);
-            h_headers.update(bytes_concept{&what, 1});
-        };
-        auto is_space = [](auto &&c){return c == ' ' || c == '\t';};
         if (c_headers_simple) {
+            auto is_space = [](auto &&c){return c == ' ' || c == '\t';};
             bool has_from{};
             for (auto &&v : std::views::split(h, ":"sv)) {
                 std::string_view sv{v};
@@ -153,47 +209,46 @@ struct input_email {
                 while (!sv.empty() && is_space(sv.back())) {
                     sv.remove_suffix(1);
                 }
-                has_from |= sv == "From"sv;
+                has_from |= std::ranges::equal(sv, "from"sv, {}, ::tolower);
                 if (auto f = find(sv)) {
-                    add_to_hash(*f);
-                    add_to_hash("\r\n"sv);
+                    add_to_hash(h_headers, *f);
+                    add_to_hash(h_headers, "\r\n"sv);
                 }
             }
             if (!has_from) {
                 return false;
             }
-            add_to_hash(dk.header.substr(0, b.data() - dk.header.data()));
+            add_to_hash(h_headers, dk.header.substr(0, b.data() - dk.header.data()));
             if (!dk.fields.empty() && dk.fields.back().empty()) {
-                add_to_hash_byte(';'); // respect last ';'
+                add_to_hash_byte(h_headers, ';'); // respect last ';'
             }
         } else {
+            auto is_space = [](auto &&c){return c == ' ' || c == '\t' || c == '\r' || c == '\n';};
             auto process_header = [&](std::string_view s) {
                 auto p = s.find(':') + 1;
                 std::string name(s.substr(0, p));
                 for (auto &&c : name) {
                     c = tolower(c);
                 }
-                add_to_hash(name);
+                add_to_hash(h_headers, name);
                 bool skip_spaces{true};
-                auto is_space = [](auto &&c){return c == ' ' || c == '\t' || c == '\r' || c == '\n';};
                 while (!s.empty() && is_space(s.back())) {
                     s.remove_suffix(1);
                 }
                 for (auto it = s.begin() + p; it != s.end(); ++it) {
                     if (is_space(*it)) {
-                        if (skip_spaces) {
-                            continue;
-                        } else {
-                            add_to_hash(" "sv);
+                        if (!skip_spaces) {
+                            add_to_hash(h_headers, " "sv);
                             skip_spaces = true;
                         }
                     } else {
-                        add_to_hash_byte(*it);
+                        add_to_hash_byte(h_headers, *it);
                         skip_spaces = false;
                     }
                 }
             };
             bool has_from{};
+            std::map<std::string_view, decltype(headers)::const_reverse_iterator> next_iters;
             for (auto &&v : std::views::split(h, ":"sv)) {
                 std::string_view sv{v};
                 while (!sv.empty() && is_space(sv.front())) {
@@ -202,10 +257,16 @@ struct input_email {
                 while (!sv.empty() && is_space(sv.back())) {
                     sv.remove_suffix(1);
                 }
-                has_from |= sv == "From"sv;
-                if (auto f = find(sv)) {
-                    process_header(*f);
-                    add_to_hash("\r\n"sv);
+                has_from |= std::ranges::equal(sv, "from"sv, {}, ::tolower);
+                auto h_it = headers.rbegin();
+                auto it = next_iters.find(sv);
+                if (it != next_iters.end()) {
+                    h_it = it->second;
+                }
+                if (h_it = find(h_it, headers.rend(), sv); h_it != headers.rend()) {
+                    process_header(*h_it);
+                    add_to_hash(h_headers, "\r\n"sv);
+                    next_iters[sv] = std::next(h_it);
                 }
             }
             if (!has_from) {
@@ -213,7 +274,7 @@ struct input_email {
             }
             process_header(dk.header.substr(0, b.data() - dk.header.data()));
         }
-        return pubk.verify_pkcs1_digest<256>(h_headers.digest(), base64::decode<true>(b));
+        return f(h_headers.digest(), base64::decode<true>(b));
     }
 };
 
