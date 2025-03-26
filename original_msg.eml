@@ -1,0 +1,67 @@
+Delivered-To: egor.pugin@gmail.com
+Received: by 2002:a05:6400:196:b0:28c:d8d2:2f8e with SMTP id hr22csp431722ecb;
+        Wed, 19 Mar 2025 10:54:22 -0700 (PDT)
+X-Google-Smtp-Source: AGHT+IFytfBwPe+QVMIIWO+GrYQIZBUfp/bjtJtGGabuSUOzAOxYfgPD/hVEz/6zb/VObKPT+eEk
+X-Received: by 2002:a2e:a54b:0:b0:30b:9813:b00e with SMTP id 38308e7fff4ca-30d6a44f6fbmr18400011fa.24.1742406861911;
+        Wed, 19 Mar 2025 10:54:21 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1742406861; cv=none;
+        d=google.com; s=arc-20240605;
+        b=EqwCcEs+XI2PZIVhw7rPPwo/KPPkW1ILTurojmTYa/jAWoqnn7TSS1Lzsn5uJRw1qC
+         bQTjA+MZdNGwwW6b817y2787+wOEwrPLbuTUJBHjbO8452iXnwXPE5eRJCvRYJvvyX1K
+         b7aDNPq94unapItCnPnl9nfeNAjvCHv3dkVIsXrrFriQumGQIiFf377TTRIjkpq12TKh
+         0XpppcHPu7eLOCO7kMOqqarbccorEdPa0rpfSihi1j3Wo/H9YjPxcsKisU5TtZEhuzv7
+         BtfIn7NnXPs5Rm9UGP4jwNcKZorFcMYBLL2AeEx1BtpSPQXBVTxGw7plbX/nkzXYDSUb
+         y94w==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=content-transfer-encoding:message-id:date:mime-version:to:from
+         :dkim-signature;
+        bh=eJSordZTKKgCW9s4DISERXxyXZB6PI8ufAgpMa6cwgw=;
+        fh=PH94Oj9z0dN2gS4nWXXNyFiLvwRHTRkjjQHJ0sXeeyo=;
+        b=aLVocYZ7Xnw/2SfDgxv8x2inXnUSZoiMBttyojvg0umsltdX4jMM2+4sne23LyR+ux
+         ObCWqNw1P8fM3+pGCVKs3rStbPXqF5zUXn4YBI6thwz25lpm8381QR9y3ntLhaxqFL8d
+         8+qDSX/qzPvWw2FkaKHcNlljAi6afZGWlH/2qm9OnBHrNmv6nqEVMo3vdMIcTUlt44zO
+         JYP58VvhGSpAY8Ugv8ZlVaubY6LZ5GP83IZ2pqlR/2xQ1LFnYfBnjhv8QTFHTEvgFLs8
+         rqY7F3QrLuuW+cxiVGkDcFwWGbHkEj7SW+DyxxZ6D3z6imucrK3cgVBDSEhOWuEEcLJ8
+         LBtA==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@yandex.ru header.s=mail header.b=UEQUG7oR;
+       spf=pass (google.com: domain of egorvpugin@yandex.ru designates 178.154.239.212 as permitted sender) smtp.mailfrom=egorvpugin@yandex.ru;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=yandex.ru
+Return-Path: <egorvpugin@yandex.ru>
+Received: from forward101d.mail.yandex.net (forward101d.mail.yandex.net. [178.154.239.212])
+        by mx.google.com with ESMTPS id 38308e7fff4ca-30c3f17fd91si117716721fa.185.2025.03.19.10.54.21
+        for <egor.pugin@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA384 bits=256/256);
+        Wed, 19 Mar 2025 10:54:21 -0700 (PDT)
+Received-SPF: pass (google.com: domain of egorvpugin@yandex.ru designates 178.154.239.212 as permitted sender) client-ip=178.154.239.212;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@yandex.ru header.s=mail header.b=UEQUG7oR;
+       spf=pass (google.com: domain of egorvpugin@yandex.ru designates 178.154.239.212 as permitted sender) smtp.mailfrom=egorvpugin@yandex.ru;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=yandex.ru
+Received: from mail-nwsmtp-mxback-production-main-97.klg.yp-c.yandex.net (mail-nwsmtp-mxback-production-main-97.klg.yp-c.yandex.net [IPv6:2a02:6b8:c42:d829:0:640:29ac:0])
+	by forward101d.mail.yandex.net (Yandex) with ESMTPS id 9338A608D9
+	for <egor.pugin@gmail.com>; Wed, 19 Mar 2025 20:54:21 +0300 (MSK)
+Received: from mail.yandex.ru (2a02:6b8:c43:2a90:0:640:2b42:0 [2a02:6b8:c43:2a90:0:640:2b42:0])
+	by mail-nwsmtp-mxback-production-main-97.klg.yp-c.yandex.net (mxback/Yandex) with HTTPS id GsNfIE6Lx8c0-NYzDx3jL;
+	Wed, 19 Mar 2025 20:54:21 +0300
+X-Yandex-Fwd: 1
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=yandex.ru; s=mail;
+	t=1742406861; bh=eJSordZTKKgCW9s4DISERXxyXZB6PI8ufAgpMa6cwgw=;
+	h=Message-Id:Date:To:From;
+	b=UEQUG7oRdUFRK5QxRBvHr7raa8W6Vgzi1zLTtGWIrkBoMS9861B3l8/xNd5KODpIi
+	 aNz2jRK6G6OuwH93ZAOSBdNixVCoBwr+BOLhEOS7aTPswoFeQfrkk5rPJvNV7FuOwl
+	 aNTw4g8ugIo8Co3TDxu0QHa7Vz+n4Mgakuyv1H6I=
+Authentication-Results: mail-nwsmtp-mxback-production-main-97.klg.yp-c.yandex.net; dkim=pass header.i=@yandex.ru
+Received: by mail-sendbernar-production-main-91.klg.yp-c.yandex.net with HTTP;
+	Wed, 19 Mar 2025 20:54:21 +0300
+From: Egor Pugin <egorvpugin@yandex.ru>
+To: Joe Smith <egor.pugin@gmail.com>
+MIME-Version: 1.0
+X-Mailer: Yamail [ http://yandex.ru ] 5.0
+Date: Wed, 19 Mar 2025 20:54:21 +0300
+Message-Id: <3661742406848@mail.yandex.ru>
+Content-Transfer-Encoding: 7bit
+Content-Type: text/html
+
+<div>test</div>
