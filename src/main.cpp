@@ -2978,6 +2978,7 @@ auto test_all() {
     test_mlkem();
     test_dns();
     test_tls();
+    test_email();
     return success != total;
 }
 
