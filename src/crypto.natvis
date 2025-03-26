@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+
+  <Type Name="__mpz_struct">
+    <Expand>
+        <IndexListItems>
+            <Size>_mp_size > 0 ? _mp_size : -_mp_size</Size>
+            <ValueNode>_mp_d[(_mp_size > 0 ? _mp_size : -_mp_size) - $i - 1]</ValueNode>
+        </IndexListItems>
+    </Expand>
+  </Type>
+
+  <Type Name="crypto::bigint">
+      <DisplayString>{p[0]}</DisplayString>
+        <Expand>
+            <Item Name="value">p[0]</Item>
+        </Expand>
+  </Type>
+
+</AutoVisualizer>
