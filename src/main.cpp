@@ -2598,6 +2598,10 @@ Joe.
         cmp_base(ie.verify_dkim_ed25519(pubk), true);
     }
 
+#ifdef CI_TESTS
+    return;
+#endif
+
     email e;
     e.from = "egor@egorpugin.ru";
     e.to = "egor.pugin@gmail.com";
