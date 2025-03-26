@@ -4,12 +4,17 @@ void build(Solution &s) {
         auto &t = crypto;
         t += cpp23;
         t += "src/.*\\.h"_rr;
+        t.Public += "src/.*\\.natvis"_rr;
 
         t.Public += "org.sw.demo.boost.asio"_dep;
         //t.Public += "org.sw.demo.neargye.nameof"_dep;
 
         t += "bcrypt.lib"_slib;
         t += "Crypt32.lib"_slib;
+
+        if (t.getCompilerType() == CompilerType::MSVC) {
+            t.Public.CompileOptions.push_back("/bigobj");
+        }
     }
 
     auto &test = s.addTarget<Executable>("test");
