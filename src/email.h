@@ -103,6 +103,9 @@ struct input_email {
         if (a != "rsa-sha256"sv && a != "ed25519-sha256"sv) {
             return false;
         }
+        if (d.empty() || s.empty()) {
+            return false;
+        }
 
         auto &dns = get_default_dns();
         auto txt = dns.query_one<dns_packet::txt>(std::format("{}._domainkey.{}", s, d));
@@ -130,8 +133,7 @@ struct input_email {
     }
     bool verify_dkim_ed25519(auto &&pubk) const {
         return verify_dkim([&](auto &&digest, auto &&sig){
-            ed25519 ed;
-            return ed.verify(pubk, digest, sig);
+            return ed25519::verify(pubk, digest, sig);
         });
     }
     bool verify_dkim(auto &&f) const {
@@ -161,8 +163,13 @@ struct input_email {
 
         // normalization is not 100% correct
         if (c_body_simple) {
-            if (bytes_concept{base64::decode(bh)} != sha256::digest(body)) {
-                throw std::runtime_error{"not impl or bad hash"};
+            sha256 body_h;
+            body_h.update(body);
+            if (!body.ends_with("\r\n"sv)) {
+                body_h.update("\r\n"sv);
+            }
+            if (bytes_concept{base64::decode(bh)} != body_h.digest()) {
+                return false;
             }
         } else {
             constexpr auto delim = "\r\n"sv;
@@ -194,13 +201,14 @@ struct input_email {
                 add_to_hash(h, delim);
             }
             if (bytes_concept{base64::decode(bh)} != h.digest()) {
-                throw std::runtime_error{"bad hash"};
+                return false;
             }
         }
         sha256 h_headers;
+        bool has_from{};
+        std::map<std::string_view, decltype(headers)::const_reverse_iterator> next_iters;
         if (c_headers_simple) {
             auto is_space = [](auto &&c){return c == ' ' || c == '\t';};
-            bool has_from{};
             for (auto &&v : std::views::split(h, ":"sv)) {
                 std::string_view sv{v};
                 while (!sv.empty() && is_space(sv.front())) {
@@ -210,13 +218,16 @@ struct input_email {
                     sv.remove_suffix(1);
                 }
                 has_from |= std::ranges::equal(sv, "from"sv, {}, ::tolower);
-                if (auto f = find(sv)) {
-                    add_to_hash(h_headers, *f);
-                    add_to_hash(h_headers, "\r\n"sv);
+                auto h_it = headers.rbegin();
+                auto it = next_iters.find(sv);
+                if (it != next_iters.end()) {
+                    h_it = it->second;
                 }
-            }
-            if (!has_from) {
-                return false;
+                if (h_it = find(h_it, headers.rend(), sv); h_it != headers.rend()) {
+                    add_to_hash(h_headers, *h_it);
+                    add_to_hash(h_headers, "\r\n"sv);
+                    next_iters[sv] = std::next(h_it);
+                }
             }
             add_to_hash(h_headers, dk.header.substr(0, b.data() - dk.header.data()));
             if (!dk.fields.empty() && dk.fields.back().empty()) {
@@ -247,8 +258,6 @@ struct input_email {
                     }
                 }
             };
-            bool has_from{};
-            std::map<std::string_view, decltype(headers)::const_reverse_iterator> next_iters;
             for (auto &&v : std::views::split(h, ":"sv)) {
                 std::string_view sv{v};
                 while (!sv.empty() && is_space(sv.front())) {
@@ -269,10 +278,10 @@ struct input_email {
                     next_iters[sv] = std::next(h_it);
                 }
             }
-            if (!has_from) {
-                return false;
-            }
             process_header(dk.header.substr(0, b.data() - dk.header.data()));
+        }
+        if (!has_from) {
+            return false;
         }
         return f(h_headers.digest(), base64::decode<true>(b));
     }
@@ -311,9 +320,6 @@ struct email {
         using boost::asio::use_awaitable;
         auto ex = co_await boost::asio::this_coro::executor;
 
-        //dns_resolver serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
-        //auto res = serv.resolve(host);
-
         uint16_t relay_port = 25;
         uint16_t legacy_port = 465; // ssl
         uint16_t secure_port = 587; // tls
@@ -322,9 +328,11 @@ struct email {
         auto port = std::to_string(relay_port);
 
         boost::asio::ip::tcp::resolver r{ex};
-        auto result = co_await r.async_resolve("gmail-smtp-in.l.google.com"sv, port, use_awaitable);
-        //auto result = co_await r.async_resolve("smtp-relay.gmail.com"sv, port, use_awaitable);
-        //auto result = co_await r.async_resolve("smtp.gmail.com"sv, port, use_awaitable);
+        auto hostname = "gmail-smtp-in.l.google.com"s;
+        //auto hostname = "smtp-relay.gmail.com"s;
+        //auto hostname = "smtp.gmail.com"s;
+        //auto hostname = "smtp.yandex.ru"s;
+        auto result = co_await r.async_resolve(hostname, port, use_awaitable);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
@@ -333,49 +341,23 @@ struct email {
         //co_await s.async_connect(e, use_awaitable);
         auto msg = co_await wait_for_message();
         msg = co_await command("EHLO home\r\n"sv);
-        //msg = co_await command("STARTTLS\r\n"s);
-        msg = co_await command(std::format("MAIL FROM:<{}>\r\n", from));
-        msg = co_await command(std::format("RCPT TO:<{}>\r\n", to));
-        msg = co_await command("DATA\r\n"sv);
-
-        auto t = time(0);
-        auto msg_id = std::format("{}@{}", t, from.substr(from.rfind('@')+1));
-
-        // supports rsa-sha256
-        // supports ed25519-sha256
-        auto priv = R"(
-   -----BEGIN RSA PRIVATE KEY-----
-   MIICXwIBAAKBgQDwIRP/UC3SBsEmGqZ9ZJW3/DkMoGeLnQg1fWn7/zYtIxN2SnFC
-   jxOCKG9v3b4jYfcTNh5ijSsq631uBItLa7od+v/RtdC2UzJ1lWT947qR+Rcac2gb
-   to/NMqJ0fzfVjH4OuKhitdY9tf6mcwGjaNBcWToIMmPSPDdQPNUYckcQ2QIDAQAB
-   AoGBALmn+XwWk7akvkUlqb+dOxyLB9i5VBVfje89Teolwc9YJT36BGN/l4e0l6QX
-   /1//6DWUTB3KI6wFcm7TWJcxbS0tcKZX7FsJvUz1SbQnkS54DJck1EZO/BLa5ckJ
-   gAYIaqlA9C0ZwM6i58lLlPadX/rtHb7pWzeNcZHjKrjM461ZAkEA+itss2nRlmyO
-   n1/5yDyCluST4dQfO8kAB3toSEVc7DeFeDhnC1mZdjASZNvdHS4gbLIA1hUGEF9m
-   3hKsGUMMPwJBAPW5v/U+AWTADFCS22t72NUurgzeAbzb1HWMqO4y4+9Hpjk5wvL/
-   eVYizyuce3/fGke7aRYw/ADKygMJdW8H/OcCQQDz5OQb4j2QDpPZc0Nc4QlbvMsj
-   7p7otWRO5xRa6SzXqqV3+F0VpqvDmshEBkoCydaYwc2o6WQ5EBmExeV8124XAkEA
-   qZzGsIxVP+sEVRWZmW6KNFSdVUpk3qzK0Tz/WjQMe5z0UunY9Ax9/4PVhp/j61bf
-   eAYXunajbBSOLlx4D+TunwJBANkPI5S9iylsbLs6NkaMHV6k5ioHBBmgCak95JGX
-   GMot/L2x0IYyMLAz6oLWh2hm7zwtb0CgOrPo1ke44hFYnfc=
-   -----END RSA PRIVATE KEY-----
-)"sv;
-        std::string bh, b;
-        auto dkim = std::format("v=1; a=rsa-sha256; s=pc; d=egorpugin.ru; c=simple/simple;"
-     "h=Received : From : To : Subject : Date : Message-ID;"
-     "bh={}; b={};", bh, b);
-
-        msg = co_await command(std::format(
-            "DKIM-Signature: {}\r\n"
-            "From: <{}>\r\n"
-            "To: <{}>\r\n"
-            "Message-ID: <{}>\r\n\r\n"
-            "{}\r\n.\r\n"
-            , dkim, from, to, msg_id, text));
+        msg = co_await command("STARTTLS\r\n"s); // rfc3207
+        tls13_<decltype(s), awaitable> tls{
+            .s = &s,
+            .servername = hostname,
+        };
+        co_await tls.init_ssl();
+        auto tls_command = [&](auto &&cmd) -> awaitable<std::string> {
+            co_await tls.send_message(cmd);
+            co_return co_await tls.receive_tls_message();
+        };
+        msg = co_await tls_command("EHLO home\r\n"sv);
+        msg = co_await tls_command(std::format("MAIL FROM:<{}>\r\n", from));
+        msg = co_await tls_command(std::format("RCPT TO:<{}>\r\n", to));
+        msg = co_await tls_command("DATA\r\n"sv);
+        auto data = make_message();
+        msg = co_await command(msg + ".\r\n"s);
         msg = co_await command("QUIT\r\n"sv);
-
-        int a = 5;
-        a++;
     }
     awaitable<std::string> wait_for_message() {
         using boost::asio::use_awaitable;
@@ -388,9 +370,78 @@ struct email {
         co_await s.async_send(boost::asio::const_buffer(cmd.data(), cmd.size()), boost::asio::use_awaitable);
         co_return co_await wait_for_message();
     }
+    std::string sign_message(auto &&signer) const {
+        auto msg = make_message();
+        input_email ie{msg};
+
+        auto body_h = sha256::digest(ie.body);
+
+        sha256 h;
+        std::string dkim_h;
+        std::map<std::string_view, decltype(ie.headers)::reverse_iterator> next_iters;
+        auto append_header = [&](auto &&name) mutable {
+            dkim_h += std::format("{}:", name);
+
+            auto h_it = ie.headers.rbegin();
+            auto it = next_iters.find(name);
+            if (it != next_iters.end()) {
+                h_it = it->second;
+            }
+            if (h_it = ie.find(h_it, ie.headers.rend(), name); h_it != ie.headers.rend()) {
+                h.update(*h_it);
+                h.update("\r\n"sv);
+                next_iters[name] = std::next(h_it);
+            }
+        };
+        append_header("Subject"sv);
+        append_header("From"sv);
+        append_header("To"sv);
+        append_header("Message-ID"sv);
+        dkim_h.pop_back();
+
+        auto dkim = std::format("DKIM-Signature: v=1; a={}-sha256; s={}; d={}; c=simple/simple; h={}; bh={}; b=",
+            signer.get_type(), signer.selector, from.substr(from.rfind('@') + 1), dkim_h, base64::encode(body_h));
+        h.update(dkim);
+        dkim += base64::encode(signer.sign(h.digest()));
+        dkim += "\r\n"sv;
+
+        msg = std::format("{}{}", dkim, msg);
+        return msg;
+    }
+    // input arg id?
+    std::string make_message() const {
+        std::string_view sv{text};
+        while (!sv.empty() && isspace(sv.back())) {
+            sv.remove_suffix(1);
+        }
+
+        auto t = time(0);
+        auto msg_id = std::format("{}@{}", t, from.substr(from.rfind('@')+1));
+
+        auto msg = std::format(
+            "Subject: {}\r\n"
+            "From: {}\r\n"
+            "To: {}\r\n"
+            "Message-ID: {}\r\n\r\n"
+            "{}\r\n"
+            , title, from, to, msg_id, sv);
+        return msg;
+    }
 };
 
 struct smtp {
+};
+
+struct dkim_ed25519_signer {
+    std::string selector;
+    ed25519 ed;
+
+    static auto get_type() {
+        return "ed25519"sv;
+    }
+    auto sign(auto &&text) {
+        return ed.sign(text);
+    }
 };
 
 }
