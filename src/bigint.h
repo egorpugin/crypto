@@ -56,6 +56,11 @@ struct bigint {
     auto size() const {
         return mpz_size(*this) * sizeof(mp_limb_t);
     }
+    auto pow(auto &&e) const {
+        bigint r;
+        mpz_pow_ui(r, *this, e);
+        return r;
+    }
     auto powm(const bigint &e, const bigint &m) const {
         bigint r;
         mpz_powm(r, *this, e, m);
