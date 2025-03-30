@@ -10,6 +10,7 @@
 namespace crypto {
 
 // rfc8032, also ed448 is there; or NIST.FIPS.186-5
+// check for mont. ladder in multiplication to prevent side-channel attacks
 struct ed25519 {
     struct edwards_point {
         bigint x,y,z,t;
@@ -43,7 +44,7 @@ struct ed25519 {
             if (y >= p) {
                 throw std::runtime_error{"bad y"};
             }
-            auto x2 = (y*y-1) * (d*y*y+1).invert(p);
+            auto x2 = (y*y-1) * (d*y*y+1).invert(p) % p;
             if (x2 == 0) {
                 if (sign) {
                     throw std::runtime_error{"..."};
@@ -89,13 +90,13 @@ struct ed25519 {
             auto zinv = P.z.invert(p);
             auto x = P.x * zinv % p;
             auto y = P.y * zinv % p;
-            mpz_tstbit(x, 0) ? mpz_setbit(y, 255) : mpz_clrbit(y, 255);
+            mpz_tstbit(x, 0) ? mpz_setbit(y, key_size * 8 - 1) : mpz_clrbit(y, key_size * 8 - 1);
             return y;
         }
         auto point_decompress(auto &&s) const {
             auto y = bytes_to_bigint(s, -1);
-            auto sign = mpz_tstbit(y, 255);
-            mpz_clrbit(y, 255);
+            auto sign = mpz_tstbit(y, key_size * 8 - 1);
+            mpz_clrbit(y, key_size * 8 - 1);
             auto x = recover_x(y, sign);
             return edwards_point{x,y,1,x*y%p};
         }
@@ -118,16 +119,16 @@ struct ed25519 {
     auto private_key_expand() {
         auto h = sha512::digest(private_key_);
         h[0] &= 0xf8;
-        h[0x1f] &= 0x7f;
-        h[0x1f] |= 0x40;
+        h[key_size-1] &= 0x7f;
+        h[key_size-1] |= 0x40;
 
         struct x {
             bigint a;
-            array<32> r;
+            array<key_size> r;
         };
         x v;
-        v.a = bytes_to_bigint(bytes_concept{h.data(), 0x20}, -1);
-        memcpy(v.r.data(), h.data() + 0x20, 0x20);
+        v.a = bytes_to_bigint(bytes_concept{h.data(), key_size}, -1);
+        memcpy(v.r.data(), h.data() + key_size, key_size);
         return v;
     }
     public_key_type public_key() {
@@ -149,53 +150,76 @@ struct ed25519 {
             return h.digest();
         };
     }
+    template <int F>
+    static auto ph() {
+        if constexpr (F == 1) {
+            return [](auto &&v){return sha512::digest(v);};
+        } else if constexpr (F == 0) {
+            return [](auto &&v){return v;};
+        } else {
+            static_assert(false);
+        }
+    }
 
     auto sign(auto &&msg, auto &&hash, auto &&ph) {
         auto [a,prefix] = private_key_expand();
         edwards_calc c;
-        auto A = c.point_compress(c.point_mul(a, c.g()));
+        array_little<key_size> A = c.point_compress(c.point_mul(a, c.g()));
         auto r = bytes_to_bigint(hash(prefix, ph(msg)), -1) % c.q;
-        auto Rs = c.point_compress(c.point_mul(r, c.g()));
+        array_little<key_size> Rs = c.point_compress(c.point_mul(r, c.g()));
         auto h = bytes_to_bigint(hash(Rs, A, ph(msg)), -1) % c.q;
         auto s = (r + h * a) % c.q;
-        array<64> ret;
-        array_little<32> ret1 = Rs;
-        memcpy(ret.data(), ret1.data(), ret1.size());
-        array_little<32> ret2 = s;
-        memcpy(ret.data() + 0x20, ret2.data(), ret2.size());
+        array<key_size*2> ret;
+        memcpy(ret.data(), Rs.data(), Rs.size());
+        array_little<key_size> ret2 = s;
+        memcpy(ret.data() + key_size, ret2.data(), ret2.size());
         return ret;
     }
     auto sign(auto &&msg) {
-        return sign(msg, [](auto &&...vals){return sha512::digest(vals...);}, [](auto &&v){return v;});
+        return sign(msg, [](auto &&...vals){return sha512::digest(vals...);}, ph<0>());
+    }
+    template <int PH>
+    auto sign(auto &&msg, auto &&ctx) {
+        return sign(msg, dom2(PH, ctx), ph<PH>());
     }
     auto sign(auto &&msg, auto &&ctx) {
-        return sign(msg, dom2(0, ctx), [](auto &&v){return v;});
+        return sign<0>(msg, ctx);
     }
     auto sign_ph(auto &&msg, auto &&ctx) {
-        return sign(msg, dom2(1, ctx), [](auto &&v){return sha512::digest(v);});
+        return sign<1>(msg, ctx);
     }
 
     static bool verify(auto &&pubk, auto &&msg, auto &&hash, auto &&ph, bytes_concept sig) {
+        if (pubk.size() != key_size) {
+            throw std::runtime_error{"bad pubk"};
+        }
+        if (sig.size() != key_size * 2) {
+            throw std::runtime_error{"bad sig"};
+        }
         edwards_calc c;
         auto A = c.point_decompress(pubk);
-        auto R = c.point_decompress(sig.subspan(0,32));
-        auto s = bytes_to_bigint(sig.subspan(32), -1);
+        auto R = c.point_decompress(sig.subspan(0,key_size));
+        auto s = bytes_to_bigint(sig.subspan(key_size), -1);
         if (s > c.q) {
             return false;
         }
-        auto h = bytes_to_bigint(hash(sig.subspan(0,32), pubk, ph(msg)), -1) % c.q;
+        auto h = bytes_to_bigint(hash(sig.subspan(0,key_size), pubk, ph(msg)), -1) % c.q;
         auto sB = c.point_mul(s, c.g());
         auto hA = c.point_mul(h, A);
         return c.point_equal(sB, c.point_add(R, hA));
     }
     static bool verify(auto &&pubk, auto &&msg, bytes_concept sig) {
-        return verify(pubk, msg, [](auto &&...vals){return sha512::digest(vals...);}, [](auto &&v){return v;}, sig);
+        return verify(pubk, msg, [](auto &&...vals){return sha512::digest(vals...);}, ph<0>(), sig);
+    }
+    template <int PH>
+    static bool verify(auto &&pubk, auto &&msg, auto &&ctx, bytes_concept sig) {
+        return verify(pubk, msg, dom2(PH, ctx), ph<PH>(), sig);
     }
     static bool verify(auto &&pubk, auto &&msg, auto &&ctx, bytes_concept sig) {
-        return verify(pubk, msg, dom2(0, ctx), [](auto &&v){return v;}, sig);
+        return verify<0>(pubk, msg, ctx, sig);
     }
     static bool verify_ph(auto &&pubk, auto &&msg, auto &&ctx, bytes_concept sig) {
-        return verify(pubk, msg, dom2(1, ctx), [](auto &&v){return sha512::digest(v);}, sig);
+        return verify<1>(pubk, msg, ctx, sig);
     }
 };
 
