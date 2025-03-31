@@ -226,7 +226,7 @@ struct dns_packet {
         static inline constexpr auto type = qtype::A;
 
         std::string name;
-        uint32_t address; // ipv4, be
+        array<4> address; // ipv4
     };
     struct cname : base {
         static inline constexpr auto type = qtype::CNAME;
@@ -249,7 +249,7 @@ struct dns_packet {
         static inline constexpr auto type = qtype::AAAA;
 
         std::string name;
-        uint8_t address[16]; // ipv6, be
+        array<16> address; // ipv6
     };
     using record_type = std::variant<a, cname, mx, txt, aaaa>;
     auto answers() {
@@ -266,7 +266,7 @@ struct dns_packet {
                 a r;
                 r.ttl = res.ttl;
                 r.name = std::move(name);
-                r.address = *(decltype(r.address)*)p;
+                memcpy(r.address.data(), p, r.address.size());
                 p += res.rdlength;
                 results.push_back(r);
                 break;
@@ -275,7 +275,7 @@ struct dns_packet {
                 aaaa r;
                 r.ttl = res.ttl;
                 r.name = std::move(name);
-                memcpy(r.address, p, 16);
+                memcpy(r.address.data(), p, r.address.size());
                 p += res.rdlength;
                 results.push_back(r);
                 break;
@@ -378,10 +378,29 @@ private:
         p.set_question(domain, type, class_);
         co_await s.async_send_to(boost::asio::buffer(buffer, p.size()), e, boost::asio::use_awaitable);
         co_await s.async_receive_from(boost::asio::buffer(buffer), e, boost::asio::use_awaitable);
-        if (p.h.rcode || p.h.zeros || p.h.qr == 0) {
-            throw std::runtime_error{"bad response"};
+        if (p.h.zeros || p.h.qr == 0) {
+            co_return;
+            //throw std::runtime_error{"bad response"};
         }
+        enum {
+            no_error,
+            query_format_error,
+            server_failure,
+            domain_not_exists,
+            function_not_implemented,
+            server_refused_to_answer,
+            name_should_not_exist_but_exists,
+            rrset_should_not_exist_but_exists,
+            server_not_authoritative_for_the_zone,
+            name_not_in_zone,
+        };
+        switch (p.h.rcode) {
+        case no_error:
         results = p.answers();
+            break;
+        case query_format_error:
+            throw std::runtime_error{"bad request"};
+        }
     }
 };
 
@@ -407,7 +426,7 @@ struct dns_cache {
     }
 
     template <typename T>
-    auto query_one(const std::string &domain) {
+    auto &query(const std::string &domain) {
         auto now = std::chrono::system_clock::now();
         query_type qt{domain, T::type};
         auto it = cache.find(qt);
@@ -419,9 +438,15 @@ struct dns_cache {
             res.last_query = now;
             if (!res.results.empty()) {
                 visit(res.results[0], [&](auto &&v){res.ttl = std::chrono::seconds{v.ttl};});
+            } else {
+                res.ttl = 60s;
             }
+            }
+        return it->second.results;
         }
-        return std::get<T>(it->second.results.at(0));
+    template <typename T>
+    auto query_one(const std::string &domain) {
+        return std::get<T>(query<T>(domain).at(0));
     }
 };
 
