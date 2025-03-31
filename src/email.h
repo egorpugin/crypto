@@ -128,7 +128,7 @@ struct input_email {
     }
     bool verify_dkim_rsa(auto &&pubk) const {
         return verify_dkim([&](auto &&digest, auto &&sig){
-            return pubk.verify_pkcs1_digest<256>(digest, sig);
+            return pubk.template verify_pkcs1_digest<256>(digest, sig);
         });
     }
     bool verify_dkim_ed25519(auto &&pubk) const {

@@ -78,10 +78,10 @@ struct ed_base {
         return obj.sign(msg, obj.dom(PH, ctx), obj.template ph<PH>());
     }
     auto sign(this auto &&obj, auto &&msg, auto &&ctx) {
-        return obj.sign<0>(msg, ctx);
+        return obj.template sign<0>(msg, ctx);
     }
     auto sign_ph(this auto &&obj, auto &&msg, auto &&ctx) {
-        return obj.sign<1>(msg, ctx);
+        return obj.template sign<1>(msg, ctx);
     }
 
     static bool verify(auto &&pubk, auto &&msg, auto &&hash, auto &&ph, bytes_concept sig) {

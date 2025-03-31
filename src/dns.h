@@ -333,9 +333,6 @@ struct dns_resolver {
         }
     }
 
-    auto query(const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
-        return query(dns_servers.at(0), domain, type, class_);
-    }
     auto query(auto &server, const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         // asio transport for now
         results_type results;
@@ -347,6 +344,9 @@ struct dns_resolver {
         });
         ctx.run();
         return results;
+    }
+    auto query(const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+        return query(dns_servers.at(0), domain, type, class_);
     }
     // return ips?
     auto resolve(const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
