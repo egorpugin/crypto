@@ -344,6 +344,8 @@ struct tls13_ {
             case parameters::content_type::change_cipher_spec:
                 co_await receive(s);
                 break;
+            default:
+                break;
             }
             switch (h.type) {
             case parameters::content_type::handshake:

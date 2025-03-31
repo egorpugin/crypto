@@ -44,7 +44,7 @@ struct sm3 : hash_traits<sm3> {
     do {                                                                                                                                                       \
         ss1 = std::rotl((std::rotl((a), 12) + (e) + (t)), 7);                                                                                                  \
         ss2 = ss1 ^ std::rotl((a), 12);                                                                                                                        \
-        d += FF##i(a, b, c) + ss2 + ((w1) ^ (w2));                                                                                                             \
+        d += FFx##i(a, b, c) + ss2 + ((w1) ^ (w2));                                                                                                             \
         h += GG##i(e, f, g) + ss1 + (w1);                                                                                                                      \
         b = std::rotl((b), 9);                                                                                                                                 \
         f = std::rotl((f), 19);                                                                                                                                \
@@ -54,8 +54,8 @@ struct sm3 : hash_traits<sm3> {
 #define R1(a, b, c, d, e, f, g, h, t, w1, w2) R(1, a, b, c, d, e, f, g, h, t, w1, w2)
 #define R2(a, b, c, d, e, f, g, h, t, w1, w2) R(2, a, b, c, d, e, f, g, h, t, w1, w2)
 
-#define FF1(x, y, z) (x ^ y ^ z)
-#define FF2(x, y, z) ((x & y) | (x & z) | (y & z))
+#define FFx1(x, y, z) (x ^ y ^ z)
+#define FFx2(x, y, z) ((x & y) | (x & z) | (y & z))
 
 #define GG1(x, y, z) (x ^ y ^ z)
 #define GG2(x, y, z) ((x & y) | (~x & z))
