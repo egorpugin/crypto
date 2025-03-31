@@ -17,7 +17,7 @@ jobs:
       run: ./sw -Dci-build=true run test-0.0.1
 
   linux:
-    if: false
+    #if: false
     runs-on: ubuntu-22.04
     container: fedora:latest
     steps:
