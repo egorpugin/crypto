@@ -196,9 +196,9 @@ struct tls13_ {
         };
         static consteval auto pkt() {
             if constexpr (requires { typename type::peer_key_type; }) {
-                return type_v<type::peer_key_type>{};
+                return type_v<typename type::peer_key_type>{};
             } else {
-                return type_v<type::public_key_type>{};
+                return type_v<typename type::public_key_type>{};
             }
         }
         using peer_key_type = decltype(pkt())::type;

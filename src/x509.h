@@ -112,9 +112,9 @@ struct x509_storage {
 
     static auto extract_keyid(auto &&kid) {
         bytes_concept keyid;
-        auto keystor = kid->get<asn1_octet_string>(0, 1);
+        auto keystor = kid->template get<asn1_octet_string>(0, 1);
         if (keystor.get_tag() == asn1_octet_string::tag) {
-            keyid = keystor.get<asn1_octet_string>(0);
+            keyid = keystor.template get<asn1_octet_string>(0);
         } else if (keystor.get_tag() == asn1_sequence::tag) {
             keyid = keystor.get(0, 0);
         }

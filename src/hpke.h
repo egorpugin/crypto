@@ -109,7 +109,7 @@ struct dhkem {
     }
 
     auto derive_key_pair(bytes_concept version, auto &&input_key_material) {
-        return params_type::template derive_key_pair<sizeof(Curve::private_key_type)>(*this, version, input_key_material);
+        return params_type::template derive_key_pair<sizeof(typename Curve::private_key_type)>(*this, version, input_key_material);
     }
 };
 

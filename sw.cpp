@@ -9,10 +9,9 @@ void build(Solution &s) {
         t.Public += "org.sw.demo.boost.asio"_dep;
         //t.Public += "org.sw.demo.neargye.nameof"_dep;
 
-        t += "bcrypt.lib"_slib;
-        t += "Crypt32.lib"_slib;
-
         if (t.getCompilerType() == CompilerType::MSVC) {
+            t += "bcrypt.lib"_slib;
+            t += "Crypt32.lib"_slib;
             t.Public.CompileOptions.push_back("/bigobj");
         }
     }

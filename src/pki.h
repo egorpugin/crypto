@@ -98,7 +98,7 @@ struct gost_sig<Curve, CurveOid, streebog<256>> : gost_sig_base<Curve, gost_sig<
     static inline constexpr auto pubk_type = oid::gost2012PublicKey256;
     static inline constexpr auto digest_type = oid::gost2012Digest256;
     using hash_type = streebog<256>;
-    using curve_type = typename Curve;
+    using curve_type = Curve;
     static inline constexpr auto curve_oid = CurveOid;
     static_assert(Curve::point_size_bytes * 8 == 256);
 };
@@ -108,7 +108,7 @@ struct gost_sig<Curve, CurveOid, streebog<512>> : gost_sig_base<Curve, gost_sig<
     static inline constexpr auto pubk_type = oid::gost2012PublicKey512;
     static inline constexpr auto digest_type = oid::gost2012Digest512;
     using hash_type = streebog<512>;
-    using curve_type = typename Curve;
+    using curve_type = Curve;
     static inline constexpr auto curve_oid = CurveOid;
     static_assert(Curve::point_size_bytes * 8 == 512);
 };

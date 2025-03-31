@@ -1634,7 +1634,7 @@ void test_ecdsa() {
             decltype(c_in) c{bytes_concept{pk}};
             auto pubkey = c.public_key();
 
-            auto [r, s] = c.sign_deterministic<decltype(hash)>(h);
+            auto [r, s] = c.template sign_deterministic<decltype(hash)>(h);
             cmp_bytes(r, r_in);
             cmp_bytes(s, s_in);
 

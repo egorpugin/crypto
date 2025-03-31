@@ -9,8 +9,10 @@
 #define WIN32_LEAN_AND_MEAN
 #undef small
 
+#include <algorithm>
 #include <array>
 #include <bit>
+#include <charconv>
 #include <cmath>
 #include <cstring>
 #include <filesystem>
