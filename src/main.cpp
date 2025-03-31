@@ -2973,7 +2973,7 @@ Joe.
         throw;
     }
     memcpy(s.ed.private_key_.data(), data.data(), data.size());
-    std::println("{}", base64::encode(s.ed.public_key()));
+    //std::println("{}", base64::encode(s.ed.public_key()));
 
     e.send();
 }
@@ -3366,7 +3366,6 @@ int main() {
 #ifndef CI_TESTS
 int main() {
     try {
-
         // test_base64();
         // test_aes();
         // test_sha1();
@@ -3377,7 +3376,7 @@ int main() {
         // test_sm3();
         // test_sm4();
         // test_ec();
-        test_ecdsa();
+        //test_ecdsa();
         // test_hmac();
         // test_hkdf();
         // test_pbkdf2();
@@ -3398,7 +3397,6 @@ int main() {
         //test_dns();
         //test_tls();
         test_email();
-
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {
