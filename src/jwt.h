@@ -54,20 +54,20 @@ struct jwt {
     };
 
     using b64 = base64url<false>;
-    //using json = json_raw<true, true>;
-    using json = json;
+    //using json_type = json_raw<true, true>;
+    using json_type = json;
     template <auto Bits> using hs = hmac_sha2<Bits>;
     template <auto Bits> using rs = rsassa_pkcs1_v1_5_sha2<Bits>;
     template <auto Bits> using ps = pkcs1_pss_mgf1_sha2<Bits>;
 
-    json header;
-    json payload;
+    json_type header;
+    json_type payload;
     std::string signature;
 
     jwt() {
         header["typ"] = "JWT";
     }
-    jwt(const json &payload) : payload{payload} {
+    jwt(const json_type &payload) : payload{payload} {
         header["typ"] = "JWT";
     }
     jwt(std::string_view s) {
@@ -88,7 +88,8 @@ struct jwt {
         return h.verify(concat(), signature, args...);
     }
 
-    auto operator<=>(const jwt &) const = default;
+    //auto operator<=>(const jwt &) const = default;
+    bool operator==(const jwt &rhs) const {return std::tie(header,payload,signature) == std::tie(rhs.header,rhs.payload,rhs.signature);}
     operator std::string() const {
         return std::format("{}.{}.{}", b64::encode(header.dump()), b64::encode(payload.dump()), b64::encode(signature));
     }

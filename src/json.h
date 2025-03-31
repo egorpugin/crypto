@@ -133,7 +133,8 @@ struct json_raw {
         auto &a = std::get<array_type>(value);
         a.push_back(v);
     }
-    auto operator<=>(const this_type &) const = default;
+    //auto operator<=>(const this_type &) const = default;
+    bool operator==(const this_type &rhs) const {return value == rhs.value;}
     auto &operator[](const string_type &key) {
         return std::get<object_type>(value)[key];
     }

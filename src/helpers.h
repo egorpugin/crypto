@@ -311,6 +311,12 @@ struct bigendian_unsigned {
     void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
     }
+    /*operator internal_type() const requires (Bytes == 3) { return std::byteswap(*(u32*)data) >> 8; }
+    operator internal_type() const requires (Bytes != 3)//requires (!std::same_as<internal_type, bad_type>)
+    {
+        auto d = *(internal_type*)data;
+        return std::byteswap(d);
+    }*/
 #ifdef __GNUC__
     // operator auto() requires fix will be available in gcc-16
     template <typename T>
@@ -384,7 +390,7 @@ struct be_stream {
     void skip(auto len) {
         step(len);
     }
-    void step(auto len) {
+    void step(size_t len) {
         p += len;
         this->len -= len;
     }
