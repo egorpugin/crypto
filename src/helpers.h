@@ -33,6 +33,9 @@ using std::format;
 #include <__msvc_int128.hpp>
 #endif
 
+#include <boost/asio.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
+
 #ifndef FWD
 #define FWD(x) std::forward<decltype(x)>(x)
 #endif
