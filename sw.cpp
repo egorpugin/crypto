@@ -12,7 +12,7 @@ void build(Solution &s) {
         if (t.getCompilerType() == CompilerType::MSVC) {
             t.Public.CompileOptions.push_back("/bigobj");
         }
-        if (t.getBuildSettings().TargetOS.Type != OSType::Windows) {
+        if (t.getBuildSettings().TargetOS.Type == OSType::Windows) {
             t += "bcrypt.lib"_slib;
             t += "Crypt32.lib"_slib;
         }
