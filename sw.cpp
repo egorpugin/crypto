@@ -10,9 +10,11 @@ void build(Solution &s) {
         //t.Public += "org.sw.demo.neargye.nameof"_dep;
 
         if (t.getCompilerType() == CompilerType::MSVC) {
+            t.Public.CompileOptions.push_back("/bigobj");
+        }
+        if (t.getBuildSettings().TargetOS.Type != OSType::Windows) {
             t += "bcrypt.lib"_slib;
             t += "Crypt32.lib"_slib;
-            t.Public.CompileOptions.push_back("/bigobj");
         }
     }
 
