@@ -127,7 +127,7 @@ struct bytes_concept {
     auto empty() const { return size() == 0; }
     auto subspan(size_t start, size_t sz = -1) const {
         auto b = p + start;
-        if (sz == SIZE_T_MAX || sz >= this->sz) {
+        if (sz == SIZE_MAX || sz >= this->sz) {
             return bytes_concept{b, this->sz - start};
         }
         sz = std::min<size_t>(this->sz - start, sz);
