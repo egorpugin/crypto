@@ -2636,19 +2636,16 @@ void test_dns() {
     using namespace crypto;
 
     dns_resolver serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
-    auto res = serv.query("gql.twitch.tv"s);
+    bool ok{true};
     auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A) {
         try {
             auto res = serv.query(what, type);
-            //cmp_base(!res.empty(), true);
-            cmp_base(1, 1);
-            //char buf[20]{};
-            //inet_ntop(AF_INET, &res, buf, sizeof(buf));
-            //std::println("{}, type {} -> {}", what, type, buf);
+            cmp_base(!res.empty(), ok);
         } catch (...) {
             cmp_base(1, 0);
         }
     };
+    res_and_print("gql.twitch.tv"s);
     res_and_print("twitch.tv"s);
     res_and_print("www.youtube.com"s);
     res_and_print("google.com"s);
@@ -2657,9 +2654,10 @@ void test_dns() {
     res_and_print("gmail.com"s);
     res_and_print("gmail.com"s, dns_packet::qtype::MX);
     res_and_print("egorpugin.ru"s);
+    res_and_print("aspia.egorpugin.ru"s);
+    ok = false;
     res_and_print("egorpugin.ru"s, dns_packet::qtype::MX);
     res_and_print("egorpugin.ru"s, dns_packet::qtype::AAAA);
-    res_and_print("aspia.egorpugin.ru"s);
 
     auto &dd = get_default_dns();
     dd.query_one<dns_packet::mx>("google.com"s);
