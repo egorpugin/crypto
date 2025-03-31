@@ -327,16 +327,15 @@ struct email {
         uint16_t alternative_port = 2525;
         auto port = std::to_string(relay_port);
 
-        boost::asio::ip::tcp::resolver r{ex};
-        auto hostname = "gmail-smtp-in.l.google.com"s;
+        //auto hostname = "gmail-smtp-in.l.google.com"s;
         //auto hostname = "smtp-relay.gmail.com"s;
-        //auto hostname = "smtp.gmail.com"s;
+        auto hostname = "smtp.gmail.com"s;
         //auto hostname = "smtp.yandex.ru"s;
-        auto result = co_await r.async_resolve(hostname, port, use_awaitable);
-        if (result.empty()) {
-            throw std::runtime_error{"cannot resolve"};
-        }
-        co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
+
+        auto &dns = get_default_dns();
+        auto result = dns.query_one<dns_packet::a>(hostname);
+        boost::asio::ip::tcp::endpoint e{boost::asio::ip::make_address_v4(result.address), relay_port};
+        co_await s.async_connect(e, use_awaitable);
         //ip::tcp::endpoint e{ip::make_address_v4("108.177.14.27"s), secure_port};
         //co_await s.async_connect(e, use_awaitable);
         auto msg = co_await wait_for_message();
