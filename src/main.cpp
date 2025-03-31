@@ -216,7 +216,7 @@ void test_aes() {
     // using v4u = unsigned __attribute__ ((vector_size (16)));
     using v4u = std::array<unsigned char, 16>;
     // using v4u = unsigned char[16];
-    int n = 10000000;
+    //int n = 10000000;
     // while (n--)
     {
         {

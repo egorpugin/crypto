@@ -387,7 +387,7 @@ struct secp {
     // verify works as expected
     template <typename Hash>
     auto sign_deterministic(auto &&hash) {
-        auto pubkey = public_key();
+        //auto pubkey = public_key();
 
         auto ec = parameters.curve();
         auto q = bigint{parameters.order};

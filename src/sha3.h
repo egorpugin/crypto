@@ -92,8 +92,8 @@ template <auto Capacity, auto Padding>
 struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding>> {
     static inline constexpr auto rate = StateBits - Capacity;
 
-    using hash_traits = hash_traits<keccak<Capacity, Padding>>;
-    using hash_traits::update;
+    using hash_traits_type = hash_traits<keccak<Capacity, Padding>>;
+    using hash_traits_type::update;
 
     int blockpos{};
     u64 bitlen{};

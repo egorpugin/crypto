@@ -30,8 +30,8 @@ struct mgm {
         c.expand_key(k);
     }
     void inc_counter(auto &&what, int sz = block_size_bytes) {
-        for (int i = sz; i >= 0; --i) {
-            if (++what[i - 1] != 0)
+        for (int i = sz - 1; i >= 0; --i) {
+            if (++what[i] != 0)
                 break;
         }
     }

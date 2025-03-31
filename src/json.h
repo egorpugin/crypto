@@ -250,7 +250,7 @@ struct json_raw {
         auto [e,ec] = std::from_chars(p.data(), end, i);
         if (ec != std::errc{} || e != end) {
             double d;
-            auto [e,ec] = std::from_chars(p.data(), end, i);
+            auto [e,ec] = std::from_chars(p.data(), end, d);
             if (ec != std::errc{} || e != end) {
                 throw std::runtime_error{"bad number"};
             }

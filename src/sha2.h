@@ -113,9 +113,9 @@ struct sha2_data {
 
 template <auto ShaType, auto DigestSizeBits = ShaType>
 struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
-    using hash_traits = hash_traits<sha2_base<ShaType, DigestSizeBits>>;
-    using hash_traits::digest;
-    using hash_traits::update;
+    using hash_traits_type = hash_traits<sha2_base<ShaType, DigestSizeBits>>;
+    using hash_traits_type::digest;
+    using hash_traits_type::update;
 
     static_assert(ShaType == 256 || ShaType == 512);
     static inline constexpr auto small_sha = ShaType == 256;
@@ -132,7 +132,7 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
 
     void update(const u8 *data, size_t length) noexcept {
         bitlen += length * 8;
-        hash_traits::update_fast_post(data, length, m_data, sizeof(m_data), blockpos, [&]() {
+        hash_traits_type::update_fast_post(data, length, m_data, sizeof(m_data), blockpos, [&]() {
             transform();
         });
     }
