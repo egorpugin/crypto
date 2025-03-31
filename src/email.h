@@ -377,7 +377,7 @@ struct email {
 
         sha256 h;
         std::string dkim_h;
-        std::map<std::string_view, decltype(ie.headers)::reverse_iterator> next_iters;
+        std::map<std::string_view, typename decltype(ie.headers)::reverse_iterator> next_iters;
         auto append_header = [&](auto &&name) mutable {
             dkim_h += std::format("{}:", name);
 

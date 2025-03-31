@@ -311,12 +311,24 @@ struct bigendian_unsigned {
     void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
     }
+#ifdef __GNUC__
+    // operator auto() requires fix will be available in gcc-16
+    template <typename T>
+    operator T() const requires (Bytes == 3) { return std::byteswap(*(u32*)data) >> 8; }
+    template <typename T>
+    operator T() const requires (Bytes != 3)//requires (!std::same_as<internal_type, bad_type>)
+    {
+        auto d = *(internal_type*)data;
+        return std::byteswap(d);
+    }
+#else
     operator auto() const requires (Bytes == 3) { return std::byteswap(*(u32*)data) >> 8; }
     operator auto() const requires (Bytes != 3)//requires (!std::same_as<internal_type, bad_type>)
     {
         auto d = *(internal_type*)data;
         return std::byteswap(d);
     }
+#endif
 };
 template <auto Bytes>
 auto operator+(auto &&v, const bigendian_unsigned<Bytes> &l) {

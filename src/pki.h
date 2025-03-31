@@ -23,7 +23,7 @@ struct certificate_authority {
     // sign certificate
 };
 
-struct subject {
+struct subject_type {
     std::string common_name;
     std::string organization_unit;
     std::string organization;
@@ -31,7 +31,7 @@ struct subject {
     std::string state;
     std::string country;
 
-    auto operator<=>(const subject &) const = default;
+    auto operator<=>(const subject_type &) const = default;
 };
 
 template <typename Curve, typename Settings>
@@ -115,8 +115,8 @@ struct gost_sig<Curve, CurveOid, streebog<512>> : gost_sig_base<Curve, gost_sig<
 
 struct cert_request {
     using clock = std::chrono::system_clock;
-    subject issuer;
-    subject subject;
+    subject_type issuer;
+    subject_type subject;
     clock::time_point not_before{clock::now()};
     clock::time_point not_after{not_before + std::chrono::years{1}};
 
@@ -137,7 +137,7 @@ struct public_key_infrastructure {
     int serial_number{1};
     std::map<key, std::string> certs;
 
-    static auto make_subject(const subject &s) {
+    static auto make_subject(const subject_type &s) {
         constexpr auto c = make_oid<2,5,4,6>();
         constexpr auto st = make_oid<2,5,4,8>();
         constexpr auto l = make_oid<2,5,4,7>();
