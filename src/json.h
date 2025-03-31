@@ -250,10 +250,15 @@ struct json_raw {
         auto [e,ec] = std::from_chars(p.data(), end, i);
         if (ec != std::errc{} || e != end) {
             double d;
+#if !defined(__clang__) || __clang__ > 20
+            // will be available in clang20
             auto [e,ec] = std::from_chars(p.data(), end, d);
             if (ec != std::errc{} || e != end) {
                 throw std::runtime_error{"bad number"};
             }
+#else
+            d = std::stod(std::string(p.data(), end));
+#endif
             p.remove_prefix(endp);
             return d;
         }
