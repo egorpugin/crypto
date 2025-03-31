@@ -378,7 +378,7 @@ private:
         p.h.rd = 1; // some queries will fail without this
         p.set_question(domain, type, class_);
         co_await s.async_send_to(boost::asio::buffer(buffer, p.size()), e, boost::asio::use_awaitable);
-        boost::asio::deadline_timer dt{ex};
+        boost::asio::deadline_timer dt{ex, boost::posix_time::seconds{2}};
         co_await (s.async_receive_from(boost::asio::buffer(buffer), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
         if (p.h.zeros || p.h.qr == 0) {
             co_return;
