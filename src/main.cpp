@@ -37,6 +37,8 @@
     std::flush(std::cout);                                                                                                                                     \
     scoped_timer ____timer;
 
+#define SRCLOC std::source_location loc = std::source_location::current()
+
 static int total, success;
 static struct stats {
     ~stats() {
@@ -103,7 +105,7 @@ auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
         crypto::print_buffer("result:", res);
     }
 };
-auto cmp_bool = [](auto &&left, auto &&right, std::source_location loc = std::source_location::current()) {
+auto cmp_bool = [](auto &&left, auto &&right, SRCLOC) {
     auto r = left == right;
     ++total;
     success += !!r;
@@ -112,10 +114,10 @@ auto cmp_bool = [](auto &&left, auto &&right, std::source_location loc = std::so
     }
     return r;
 };
-auto cmp_base = [](auto &&left, auto &&right, std::source_location loc = std::source_location::current()) {
+auto cmp_base = [](auto &&left, auto &&right, SRCLOC) {
     return cmp_bool(left == right, true, loc);
 };
-auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right, bool with_xor = false, std::source_location loc = std::source_location::current()) {
+auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right, bool with_xor = false, SRCLOC) {
     auto r = cmp_base(left, right, loc);
     if (!r) {
         std::cout << "bytes not equal" << "\n";
@@ -2640,12 +2642,12 @@ void test_dns() {
 
     dns_resolver serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
     bool ok{true};
-    auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A) {
+    auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A, SRCLOC) {
         try {
             auto res = serv.query(what, type);
-            cmp_base(!res.empty(), ok);
+            cmp_base(!res.empty(), ok, loc);
         } catch (...) {
-            cmp_base(1, 0);
+            cmp_base(1, 0, loc);
         }
     };
     res_and_print("gql.twitch.tv"s);
