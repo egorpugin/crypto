@@ -103,20 +103,20 @@ auto to_string2 = [](auto &&sha, std::string s, std::string s2) {
         crypto::print_buffer("result:", res);
     }
 };
-auto cmp_bool = [](auto &&left, auto &&right) {
+auto cmp_bool = [](auto &&left, auto &&right, std::source_location loc = std::source_location::current()) {
     auto r = left == right;
     ++total;
     success += !!r;
     if (!r) {
-        std::println("false");
+        std::println("test failed on the line {}", loc.line());
     }
     return r;
 };
-auto cmp_base = [](auto &&left, auto &&right) {
-    return cmp_bool(left == right, true);
+auto cmp_base = [](auto &&left, auto &&right, std::source_location loc = std::source_location::current()) {
+    return cmp_bool(left == right, true, loc);
 };
-auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right, bool with_xor = false) {
-    auto r = cmp_base(left, right);
+auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right, bool with_xor = false, std::source_location loc = std::source_location::current()) {
+    auto r = cmp_base(left, right, loc);
     if (!r) {
         std::cout << "bytes not equal" << "\n";
         std::cout << "left:" << "\n";
