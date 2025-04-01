@@ -59,7 +59,10 @@ struct timer {
     void end() {
         auto diff = clock::now() - tp;
         auto ok = ::total - total == ::success - success && std::uncaught_exceptions() == 0;
-        std::println("{} in {:.4f}", ok ? "ok" : "errored", std::chrono::duration_cast<std::chrono::duration<float>>(diff).count());
+        std::println("{} in {:.4f} ({} of {} tests passed)", ok ? "ok" : "errored",
+            std::chrono::duration_cast<std::chrono::duration<float>>(diff).count(),
+            ::success - success, ::total - total
+        );
     }
 };
 struct scoped_timer {
