@@ -398,7 +398,7 @@ private:
         };
         switch (p.h.rcode) {
         case no_error:
-        results = p.answers();
+            results = p.answers();
             break;
         case query_format_error:
             throw std::runtime_error{"bad request"};
@@ -443,9 +443,9 @@ struct dns_cache {
             } else {
                 res.ttl = 60s;
             }
-            }
-        return it->second.results;
         }
+        return it->second.results;
+    }
     template <typename T>
     auto query_one(const std::string &domain) {
         return std::get<T>(query<T>(domain).at(0));
@@ -453,7 +453,7 @@ struct dns_cache {
 };
 
 auto &get_default_dns() {
-    static dns_cache serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    static dns_cache serv{"178.208.90.175", "8.8.8.8", "8.8.4.4", "1.1.1.1"};
     return serv;
 }
 
