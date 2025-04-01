@@ -2830,6 +2830,8 @@ void test_email() {
     //
     {
         auto msg = read_file("original_msg.eml");
+        replace_all(msg, "\r\n"sv, "\n"sv);
+        replace_all(msg, "\n"sv, "\r\n"sv);
         input_email ie{msg};
         cmp_base(ie.verify_dkim(), true);
     }
