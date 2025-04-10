@@ -29,30 +29,30 @@ struct http_client {
         static inline constexpr auto line_delim = "\r\n"sv;
         static inline constexpr auto body_delim = "\r\n\r\n"sv;
 
-        std::string response;
+        std::string header, body;
         string_view code;
         std::map<string_view, string_view> headers;
-        string_view body;
-        std::vector<string_view> chunked_body;
 
         http_message() {
-            response.reserve(10'000'000);
+            header.reserve(10'000'000);
         }
         awaitable<void> receive(auto &&s, auto &&transport) {
-            auto append = [&]() -> awaitable<size_t> {
-                auto dec = co_await transport.receive_some();
-                response.append((char *)dec.data(), dec.size());
-                co_return dec.size();
+            auto receive = [&]() -> awaitable<std::string> {
+                co_return co_await transport.receive_some();
             };
 
-            while (!response.contains(body_delim)) {
-                co_await append();
+            size_t pos{SIZE_MAX};
+            for (; pos == -1;) {
+                if (header.size() > 100*1024) {
+                    throw std::runtime_error{"too long header"s};
+                }
+                header += co_await receive();
+                pos = header.find(body_delim);
             }
+            body = header.substr(pos + body_delim.size());
+            header.resize(pos);
 
             // read headers
-            auto p = response.find(body_delim);
-            headers.clear();
-            auto header = string_view{response.data(), p};
             auto hdrs = header | std::views::split(line_delim);
             auto cod = *std::begin(hdrs);
             code = std::string_view{cod.begin(), cod.end()};
@@ -72,56 +72,38 @@ struct http_client {
             // read body
             if (auto it = headers.find("Content-Length"sv); it != headers.end()) {
                 auto sz = std::stoull(it->second.data());
-                while (response.size() != p + body_delim.size() + sz) {
-                    co_await append();
+                while (body.size() < sz) {
+                    body += co_await receive();
                 }
-                string_view sv{response.begin(), response.end()};
-                auto start = p + body_delim.size();
-                body = sv.substr(start, sz);
             } else if (auto it = headers.find("Transfer-Encoding"sv); it != headers.end()) {
                 if (it->second != "chunked"sv) {
-                    throw std::logic_error{"not impl"};
+                    throw std::logic_error{"not impl"s};
                 }
+                auto part = std::move(body);
                 while (1) {
-                    string_view sv{response.begin(), response.end()};
-                    body = sv.substr(p + body_delim.size());
-                    if (body.contains(line_delim)) {
-                        break;
+                    for (pos = part.find(line_delim); pos == -1; pos = part.find(line_delim)) {
+                        part += co_await receive();
                     }
-                    co_await append();
-                }
-                while (1) {
-                    while (!body.contains(line_delim)) {
-                        auto pos = body.data() - response.data();
-                        co_await append();
-                        string_view sv{response.begin(), response.end()};
-                        body = sv.substr(pos);
+                    if (part.starts_with("0\r\n"sv)) {
+                        break;
                     }
                     size_t sz_read;
-                    auto needs_more = std::stoll(body.data(), &sz_read, 16);
-                    if (needs_more == 0 && sz_read == 1) {
+                    auto more = std::stoll(part, &sz_read, 16);
+                    if (more == 0 && sz_read == 1) {
                         break;
                     }
-                    body = body.substr(sz_read);
-                    if (!body.starts_with(line_delim)) {
-                        throw std::runtime_error{"bad http body data"};
+                    auto b = pos + line_delim.size();
+                    while (part.size() - b < more + line_delim.size()) {
+                        part += co_await receive();
                     }
-                    body = body.substr(line_delim.size());
-                    auto begin = body.data() - response.data();
-                    auto end = begin + needs_more;
-                    auto jump = end + line_delim.size();
-                    needs_more -= body.size();
-                    while (needs_more > 0) {
-                        needs_more -= co_await append();
+                    body += part.substr(b, more);
+                    if (part.compare(b + more, line_delim.size(), line_delim) != 0) {
+                        throw std::logic_error{"bad data"s};
                     }
-                    chunked_body.push_back(string_view{response.begin() + begin, response.begin() + end});
-                    body = string_view{response.begin(), response.end()};
-                    body = body.substr(jump);
+                    part.erase(0, b + more + line_delim.size());
                 }
             } else {
-                // complete message
-                string_view sv{response.begin(), response.end()};
-                body = sv.substr(p + body_delim.size());
+                // complete message, nothing to do
             }
         }
     };
