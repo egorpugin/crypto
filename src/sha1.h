@@ -7,7 +7,11 @@
 
 namespace crypto {
 
-struct sha1 {
+struct sha1 : hash_traits<sha1> {
+    using hash_traits_type = hash_traits<sha1>;
+    using hash_traits_type::digest;
+    using hash_traits_type::update;
+
     static inline constexpr auto state_size = 5;
     static inline constexpr auto digest_size_bytes = state_size * sizeof(u32);
 
@@ -18,20 +22,10 @@ struct sha1 {
     int blockpos{};
     u64 n_bytes{};
 
-    void update(bytes_concept b) noexcept {
-        update(b.data(), b.size());
-    }
     void update(const u8 *data, size_t length) noexcept {
-        return update_slow(data, length);
-    }
-    void update_slow(const u8 *data, size_t length) noexcept {
-        for (size_t i = 0; i < length; ++i) {
-            buffer[blockpos++] = data[i];
-            if (blockpos == sizeof(buffer)) {
-                transform();
-                blockpos = 0;
-            }
-        }
+        hash_traits_type::update_fast_post(data, length, buffer, sizeof(buffer), blockpos, [&]() {
+            transform();
+        });
     }
     auto digest() {
         u64 total_bits = (n_bytes + blockpos) * 8;
@@ -57,11 +51,6 @@ struct sha1 {
             ((u32 *)res.data())[i++] = std::byteswap(d);
         }
         return res;
-    }
-    static auto digest(auto &&v) noexcept {
-        sha1 h;
-        h.update(v);
-        return h.digest();
     }
 
 private:
