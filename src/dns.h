@@ -2,13 +2,6 @@
 
 #include "helpers.h"
 
-#include <boost/asio.hpp>
-
-#include <iostream>
-#include <print>
-#include <ranges>
-#include <variant>
-
 namespace crypto {
 
 // https://www.ietf.org/rfc/rfc1035.txt
@@ -109,14 +102,14 @@ struct dns_packet {
     struct header {
         be<uint16_t> id;
         // BE order
-        uint16_t rd     : 1;
-        uint16_t tc     : 1;
+        uint16_t rd     : 1; // skip intermediate answers, return ip
+        uint16_t tc     : 1; // does not fit in one packet
         uint16_t aa     : 1;
         uint16_t opcode : 4;
         uint16_t qr     : 1;
         uint16_t rcode  : 4;
         uint16_t zeros  : 3; // empty field
-        uint16_t ra     : 1;
+        uint16_t ra     : 1; // server can in recursion
         //
         be<uint16_t> qdcount;
         be<uint16_t> ancount;
@@ -170,7 +163,7 @@ struct dns_packet {
         p += sizeof(h);
         return *(question_type *)p;
     }
-    void set_question(const std::string &qname, uint16_t qtype, uint16_t qclass) {
+    void set_question(std::string_view qname, uint16_t qtype, uint16_t qclass) {
         for (auto &&[b,e] : std::views::split(qname, "."sv)) {
             std::string_view sv{b, e};
             if (sv.size() > 64) {
@@ -325,6 +318,7 @@ struct dns_resolver {
         uint16_t port{53};
     };
     std::vector<server> dns_servers;
+    uint16_t query_id{};
 
     dns_resolver() = default;
     dns_resolver(std::initializer_list<const char *> list) {
@@ -333,7 +327,7 @@ struct dns_resolver {
         }
     }
 
-    auto query(auto &server, const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+    auto query(auto &server, std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         // asio transport for now
         results_type results;
         boost::asio::io_context ctx;
@@ -345,11 +339,11 @@ struct dns_resolver {
         ctx.run();
         return results;
     }
-    auto query(const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+    auto query(std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         return query(dns_servers.at(0), domain, type, class_);
     }
     // return ips?
-    auto resolve(const std::string &domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+    auto resolve(std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         for (auto &&s : dns_servers) {
             for (auto &&r : query(s, domain, type, class_)) {
                 if (auto p = std::get_if<dns_packet::a>(&r)) {
@@ -357,13 +351,13 @@ struct dns_resolver {
                 }
             }
         }
-        throw std::runtime_error{"server not found: " + domain};
+        throw std::runtime_error{std::format("server not found: {}", domain)};
     }
 
 private:
     template <typename T = void> using task = boost::asio::awaitable<T>;
 
-    task<> query_udp(auto &results, auto &server, const std::string &domain, uint16_t type, uint16_t class_) {
+    task<> query_udp(auto &results, auto &server, std::string_view domain, uint16_t type, uint16_t class_) {
         namespace ip = boost::asio::ip;
         using namespace boost::asio::experimental::awaitable_operators;
 
@@ -372,17 +366,20 @@ private:
         ip::udp::socket s(ex);
         s.open(ip::udp::v4());
         constexpr auto udp_packet_max_size = 512;
-        uint8_t buffer[udp_packet_max_size]{};
-        auto &p = *(dns_packet *)buffer;
-        //p.h.id = 123;
-        p.h.rd = 1; // some queries will fail without this
-        p.set_question(domain, type, class_);
-        co_await s.async_send_to(boost::asio::buffer(buffer, p.size()), e, boost::asio::use_awaitable);
+        uint8_t bq[udp_packet_max_size]{}, ba[udp_packet_max_size]{};
+        auto &q = *(dns_packet *)bq;
+        q.h.id = query_id++;
+        q.h.rd = 1; // some queries will fail without this
+        q.set_question(domain, type, class_);
+        co_await s.async_send_to(boost::asio::buffer(bq, q.size()), e, boost::asio::use_awaitable);
         boost::asio::deadline_timer dt{ex, boost::posix_time::seconds{2}};
-        co_await (s.async_receive_from(boost::asio::buffer(buffer), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
-        if (p.h.zeros || p.h.qr == 0) {
+        co_await (s.async_receive_from(boost::asio::buffer(ba), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
+        auto &a = *(dns_packet *)ba;
+        if (a.h.zeros || a.h.qr == 0) {
             co_return;
-            //throw std::runtime_error{"bad response"};
+        }
+        if (q.h.id != a.h.id || q.h.rd != a.h.rd) {
+            throw std::runtime_error{"bad response"};
         }
         enum {
             no_error,
@@ -396,9 +393,9 @@ private:
             server_not_authoritative_for_the_zone,
             name_not_in_zone,
         };
-        switch (p.h.rcode) {
+        switch (a.h.rcode) {
         case no_error:
-            results = p.answers();
+            results = a.answers();
             break;
         case query_format_error:
             throw std::runtime_error{"bad request"};
@@ -428,9 +425,9 @@ struct dns_cache {
     }
 
     template <typename T>
-    auto &query(const std::string &domain) {
+    auto &query(std::string_view domain) {
         auto now = std::chrono::system_clock::now();
-        query_type qt{domain, T::type};
+        query_type qt{std::string{domain}, T::type};
         auto it = cache.find(qt);
         if (it == cache.end() || it->second.outdated(now)) {
             auto [it2,_] = cache.emplace(qt, results_type{});
@@ -447,7 +444,7 @@ struct dns_cache {
         return it->second.results;
     }
     template <typename T>
-    auto query_one(const std::string &domain) {
+    auto query_one(std::string_view domain) {
         return std::get<T>(query<T>(domain).at(0));
     }
 };
