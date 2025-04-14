@@ -70,9 +70,9 @@ struct hmac2 {
     }
 };
 template <typename Hash>
-auto hmac(bytes_concept key, bytes_concept message) {
+auto hmac(bytes_concept key, bytes_concept message, auto &&...more) {
     hmac2<Hash> h{key};
-    h.update(message);
+    h.update(message, more...);
     return h.digest();
 }
 
@@ -134,12 +134,9 @@ struct hmac_drbg {
 };
 
 // https://datatracker.ietf.org/doc/html/rfc2898
-auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, u32 c, u32 i) {
-    u32 tail{i};
-    tail = std::byteswap(tail);
-    salt.resize(salt.size() + sizeof(tail));
-    memcpy(salt.data() + salt.size() - sizeof(tail), &tail, sizeof(tail));
-    auto u = prf(pass, salt);
+auto pbkdf2_raw(auto &&prf, auto &&pass, auto &&salt, u32 c, u32 i) {
+    i = std::byteswap(i);
+    auto u = prf(pass, salt, bytes_concept{&i, sizeof(i)});
     auto r = u;
     auto len = r.size();
     while (--c) {
@@ -150,7 +147,7 @@ auto pbkdf2_raw(auto &&prf, auto &&pass, std::string salt, u32 c, u32 i) {
     }
     return r;
 }
-auto pbkdf2(auto &&prf, auto &&pass, bytes_concept salt, auto &&c, u32 derived_key_bytes) {
+auto pbkdf2(auto &&prf, auto &&pass, auto &&salt, auto &&c, u32 derived_key_bytes) {
     std::vector<u8> res;
     res.resize(derived_key_bytes);
     int i = 0;
@@ -167,7 +164,7 @@ auto pbkdf2(auto &&prf, auto &&pass, bytes_concept salt, auto &&c, u32 derived_k
 }
 template <typename Hash>
 auto pbkdf2(auto &&pass, auto &&salt, auto &&c, u32 derived_key_bytes = Hash::digest_size_bytes) {
-    return pbkdf2([](auto &&pass, auto &&u) { return hmac<Hash>(pass, u); }, pass, salt, c, derived_key_bytes);
+    return pbkdf2([](auto &&pass, auto &&msg, auto &&...more) { return hmac<Hash>(pass, msg, more...); }, pass, salt, c, derived_key_bytes);
 }
 
 // https://www.rfc-editor.org/rfc/rfc5869
