@@ -7,7 +7,6 @@ void build(Solution &s) {
         t.Public += "src/.*\\.natvis"_rr;
 
         t.Public += "org.sw.demo.boost.asio"_dep;
-        //t.Public += "org.sw.demo.neargye.nameof"_dep;
 
         if (t.getCompilerType() == CompilerType::MSVC) {
             t.Public.CompileOptions.push_back("/bigobj");
