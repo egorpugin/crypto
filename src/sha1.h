@@ -23,12 +23,13 @@ struct sha1 : hash_traits<sha1> {
     u64 n_bytes{};
 
     void update(const u8 *data, size_t length) noexcept {
+        n_bytes += length;
         hash_traits_type::update_fast_post(data, length, buffer, sizeof(buffer), blockpos, [&]() {
             transform();
         });
     }
     auto digest() {
-        u64 total_bits = (n_bytes + blockpos) * 8;
+        u64 total_bits = n_bytes * 8;
 
         // pad
         buffer[blockpos++] = 0x80;
@@ -46,7 +47,7 @@ struct sha1 : hash_traits<sha1> {
         *(u64 *)(buffer + sizeof(buffer) - 8) = std::byteswap(total_bits);
         transform();
 
-        std::array<u8, digest_size_bytes> res;
+        array<digest_size_bytes> res;
         for (int i = 0; auto &&d : state) {
             ((u32 *)res.data())[i++] = std::byteswap(d);
         }
@@ -184,8 +185,6 @@ private:
         state[2] += c;
         state[3] += d;
         state[4] += e;
-
-        n_bytes += sizeof(buffer);
     }
 };
 
