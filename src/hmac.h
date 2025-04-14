@@ -56,12 +56,10 @@ struct hmac2 {
         } else {
             memcpy(k0.data(), Hash::digest(key).data(), hash_bytes);
         }
-        auto So = k0, Si = k0;
-        for (auto &&c : So) c ^= 0x5C;
-        for (auto &&c : Si) c ^= 0x36;
-
-        inner.update(Si);
-        outer.update(So);
+        for (auto &&c : k0) c ^= 0x36;
+        inner.update(k0);
+        for (auto &&c : k0) c ^= 0x36 ^ 0x5C;
+        outer.update(k0);
     }
     void update(auto &&...args) {
         inner.update(args...);
