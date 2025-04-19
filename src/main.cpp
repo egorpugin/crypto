@@ -31,6 +31,7 @@
 #include "email.h"
 #include "ed25519.h"
 #include "ed448.h"
+#include "ssh2.h"
 
 #define LOG_TEST()                                                                                                                                             \
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
@@ -280,6 +281,18 @@ void test_sha1() {
     {
         sha1 sha;
         to_string2(sha, "plnlrtfpijpuhqylxbgqiiyipieyxvfsavzgxbbcfusqkozwpngsyejqlmjsytrmd", "65426b585154667542717027635463617226672a");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, std::string(64, 'a'), "0098ba824b5c16427bd7a1122a5a442a25ec644d");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, std::string(65, 'a'), "11655326c708d70319be2610e8a57d9a5b959d3b");
+    }
+    {
+        sha1 sha;
+        to_string2(sha, std::string(585, 'a'), "0eb45e04b2491c518efaf14a5735dbf0241ad7d8");
     }
 }
 
@@ -2640,7 +2653,7 @@ void test_dns() {
 
     using namespace crypto;
 
-    dns_resolver serv{"8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    dns_resolver serv{"178.208.90.175", "8.8.8.8", "8.8.4.4", "1.1.1.1"};
     bool ok{true};
     auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A, SRCLOC) {
         try {
@@ -2980,7 +2993,16 @@ Joe.
     memcpy(s.ed.private_key_.data(), data.data(), data.size());
     //std::println("{}", base64::encode(s.ed.public_key()));
 
-    e.send();
+    //e.send();
+}
+
+void test_ssh2() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    ssh2 s;
+    s.connect("fedora@software-network.org"sv);
 }
 
 void test_jwt() {
@@ -3319,6 +3341,27 @@ ed 10 1d ae d5 cf e9 f8 32 06 a4 bb 2b f5 1f a2
 );
     cmp_bytes(sig1, bytes);
     cmp_bytes(sig, bytes, true);
+
+    auto test_url1 = [](auto &&in, auto &&out) {
+        using b64u = base64url<false>;
+        cmp_bytes(b64u::encode(in), out);
+        cmp_bytes(b64u::decode(out), in);
+    };
+    auto test_url2 = [](auto &&in, auto &&out) {
+        using b64u = base64url<true>;
+        cmp_bytes(b64u::encode(in), out);
+        cmp_bytes(b64u::decode(out), in);
+    };
+    auto test_url = [&](auto &&in, auto &&out) {
+        test_url1(in, out);
+        out.resize(divceil(out.size(), 4) * 4, '=');
+        test_url2(in, out);
+    };
+    test_url("f"sv, "Zg"s);
+    test_url("ff"sv, "ZmY"s);
+    test_url("ff"sv, "ZmY"s);
+    test_url("fff"sv, "ZmZm"s);
+    test_url("ffff"sv, "ZmZmZg"s);
 }
 
 auto test_all() {
@@ -3371,9 +3414,9 @@ int main() {
 #ifndef CI_TESTS
 int main() {
     try {
-        // test_base64();
+        test_base64();
         // test_aes();
-        // test_sha1();
+        //test_sha1();
         // test_sha2();
         // test_sha3();
         // test_blake2();
@@ -3382,9 +3425,9 @@ int main() {
         // test_sm4();
         // test_ec();
         //test_ecdsa();
-        // test_hmac();
+        //test_hmac();
         // test_hkdf();
-        // test_pbkdf2();
+        //test_pbkdf2();
         // test_chacha20();
         // test_chacha20_aead();
         // test_scrypt();
@@ -3395,13 +3438,14 @@ int main() {
         // test_grasshopper();
         // test_mgm();
         // test_gost();
-        // test_jwt();
+        test_jwt();
         // test_hpke();
         // test_mlkem();
         //
         //test_dns();
         //test_tls();
-        test_email();
+        //test_email();
+        //test_ssh2();
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {

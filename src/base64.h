@@ -117,9 +117,9 @@ struct base_raw {
         }
         size_t outsz;
         if (Pad) {
-            outsz = (sz / input_block_size + (sz % input_block_size ? 1 : 0)) * output_block_size;
+            outsz = divceil(sz, input_block_size) * output_block_size;
         } else {
-            outsz = (sz * byte_bits + n_bits - 1) / n_bits;
+            outsz = divceil(sz * byte_bits, n_bits);
         }
         s.resize(outsz);
         auto out = s.data();

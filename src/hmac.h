@@ -183,7 +183,7 @@ auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
     static_assert(Len <= 255 * Hash::digest_size_bytes);
 
     constexpr auto hash_bytes = Hash::digest_size_bytes;
-    constexpr auto n = ceil(Len, hash_bytes);
+    constexpr auto n = divceil(Len, hash_bytes);
     std::array<u8, Len> r;
     for (int i = 1, pos = 0; i <= n; ++i) {
         hmac2<Hash> h{pseudorandom_key};

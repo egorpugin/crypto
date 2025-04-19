@@ -568,7 +568,7 @@ void increment_be_number(auto &&n) {
     }
 }
 
-constexpr auto ceil(auto &&x, auto &&y) {
+constexpr auto divceil(auto &&x, auto &&y) {
     return (x + y - 1) / y;
 }
 
