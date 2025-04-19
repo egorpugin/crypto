@@ -172,6 +172,7 @@ struct base_raw {
         char buf[output_block_size];
         for (int i = 0, bi = 0; i < sz;) {
             if constexpr (IgnoreNonAlphabetChars) {
+                // replace contains with a map of 0,1
                 if (!alph.contains(data[i]) && data[i] != padding) {
                     ++i;
                     ++skipped;
@@ -225,8 +226,9 @@ struct base32    : base_raw<32, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"_s> {};
 struct base32extended_hex
                  : base_raw<32, "0123456789ABCDEFGHIJKLMNOPQRSTUV"_s> {};
 struct base62    : base_raw<62, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"_s> {};
+//struct base58    : base_raw<58, "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"_s> {};
 struct base64    : base_raw<64, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"_s> {};
-template <bool Pad>
+template <bool Pad = false>
 struct base64url : base_raw<64, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"_s, '=', Pad> {};
 // uses variable sym length (6-7 bits), not suitable for general base-algorithm
 //struct ascii85   : base_raw<85, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~"_s> {};

@@ -29,8 +29,6 @@ struct sha1 : hash_traits<sha1> {
         });
     }
     auto digest() {
-        u64 total_bits = n_bytes * 8;
-
         // pad
         buffer[blockpos++] = 0x80;
         auto orig_size = blockpos;
@@ -44,6 +42,7 @@ struct sha1 : hash_traits<sha1> {
             }
         }
 
+        u64 total_bits = n_bytes * 8;
         *(u64 *)(buffer + sizeof(buffer) - 8) = std::byteswap(total_bits);
         transform();
 

@@ -53,7 +53,7 @@ struct jwt {
         }
     };
 
-    using b64 = base64url<false>;
+    using b64 = base64url<>;
     //using json_type = json_raw<true, true>;
     using json_type = json;
     template <auto Bits> using hs = hmac_sha2<Bits>;

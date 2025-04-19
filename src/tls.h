@@ -323,7 +323,7 @@ struct tls13_ {
         bool crypted_exchange{};
 
         buf_type() {
-            data.resize(400000);
+            data.resize(41'000);
         }
         Awaitable<void> receive(auto &s) {
             using boost::asio::use_awaitable;
