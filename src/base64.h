@@ -165,7 +165,7 @@ struct base_raw {
         if (sz == 0) {
             return s;
         }
-        s.resize(sz * input_block_size / output_block_size);
+        s.resize(sz * n_bits / byte_bits);
         auto p = (b*)s.data();
         std::string_view alph = Alphabet;
         int skipped{};
@@ -191,7 +191,7 @@ struct base_raw {
             }
         }
         if constexpr (IgnoreNonAlphabetChars) {
-            s.resize((sz - skipped) * input_block_size / output_block_size);
+            s.resize((sz - skipped) * n_bits / byte_bits);
         }
         if constexpr (max_tail) {
             int tailsize{};
