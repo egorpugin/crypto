@@ -23,9 +23,10 @@ struct base_raw {
     static inline constexpr auto n_bits = std::countr_zero(std::bit_ceil(base_type));
 
     static inline constexpr auto lcm = std::lcm(byte_bits, n_bits);
-    static inline constexpr auto input_block_size = lcm / byte_bits;
-    static inline constexpr auto output_block_size = lcm / n_bits;
-    static inline constexpr auto max_tail = output_block_size - (byte_bits / n_bits + (byte_bits % n_bits ? 1 : 0));
+    static inline constexpr auto decoded_block_size = lcm / byte_bits;
+    static inline constexpr auto encoded_block_size = lcm / n_bits;
+    static inline constexpr auto can_have_tail = lcm == encoded_block_size;
+    static inline constexpr auto max_tail = encoded_block_size - divceil(byte_bits, n_bits);
 
     static consteval auto make_decoder() {
         array<128> alph{};
@@ -37,185 +38,138 @@ struct base_raw {
     static inline constexpr auto DecodeAlphabet = make_decoder();
 
     static auto name() {return std::format("base{}", Nchars);}
+    static auto encoded_size(auto decoded_size) {
+        return divceil(decoded_size, decoded_block_size) * encoded_block_size;
+    }
+    static auto decoded_size(auto encoded_size) {
+        return divceil(encoded_size, encoded_block_size) * decoded_block_size;
+    }
 
-    struct b {
+    template <bool Encode>
+    struct b2 {
+        static inline constexpr auto data_size = Encode ? decoded_block_size : encoded_block_size;
+        static inline constexpr auto output_size = Encode ? encoded_block_size : decoded_block_size;
+
+        u8 data[data_size];
+        u8 sz{};
+
+        void add(auto &&c, auto &p) {
+            data[sz++ % data_size] = c;
+            if (sz % data_size == 0) {
+                finish(p);
+            }
+        }
+        void finish(auto &p) {
+            if (sz == 0) {
+                return;
+            }
+            auto real_data_size = sz % data_size;
+            if (real_data_size == 0) {
+                real_data_size = data_size;
+            }
+            while (sz % data_size != 0) {
+                data[sz++ % data_size] = Encode ? 0 : padding;
+            }
+            sz = 0;
+            if constexpr (Encode) {
+                int i = 0;
+                for (; i < real_data_size * byte_bits; i += n_bits) {
+                    *p++ = Alphabet[get_bits(i)];
+                }
+                auto p2 = p; // keep output pointer on before padding
+                for (; i < data_size * byte_bits; i += n_bits) {
+                    *p2++ = padding;
+                }
+            } else {
+                auto outsz = output_size;
+                for (int i = 0, start = 0; i < data_size; ++i, start += n_bits) {
+                    if (data[i] == padding) {
+                        --outsz;
+                    }
+                    set_bits(DecodeAlphabet[data[i]], start, p);
+                }
+                p += outsz;
+            }
+        }
+
         // from
         // 76543210 76543210 76543210 ...
         // to         1          2
         // 01234567 89012345 67890123 ...
-        template <auto start> u8 get_bits(bool last) {
-            auto base = (u8*)this;
-            constexpr auto b1 = start / byte_bits;
-            constexpr auto b2 = (start + n_bits - 1) / byte_bits;
+        u8 get_bits(auto &&start) const {
+            auto b1 = start / byte_bits;
+            auto b2 = (start + n_bits - 1) / byte_bits;
             if (b1 == b2) {
-                constexpr auto offset = byte_bits - start % byte_bits;
-                return (base[b1] >> (offset - n_bits)) & ((1 << n_bits) - 1);
+                auto offset = byte_bits - start % byte_bits;
+                return (data[b1] >> (offset - n_bits)) & ((1 << n_bits) - 1);
             } else {
-                constexpr auto bits1 = byte_bits - start % byte_bits;
-                constexpr auto bits2 = n_bits - bits1;
-                auto l = base[b1] & ((1 << bits1) - 1);
-                if (last) {
-                    return l << bits2;
-                }
-                auto r = base[b2] >> (byte_bits - bits2);
+                auto bits1 = byte_bits - start % byte_bits;
+                auto bits2 = n_bits - bits1;
+                auto l = data[b1] & ((1 << bits1) - 1);
+                auto r = data[b2] >> (byte_bits - bits2);
                 return (l << bits2) | r;
             }
         }
-        template <auto start> void set_bits(u8 value) {
-            auto base = (u8*)this;
-            constexpr auto b1 = start / byte_bits;
-            constexpr auto b2 = (start + n_bits) / byte_bits;
+        static void set_bits(u8 value, auto &&start, auto &p) {
+            auto b1 = start / byte_bits;
+            auto b2 = (start + n_bits) / byte_bits;
             if (b1 == b2) {
-                constexpr auto bits1 = byte_bits - start % byte_bits - n_bits;
-                base[b1] |= value << bits1;
+                auto bits1 = byte_bits - start % byte_bits - n_bits;
+                p[b1] |= value << bits1;
             } else {
-                constexpr auto bits1 = byte_bits - start % byte_bits;
-                constexpr auto bits2 = n_bits - bits1;
-                base[b1] |= value >> bits2;
-                base[b2] |= value << (byte_bits - bits2);
+                auto bits1 = byte_bits - start % byte_bits;
+                auto bits2 = n_bits - bits1;
+                p[b1] |= value >> bits2;
+                p[b2] |= value << (byte_bits - bits2);
             }
-        }
-
-        // input_block_size -> output_block_size bytes
-        template <auto N> constexpr void encode(auto &s, bool data_minus_one) {
-#define X(v)                                                \
-            if constexpr (N > v)                            \
-                s[v] = Alphabet[get_bits<n_bits * v>(data_minus_one && N - 1 == v)];\
-            else if constexpr (v < output_block_size && Pad)          \
-                s[v] = padding
-
-            X(0);
-            X(1);
-            X(2);
-            X(3);
-            X(4);
-            X(5);
-            X(6);
-            X(7);
-#undef X
-        }
-        // output_block_size -> input_block_size bytes
-        template <auto N> constexpr void decode(auto data) {
-#define X(v) if constexpr (N > v) set_bits<n_bits * v>(DecodeAlphabet[data[v]])
-            X(0);
-            X(1);
-            X(2);
-            X(3);
-            X(4);
-            X(5);
-            X(6);
-            X(7);
-#undef X
         }
     };
 
     static auto encode(auto &&data) {
         auto sz = data.size();
-        std::string s;
+        std::string out;
         if (sz == 0) {
-            return s;
+            return out;
         }
-        size_t outsz;
-        if (Pad) {
-            outsz = divceil(sz, input_block_size) * output_block_size;
-        } else {
-            outsz = divceil(sz * byte_bits, n_bits);
+        out.resize(encoded_size(sz));
+        auto p = out.data();
+        b2<true> conv;
+        for (auto &&c : data) {
+            conv.add(c, p);
         }
-        s.resize(outsz);
-        auto out = s.data();
-        auto until = sz - sz % input_block_size;
-        auto p = (b*)data.data();
-        int i{};
-        for (; i < until; i += input_block_size, out += output_block_size, p += input_block_size) {
-            p->template encode<output_block_size>(out, false);
+        conv.finish(p);
+        if constexpr (!Pad) {
+            out.resize(p - out.data());
         }
-        if constexpr (max_tail) {
-            auto tail = sz - i;
-            auto tailbits = tail * byte_bits;
-            auto tailsize = tailbits / n_bits + (tailbits % n_bits ? 1 : 0);
-            if (false) {
-            } else if (tailsize == 0) {
-            } else if (tailsize == 1) {
-                p->template encode<1>(out, tailsize > tail);
-            } else if (tailsize == 2) {
-                p->template encode<2>(out, tailsize > tail);
-            } else if (tailsize == 3) {
-                p->template encode<3>(out, tailsize > tail);
-            } else if (tailsize == 4) {
-                p->template encode<4>(out, tailsize > tail);
-            } else if (tailsize == 5) {
-                p->template encode<5>(out, tailsize > tail);
-            } else if (tailsize == 6) {
-                p->template encode<6>(out, tailsize > tail);
-            } else if (tailsize == 7) {
-                p->template encode<7>(out, tailsize > tail);
-            } else {
-                throw std::logic_error{"unimplemented"};
-            }
-        }
-        return s;
+        return out;
     }
     template <bool IgnoreNonAlphabetChars>
     static auto decode(auto &&data) {
         auto sz = data.size();
-        if ((sz % output_block_size) && Pad && !IgnoreNonAlphabetChars) {
+        if ((sz % encoded_block_size) && Pad && !IgnoreNonAlphabetChars) {
             throw std::runtime_error{std::format("bad {}: incorrect length", name())};
         }
-        std::string s;
+        std::string out;
         if (sz == 0) {
-            return s;
+            return out;
         }
-        s.resize(sz * n_bits / byte_bits);
-        auto p = (b*)s.data();
+        out.resize(decoded_size(sz));
         std::string_view alph = Alphabet;
-        int skipped{};
-        char buf[output_block_size];
-        for (int i = 0, bi = 0; i < sz;) {
+        auto p = out.data();
+        b2<false> conv;
+        for (auto &&c : data) {
             if constexpr (IgnoreNonAlphabetChars) {
-                // replace contains with a map of 0,1
-                if (!alph.contains(data[i]) && data[i] != padding) {
-                    ++i;
-                    ++skipped;
-                    continue;
-                } else {
-                    buf[bi++] = data[i++];
-                    if (bi == output_block_size) {
-                        p->template decode<output_block_size>(buf);
-                        p += input_block_size;
-                        bi = 0;
-                    }
+                if (alph.contains(c) || c == padding) {
+                    conv.add(c, p);
                 }
             } else {
-                p->template decode<output_block_size>(&data[i]);
-                i += output_block_size;
-                p += input_block_size;
+                // check for symbol and throw exception?
+                conv.add(c, p);
             }
         }
-        if constexpr (IgnoreNonAlphabetChars) {
-            s.resize((sz - skipped) * n_bits / byte_bits);
-        }
-        if constexpr (max_tail) {
-            int tailsize{};
-            auto t = max_tail;
-            while (t--) {
-                auto c = data[--sz];
-                if constexpr (IgnoreNonAlphabetChars) {
-                    if (!alph.contains(c) && c != padding) {
-                        ++t;
-                        continue;
-                    }
-                }
-                if (c == padding) {
-                    ++tailsize;
-                } else {
-                    break;
-                }
-            }
-            auto tailbits = tailsize * n_bits;
-            auto tail = tailbits / byte_bits + (tailbits % byte_bits ? 1 : 0);
-            s.resize(s.size() - tail);
-        }
-        return s;
+        conv.finish(p);
+        out.resize(p - out.data());
+        return out;
     }
     static auto decode(auto &&data) {
         return decode<false>(data);
