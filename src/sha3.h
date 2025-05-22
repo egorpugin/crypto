@@ -156,19 +156,16 @@ struct shake_base : keccak<2 * ShakeType, 0b1111> {
         base::pad();
     }
     auto squeeze(auto &out) noexcept {
-        constexpr auto max = base::rate / 8;
-
         auto ptr = out.data();
-        auto sz = out.size();
+        auto end = ptr + out.size();
         auto step = [&](){
-            auto len = std::min<size_t>(max - offset, sz);
+            auto len = std::min<size_t>(digest_size_bytes - offset, end - ptr);
             memcpy(ptr, (u8 *)base::A + offset, len);
-            sz -= len;
             ptr += len;
             offset += len;
         };
         step();
-        while (offset == max) {
+        while (offset == digest_size_bytes) {
             base::permute();
             offset = 0;
             step();
@@ -178,7 +175,6 @@ struct shake_base : keccak<2 * ShakeType, 0b1111> {
     auto squeeze() noexcept {
         array<Bits / 8> hash;
         squeeze(hash);
-
         return hash;
     }
     auto squeeze() noexcept {
