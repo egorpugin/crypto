@@ -943,15 +943,8 @@ struct tls13_ {
                 };
                 auto gost_check = [&](auto &&c, auto &&h) {
                     h.update(hs);
-
-                    auto r = data | std::views::reverse;
-                    std::vector<u8> sig2(std::begin(r), std::end(r));
-                    //std::vector<u8> sig2{std::from_range, data | std::views::reverse};//gcc-15
-
-                    auto r2 = h.digest() | std::views::reverse;
-                    std::vector<u8> h2(std::begin(r2), std::end(r2));
-                    //std::vector<u8> h2{std::from_range, h.digest() | std::views::reverse};//gcc-15
-
+                    std::vector<u8> sig2{std::from_range, data | std::views::reverse};
+                    std::vector<u8> h2{std::from_range, h.digest() | std::views::reverse};
                     if (!c.verify(h2, asn1{pubkey_data}.get<asn1_octet_string>().data, sig2)) {
                         throw std::runtime_error{"bad signature"};
                     }

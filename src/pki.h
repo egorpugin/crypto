@@ -83,9 +83,7 @@ struct gost_sig_base {
     }
     auto sign(auto &&tbs_certificate) {
         auto h = Settings::hash_type::digest(tbs_certificate);
-        auto r = h | std::views::reverse;
-        std::vector<u8> h2(std::begin(r), std::end(r));
-        //std::vector<u8> h2{std::from_range, h | std::views::reverse}; //gcc-15
+        std::vector<u8> h2{std::from_range, h | std::views::reverse};
         auto rsig = c.sign(h2);
         auto sig = asn1_bit_string::make(rsig);
         auto cert = asn1_sequence::make(tbs_certificate, signature, sig);

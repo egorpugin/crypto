@@ -319,9 +319,7 @@ struct x509_storage {
                     auto f = [&](auto &&c) {
                         auto pubk = asn1{issuer_pubkey_data}.get<asn1_octet_string>().data;
                         auto h = streebog<256>::digest(cert_raw);
-                        auto r = h | std::views::reverse;
-                        std::vector<u8> h2(std::begin(r), std::end(r));
-                        //std::vector<u8> h2{std::from_range, h | std::views::reverse}; //gcc-15
+                        std::vector<u8> h2{std::from_range, h | std::views::reverse};
                         if (c.verify(h2, pubk, sig)) {
                             v.trusted = true;
                             return v.is_valid(now);
