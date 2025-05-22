@@ -1,5 +1,5 @@
 void build(Solution &s) {
-    auto &crypto = s.addTarget<Executable>("crypto");
+    auto &crypto = s.addTarget<StaticLibrary>("crypto");
     {
         auto &t = crypto;
         t += cpp23;
@@ -11,7 +11,7 @@ void build(Solution &s) {
         if (t.getCompilerType() == CompilerType::MSVC) {
             t.Public.CompileOptions.push_back("/bigobj");
         }
-        if (t.getBuildSettings().TargetOS.Type == OSType::Windows) {
+        if (t.getBuildSettings().TargetOS.Type == OSType::Windows || t.getBuildSettings().TargetOS.Type == OSType::Mingw) {
             t += "bcrypt.lib"_slib;
             t += "Crypt32.lib"_slib;
         }
