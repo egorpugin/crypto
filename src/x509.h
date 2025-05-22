@@ -103,7 +103,7 @@ struct x509_storage {
     using issuer_type = bytes_concept;
     using keyid_type = bytes_concept;
     std::map<issuer_type, std::map<keyid_type, std::vector<value>>> index;
-    std::vector<std::unique_ptr<std::string>> storage;
+    std::vector<std::vector<u8>> storage;
 
     static auto &trusted_storage() {
         static x509_storage s;
@@ -133,7 +133,7 @@ struct x509_storage {
             // see 4.2.1.2.  Subject Key Identifier
             auto spk = x509(data).get_tbs_field<asn1_bit_string>(x509::subject_public_key_info, x509::subject_public_key);
             auto h = sha1::digest(spk.data.subspan(1));
-            keyid = *storage.emplace_back(std::make_unique<std::string>(h.begin(), h.end()));
+            keyid = storage.emplace_back(std::from_range, h);
         }
         return keyid;
     }
@@ -148,7 +148,7 @@ struct x509_storage {
         return nullptr;
     }
 
-    auto &add(auto &&data) {
+    auto &add(bytes_concept data) {
         x509 x{data};
         auto subject = x.get_tbs_field<asn1_sequence>(x509::subject_name);
         //auto issuer = x.get_tbs_field<asn1_sequence>(x509::issuer_name);
@@ -174,13 +174,13 @@ struct x509_storage {
             }
             sv = sv.substr(0, sv.find("---"sv));
             auto decoded = base64::decode<true>(sv);
-            std::string_view data = *storage.emplace_back(std::make_unique<std::string>(decoded));
+            auto &data = storage.emplace_back(std::from_range, decoded);
             auto &p = add(data);
             p.trusted = trusted;
         }
     }
-    decltype(auto) load_der(std::string_view data, bool trusted = false) {
-        auto &p = add(*storage.emplace_back(std::make_unique<std::string>(data)));
+    auto &load_der(std::string_view data, bool trusted = false) {
+        auto &p = add(storage.emplace_back(std::from_range, data));
         p.trusted = trusted;
         return p;
     }
