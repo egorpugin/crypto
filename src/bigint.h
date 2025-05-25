@@ -240,6 +240,39 @@ struct bigint {
     auto operator<=>(int p) const {
         return mpz_cmp_si(*this, p) <=> 0;
     }
+
+    auto to_ssh_mpint_string() {
+        using lentype = uint32_t;
+        auto lensz = sizeof(lentype);
+        if (*this == 0) {
+            return std::string(lensz, 0);
+        }
+        auto size = 1;
+        auto nail = 0;
+        auto numb = 8 * size - nail;
+        auto bitsize = mpz_sizeinbase(*this, 2);
+        lentype count1 = (bitsize + numb - 1) / numb;
+
+        std::string s;
+        if (*this > 0) {
+            if (mpz_tstbit(*this, ceil_to_base(bitsize, 8) - 1)) {
+                ++count1;
+            }
+            s = to_string(count1 + lensz);
+        } else {
+            bigint bi;
+            mpz_com(bi, *this);
+            if (mpz_tstbit(*this, ceil_to_base(bitsize, 8) - 1) == 0) {
+                ++count1;
+            }
+            s = bi.to_string(count1 + lensz);
+            for (int i = lensz; i < count1 + lensz; ++i) {
+                s[i] = ~s[i];
+            }
+        }
+        *(lentype*)s.data() = std::byteswap(count1);
+        return s;
+    }
 };
 
 auto operator""_bi(const char *p, size_t len) {
