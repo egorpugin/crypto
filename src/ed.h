@@ -39,11 +39,10 @@ struct ed_base {
             return std::tuple{x,y};
         }
         bool point_equal(auto &&P, auto &&Q) const {
-            if ((P.x * Q.z - Q.x * P.z) % p != 0)
-                return false;
-            if ((P.y * Q.z - Q.y * P.z) % p != 0)
-                return false;
-            return true;
+            return 1
+                && (P.x * Q.z - Q.x * P.z) % p == 0
+                && (P.y * Q.z - Q.y * P.z) % p == 0
+                ;
         }
     };
 

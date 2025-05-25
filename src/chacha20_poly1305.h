@@ -16,7 +16,7 @@ struct chacha20_poly1305_aead {
     static inline constexpr auto tag_size_bytes = 16;
     static inline constexpr auto key_size_bytes = 32;
 
-    array<block_size_bytes> k;
+    array<key_size_bytes> k;
 
     auto encrypt_and_tag(auto &&nonce, auto &&data, auto &&auth_data) {
         chacha20 c{k.data(), nonce.data()};

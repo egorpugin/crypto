@@ -571,5 +571,9 @@ void increment_be_number(auto &&n) {
 constexpr auto divceil(auto &&x, auto &&y) {
     return (x + y - 1) / y;
 }
+// just ceil?
+constexpr auto ceil_to_base(auto &&x, auto &&y) {
+    return divceil(x,y) * y;
+}
 
 } // namespace crypto

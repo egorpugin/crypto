@@ -143,11 +143,11 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
             for (u8 i = 0; i < 8; i++) {
                 swapped[i] = std::byteswap(h[i]);
             }
-            std::array<u8, DigestSizeBits / 8> hash;
+            array<DigestSizeBits / 8> hash;
             memcpy(hash.data(), swapped.data(), DigestSizeBits / 8);
             return hash;
         } else {
-            std::array<u8, DigestSizeBits / 8> hash;
+            array<DigestSizeBits / 8> hash;
             for (u8 i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
                 *(state_type *)(hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
             }

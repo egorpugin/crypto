@@ -41,6 +41,14 @@ struct curve25519 {
         curve25519_f(private_key_.data(), peer_public_key.data(), shared_secret.data());
         return shared_secret;
     }
+    auto shared_secret(auto &&peer_public_key) {
+        if (peer_public_key.size() != sizeof(public_key_type)) {
+            throw std::runtime_error{"invalid pubk size"};
+        }
+        public_key_type shared_secret;
+        curve25519_f(private_key_.data(), (u8*)peer_public_key.data(), shared_secret.data());
+        return shared_secret;
+    }
 };
 
 } // namespace crypto
