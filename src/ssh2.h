@@ -67,7 +67,7 @@ struct ssh2 {
             length = sz - sizeof(length) + padding_length;
         }
         auto payload_full() {
-            return bytes_concept{&padding_length + 1,length - padding_length - sizeof(padding_length)};
+            return bytes_concept{&padding_length + 1,(uint32_t)length - padding_length - sizeof(padding_length)};
         }
         auto payload() {
             struct pl {

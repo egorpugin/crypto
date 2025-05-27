@@ -33,6 +33,8 @@
 #include "ed448.h"
 #include "ssh2.h"
 
+// TODO: dns - doh dot (port 853)?
+
 #define LOG_TEST()                                                                                                                                             \
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
     std::flush(std::cout);                                                                                                                                     \
@@ -3414,11 +3416,11 @@ int main() {
 #ifndef CI_TESTS
 int main() {
     try {
-        test_base64();
+        //test_base64();
         // test_aes();
         //test_sha1();
         // test_sha2();
-        // test_sha3();
+        //test_sha3();
         // test_blake2();
         // test_blake3();
         // test_sm3();
@@ -3428,8 +3430,8 @@ int main() {
         //test_hmac();
         // test_hkdf();
         //test_pbkdf2();
-        // test_chacha20();
-        // test_chacha20_aead();
+        test_chacha20();
+        test_chacha20_aead();
         // test_scrypt();
         // test_argon2();
         // test_x509();
@@ -3438,14 +3440,14 @@ int main() {
         // test_grasshopper();
         // test_mgm();
         // test_gost();
-        test_jwt();
+        //test_jwt();
         // test_hpke();
         // test_mlkem();
         //
         //test_dns();
         //test_tls();
         //test_email();
-        //test_ssh2();
+        test_ssh2();
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {
