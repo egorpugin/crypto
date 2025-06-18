@@ -189,7 +189,7 @@ struct ssh2 {
         operator std::string_view() {
             length_type &l = *this;
             auto b = p;
-            p += l;
+            p += (uint32_t)l;
             return std::string_view{(const char *)b,(const char *)p};
         }
     };
