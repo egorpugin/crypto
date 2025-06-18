@@ -53,5 +53,5 @@ jobs:
         export PATH="/opt/homebrew/opt/m4/bin:$PATH"
         export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
         export PATH="/opt/homebrew/opt/gcc/bin:$PATH"
-        ./sw -compiler gcc-14 -Dci-build=true run test-0.0.1
+        ./sw -compiler gcc -Dci-build=true run test-0.0.1
         #./sw -compiler clang -Dci-build=true run test-0.0.1
