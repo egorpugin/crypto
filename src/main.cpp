@@ -2680,8 +2680,17 @@ void test_dns() {
     res_and_print("egorpugin.ru"s, dns_packet::qtype::AAAA);
 
     auto &dd = get_default_dns();
-    dd.query_one<dns_packet::mx>("google.com"s);
-    dd.query_one<dns_packet::mx>("google.com"s);
+    auto res_and_print2 = [&](SRCLOC) {
+        try {
+            dd.query_one<dns_packet::mx>("google.com"s);
+            cmp_base(1, 1, loc);
+        }
+        catch (...) {
+            cmp_base(1, 0, loc);
+        }
+        };
+    res_and_print2();
+    res_and_print2();
 }
 
 void test_tls() {
@@ -3416,6 +3425,8 @@ int main() {
 #ifndef CI_TESTS
 int main() {
     try {
+        //test_all();
+
         //test_base64();
         // test_aes();
         //test_sha1();
