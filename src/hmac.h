@@ -199,15 +199,15 @@ struct hkdf {
     using hash_type = Hash;
 
     static auto extract(bytes_concept salt, bytes_concept input_key_material) {
-        return hkdf_extract<Hash>(salt, input_key_material);
+        return hkdf_extract<hash_type>(salt, input_key_material);
     }
     static auto extract(bytes_concept input_key_material) {
         array<digest_size_bytes> salt{};
         return extract(salt, input_key_material);
     }
-    template <auto Len = Hash::digest_size_bytes>
+    template <auto Len = digest_size_bytes>
     static auto expand(bytes_concept pseudorandom_key, bytes_concept info) {
-        return hkdf_expand<Hash, Len>(pseudorandom_key, info);
+        return hkdf_expand<hash_type, Len>(pseudorandom_key, info);
     }
 };
 
