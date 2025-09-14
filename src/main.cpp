@@ -1943,6 +1943,8 @@ void test_pbkdf2() {
         return cmp_bytes(x, y);
     };
 
+    cmp(pbkdf2<sha256>(pass, salt, 1000, 1), "4f"_sb);
+    cmp(pbkdf2<sha256>(pass, salt, 1000, 2), "4ff5"_sb);
     cmp(pbkdf2<sha256>(pass, salt, 1000, 33), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca4208"_sb);
     cmp(pbkdf2<sha256>(pass, salt, 1000, 34), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca420882"_sb);
     cmp(pbkdf2<sha256>(pass, salt, 1000), "4ff53b205602ea576b8a6bd69fb594a0a98a91299f14810092a23d925decca42"_sb);
@@ -3440,9 +3442,9 @@ int main() {
         //test_ecdsa();
         //test_hmac();
         // test_hkdf();
-        //test_pbkdf2();
-        test_chacha20();
-        test_chacha20_aead();
+        test_pbkdf2();
+        //test_chacha20();
+        //test_chacha20_aead();
         // test_scrypt();
         // test_argon2();
         // test_x509();
@@ -3459,6 +3461,8 @@ int main() {
         //test_tls();
         //test_email();
         test_ssh2();
+
+        return 0;
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {

@@ -150,15 +150,10 @@ auto pbkdf2_raw(auto &&prf, auto &&pass, auto &&salt, u32 c, u32 i) {
 auto pbkdf2(auto &&prf, auto &&pass, auto &&salt, auto &&c, u32 derived_key_bytes) {
     std::vector<u8> res;
     res.resize(derived_key_bytes);
-    int i = 0;
-    auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
-    auto iter_size = r.size();
-    memcpy(res.data() + iter_size * i, r.data(), std::min<u32>(derived_key_bytes - i * iter_size, iter_size));
-    ++i;
-    auto iters = std::max<u32>(1, (derived_key_bytes + iter_size - 1) / iter_size);
-    for (; i < iters; ++i) {
+    for (u32 i = 0, to_copy; derived_key_bytes > 0; derived_key_bytes -= to_copy, i++) {
         auto r = pbkdf2_raw(prf, pass, salt, c, i + 1);
-        memcpy(res.data() + iter_size * i, r.data(), std::min<u32>(derived_key_bytes - i * iter_size, iter_size));
+        to_copy = std::min<u32>(derived_key_bytes, r.size());
+        memcpy(res.data() + r.size() * i, r.data(), to_copy);
     }
     return res;
 }
