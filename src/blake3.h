@@ -161,7 +161,6 @@ struct blake3 : hash_traits<blake3> {
         v[a] = v[a] + v[b] + x;
         v[d] = std::rotr(v[d] ^ v[a], 16);
         v[c] = v[c] + v[d];
-
         v[b] = std::rotr(v[b] ^ v[c], 12);
         v[a] = v[a] + v[b] + y;
         v[d] = std::rotr(v[d] ^ v[a], 8);
