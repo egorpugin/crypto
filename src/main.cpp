@@ -3439,10 +3439,10 @@ int main() {
         // test_sm3();
         // test_sm4();
         // test_ec();
-        //test_ecdsa();
+        test_ecdsa();
         //test_hmac();
         // test_hkdf();
-        test_pbkdf2();
+        //test_pbkdf2();
         //test_chacha20();
         //test_chacha20_aead();
         // test_scrypt();
@@ -3460,7 +3460,7 @@ int main() {
         //test_dns();
         //test_tls();
         //test_email();
-        test_ssh2();
+        //test_ssh2();
 
         return 0;
     } catch (std::exception &e) {

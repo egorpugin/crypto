@@ -75,10 +75,6 @@ struct ed25519 : ed_base<ed25519, 32> {
         auto point_double(auto &&P) const {
             return point_add(P, P);
         }
-        auto point_mul(auto &&s, auto &&P) const {
-            edwards_point Q{0,1,1,0};
-            return edwards_calc_base::point_mul(s, P, Q);
-        }
         auto point_decompress(auto &&s) const {
             auto [x,y] = edwards_calc_base::point_decompress(s);
             return edwards_point{x,y,1,x*y%p};

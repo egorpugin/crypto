@@ -76,10 +76,6 @@ struct ed448 : ed_base<ed448, 57> {
             auto J = (E - H * 2) % p;
             return edwards_point{(B-E)*J%p, E*(C-D)%p, E*J%p};
         }
-        auto point_mul(auto &&s, auto &&P) const {
-            edwards_point Q{0,1,1};
-            return edwards_calc_base::point_mul(s, P, Q);
-        }
         auto point_decompress(auto &&s) const {
             auto [x,y] = edwards_calc_base::point_decompress(s);
             return edwards_point{x,y,1};
