@@ -117,12 +117,9 @@ struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding>> {
     }
     void pad() noexcept {
         auto *d = (u8 *)A;
-        auto q = (rate - (bitlen % rate)) / 8;
-        u8 q21 = Padding | (1 << (log2floor(Padding) + 1));
-        u8 q22 = 0x80;
-        d[blockpos++] ^= q21;
-        blockpos += q - 2;
-        d[blockpos++] ^= q22;
+        d[blockpos++] ^= Padding | (1 << (log2floor(Padding) + 1));
+        blockpos += (rate - (bitlen % rate)) / 8 - 2;
+        d[blockpos++] ^= 0x80;
         permute();
     }
 };
