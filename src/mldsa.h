@@ -316,41 +316,6 @@ use_hint(const ml_dsa_field::zq_t h, const ml_dsa_field::zq_t r) {
 
 }
 
-// Utility functions for ML-DSA
-namespace ml_dsa_utils {
-
-// Compile-time compute how many bytes to reserve for storing serialized ML-DSA public key, for given parameter set.
-//
-// See table 1, 2 of ML-DSA standard https://doi.org/10.6028/NIST.FIPS.204.
-static inline constexpr size_t
-pub_key_len(const size_t k, const size_t d) {
-    const size_t t1_bw = ml_dsa_field::Q_BIT_WIDTH - d;
-    const size_t pklen = 32 + k * 32 * t1_bw;
-    return pklen;
-}
-
-// Compile-time compute how many bytes to reserve for storing serialized ML-DSA secret key, for given parameter set.
-//
-// See table 1, 2 of ML-DSA standard https://doi.org/10.6028/NIST.FIPS.204.
-static inline constexpr size_t
-sec_key_len(const size_t k, const size_t l, const uint32_t eta, const size_t d) {
-    const size_t eta_bw = std::bit_width(2 * eta);
-    const size_t sklen = 32 + 32 + 64 + 32 * (eta_bw * (k + l) + k * d);
-    return sklen;
-}
-
-// Compile-time compute how many bytes to reserve for storing serialized ML-DSA signature, for specified parameter set.
-//
-// See table 1, 2 of ML-DSA standard https://doi.org/10.6028/NIST.FIPS.204.
-static inline constexpr size_t
-sig_len(const size_t k, const size_t l, const uint32_t gamma1, const size_t omega, const size_t lambda) {
-    const size_t gamma1_bw = std::bit_width(gamma1);
-    const size_t siglen = ((2 * lambda) / std::numeric_limits<uint8_t>::digits) + (32 * l * gamma1_bw) + (omega + k);
-    return siglen;
-}
-
-}
-
 // Compile-time executable functions, ensuring that ML-DSA routines are always invoked with proper arguments.
 namespace ml_dsa_params {
 
@@ -1472,7 +1437,7 @@ sample_in_ball(std::span<const uint8_t, (2 * lambda) / std::numeric_limits<uint8
 // ML-DSA FIPS 204
 template<size_t k, size_t l, size_t d, uint32_t eta, uint32_t gamma1, uint32_t gamma2, uint32_t tau, uint32_t beta, size_t omega, size_t lambda>
 struct ml_dsa_base {
-    // Byte length of seed ξ, required for key generation.
+    // Byte length of seed, required for key generation.
     static inline constexpr size_t KeygenSeedByteLen = 32;
 
     // Byte length of randomness, required for hedged signing.
@@ -1482,25 +1447,26 @@ struct ml_dsa_base {
     static inline constexpr size_t MessageRepresentativeByteLen = 64;
 
     // Byte length of ML-DSA public key.
-    static inline constexpr size_t PubKeyByteLen = ml_dsa_utils::pub_key_len(k, d);
+    static inline constexpr size_t PubKeyByteLen = 32 + k * 32 * (ml_dsa_field::Q_BIT_WIDTH - d);
 
     // Byte length of ML-DSA secret key.
-    static inline constexpr size_t SecKeyByteLen = ml_dsa_utils::sec_key_len(k, l, eta, d);
+    static inline constexpr size_t SecKeyByteLen = 32 + 32 + 64 + 32 * (std::bit_width(2 * eta) * (k + l) + k * d);
 
     // Byte length of ML-DSA signature.
-    static inline constexpr size_t SigByteLen = ml_dsa_utils::sig_len(k, l, gamma1, omega, lambda);
+    static inline constexpr size_t SigByteLen = ((2 * lambda) / std::numeric_limits<uint8_t>::digits) + (32 * l * std::bit_width(gamma1)) + (omega + k);
 
-    // Given seed ξ, this routine generates a public key and secret key pair, using deterministic key generation algorithm.
+public:
+    // Given seed, this routine generates a public key and secret key pair, using deterministic key generation algorithm.
     //
     // See algorithm 1 of ML-DSA standard @ https://doi.org/10.6028/NIST.FIPS.204.
-    static inline constexpr void keygen(std::span<const uint8_t, KeygenSeedByteLen> ξ, std::span<uint8_t, PubKeyByteLen> pubkey, std::span<uint8_t, SecKeyByteLen> seckey) {
+    static constexpr void keygen(std::span<const uint8_t, KeygenSeedByteLen> seed, std::span<uint8_t, PubKeyByteLen> pubkey, std::span<uint8_t, SecKeyByteLen> seckey) {
         constexpr std::array<uint8_t, 2> domain_separator{ k, l };
 
         std::array<uint8_t, 32 + 64 + 32> seed_hash{};
         auto seed_hash_span = std::span(seed_hash);
 
         shake<256> hasher;
-        hasher.absorb(ξ);
+        hasher.absorb(seed);
         hasher.absorb(domain_separator);
         hasher.finalize();
         hasher.squeeze(seed_hash_span);
@@ -1587,7 +1553,7 @@ struct ml_dsa_base {
     // Note, hedged signing is the default and recommended version.
     //
     // See algorithm 7 of ML-DSA standard @ https://doi.org/10.6028/NIST.FIPS.204.
-    static inline constexpr bool sign_internal(std::span<const uint8_t, SigningSeedByteLen> rnd,
+    static constexpr bool sign_internal(std::span<const uint8_t, SigningSeedByteLen> rnd,
         std::span<const uint8_t, SecKeyByteLen> seckey,
         std::span<const uint8_t, MessageRepresentativeByteLen> mu,
         std::span<uint8_t, SigByteLen> sig) {
@@ -1753,7 +1719,7 @@ struct ml_dsa_base {
     // Note, hedged signing is the default and recommended version.
     //
     // See algorithm 2 of ML-DSA standard @ https://doi.org/10.6028/NIST.FIPS.204.
-    static inline constexpr bool sign(std::span<const uint8_t, SigningSeedByteLen> rnd,
+    static constexpr bool sign(std::span<const uint8_t, SigningSeedByteLen> rnd,
         std::span<const uint8_t, SecKeyByteLen> seckey,
         std::span<const uint8_t> msg,
         std::span<const uint8_t> ctx,
@@ -1788,7 +1754,7 @@ struct ml_dsa_base {
     // given message and public key.
     //
     // See algorithm 8 of ML-DSA standard @ https://doi.org/10.6028/NIST.FIPS.204.
-    static inline constexpr bool verify_internal(std::span<const uint8_t, PubKeyByteLen> pubkey, std::span<const uint8_t, MessageRepresentativeByteLen> mu, std::span<const uint8_t, SigByteLen> sig) {
+    static constexpr bool verify_internal(std::span<const uint8_t, PubKeyByteLen> pubkey, std::span<const uint8_t, MessageRepresentativeByteLen> mu, std::span<const uint8_t, SigByteLen> sig) {
         constexpr size_t t1_bw = std::bit_width(ml_dsa_field::Q) - d;
         constexpr size_t gamma1_bw = std::bit_width(gamma1);
 
@@ -1879,7 +1845,7 @@ struct ml_dsa_base {
     // of signature verification. For example, say it returns true, it means signature is valid for given message and public key.
     //
     // See algorithm 3 of ML-DSA standard @ https://doi.org/10.6028/NIST.FIPS.204.
-    static inline constexpr bool verify(std::span<const uint8_t, PubKeyByteLen> pubkey, std::span<const uint8_t> msg, std::span<const uint8_t> ctx, std::span<const uint8_t, SigByteLen> sig) {
+    static constexpr bool verify(std::span<const uint8_t, PubKeyByteLen> pubkey, std::span<const uint8_t> msg, std::span<const uint8_t> ctx, std::span<const uint8_t, SigByteLen> sig) {
         if (ctx.size() > std::numeric_limits<uint8_t>::max()) {
             return false;
         }
@@ -1912,8 +1878,8 @@ public:
     private_key_type private_key_;
     public_key_type public_key_;
 
-    void keygen(std::span<const uint8_t, KeygenSeedByteLen> ξ) {
-        keygen(ξ, bytes_concept{public_key_}, bytes_concept{private_key_});
+    void keygen(std::span<const uint8_t, KeygenSeedByteLen> seed) {
+        keygen(seed, bytes_concept{public_key_}, bytes_concept{private_key_});
     }
 };
 
@@ -1928,7 +1894,7 @@ struct ml_dsa;
 template <>
 struct ml_dsa<44> : ml_dsa_base2<4, 4, 2, 1u << 17, (ml_dsa_field::Q - 1) / 88, 39, 80, 128> {};
 template <>
-struct ml_dsa<65> : ml_dsa_base2<6, 5, 4, 1u << 19, (ml_dsa_field::Q - 1) / 32, 49, 55, 198> {};
+struct ml_dsa<65> : ml_dsa_base2<6, 5, 4, 1u << 19, (ml_dsa_field::Q - 1) / 32, 49, 55, 192> {};
 template <>
 struct ml_dsa<87> : ml_dsa_base2<8, 7, 2, 1u << 19, (ml_dsa_field::Q - 1) / 32, 60, 75, 256> {};
 
