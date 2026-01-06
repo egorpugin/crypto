@@ -194,6 +194,21 @@ struct bytes_concept {
         std::string a{p,p+sz};
         return a;
     }
+
+    template <auto N>
+    operator std::span<u8, N>() const {
+        if (N != sz) {
+            throw std::runtime_error{ "bad array conversion" };
+        }
+        return std::span<u8, N>{data(), sz};
+    }
+    template <auto N>
+    operator std::span<const u8, N>() const {
+        if (N != sz) {
+            throw std::runtime_error{ "bad array conversion" };
+        }
+        return std::span<const u8, N>{ data(), sz };
+    }
 };
 
 template <typename... Ts>
