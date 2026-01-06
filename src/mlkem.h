@@ -1,5 +1,5 @@
 // parts are from https://github.com/itzmeanjan/ml-kem
-// MPL-2.0 license
+// BSD-3-Clause license
 
 #pragma once
 
@@ -9,7 +9,7 @@
 // check mlkem in boring ssl
 // https://boringssl.googlesource.com/boringssl.git/+/chromium-stable/crypto/mlkem/mlkem.cc
 
-// TODO: ML-DSA, SLH-DSA?
+// TODO: SLH-DSA?
 
 namespace crypto {
 
@@ -1144,11 +1144,11 @@ struct mlkem_base {
         array<32> d, z;
         get_random_secure_bytes(d);
         get_random_secure_bytes(z);
-        ml_kem_geygen(d, z);
+        ml_kem_keygen(d, z);
     }
     // ML-KEM key generation algorithm, generating byte serialized public key and secret key, given 32 -bytes seed `d` and `z`.
     // See algorithm 16 defined in ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
-    constexpr void ml_kem_geygen(auto &&d, // used in CPA-PKE
+    constexpr void ml_kem_keygen(auto &&d, // used in CPA-PKE
                                  auto &&z  // used in CCA-KEM
     ) {
         std::span pubkey{public_key_};
@@ -1163,7 +1163,7 @@ struct mlkem_base {
         auto kpke_pkey_digest_in_seckey = seckey.template subspan<seckey_offset_kpke_pkey, seckey_offset_z - seckey_offset_kpke_pkey>();
         auto z_in_seckey = seckey.template subspan<seckey_offset_z, seckey.size() - seckey_offset_z>();
 
-        k_pke_geygen(d, kpke_pkey_in_seckey, kpke_skey_in_seckey);
+        k_pke_keygen(d, kpke_pkey_in_seckey, kpke_skey_in_seckey);
         std::copy(kpke_pkey_in_seckey.begin(), kpke_pkey_in_seckey.end(), pubkey.begin());
         std::copy(z.begin(), z.end(), z_in_seckey.begin());
 
@@ -1172,7 +1172,7 @@ struct mlkem_base {
         auto r = hasher.digest();
         memcpy(kpke_pkey_digest_in_seckey.data(), r.data(), r.size());
     }
-    static void k_pke_geygen(auto &&d, auto &&pubkey, auto &&seckey) {
+    static void k_pke_keygen(auto &&d, auto &&pubkey, auto &&seckey) {
         array<64> g_out{};
         memcpy(g_out.data(), d.data(), d.size());
         g_out[d.size()] = k;

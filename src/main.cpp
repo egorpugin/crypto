@@ -3242,7 +3242,7 @@ void test_mlkem() {
     using namespace crypto;
 
     auto check1 = [&](auto k, auto &&sk, auto &&pk, auto &&in_c, auto &&in_ss, auto &&d, auto &&z, auto &&m) {
-        k.ml_kem_geygen(d, z);
+        k.ml_kem_keygen(d, z);
         cmp_bytes(k.private_key_, sk);
         cmp_bytes(k.public_key_, pk);
         array<decltype(k)::pke_cipher_text_len> c;
@@ -3305,7 +3305,7 @@ void test_mlkem() {
 
     {
         mlkem<768> k;
-        k.ml_kem_geygen("E34A701C4C87582F42264EE422D3C684D97611F2523EFE0C998AF05056D693DC"_sb,
+        k.ml_kem_keygen("E34A701C4C87582F42264EE422D3C684D97611F2523EFE0C998AF05056D693DC"_sb,
                         "A85768F3486BD32A01BF9A8F21EA938E648EAE4E5448C34C3EB88820B159EEDD"_sb);
         cmp_bytes(
             k.private_key_,
@@ -3316,7 +3316,7 @@ void test_mlkem() {
     }
     {
         mlkem<768> k;
-        k.ml_kem_geygen("D21D5AFED9AFAA3B49FB45245B2BCA1505E4000CDC29094A3600F5CAA49A7B3A"_sb,
+        k.ml_kem_keygen("D21D5AFED9AFAA3B49FB45245B2BCA1505E4000CDC29094A3600F5CAA49A7B3A"_sb,
                         "4DD0E86091649A0A08EA44DAB85DF56797F8BF46222C2DBA7DEC6374B9B2268E"_sb);
         cmp_bytes(
             k.private_key_,
