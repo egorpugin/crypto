@@ -16,6 +16,7 @@
 #include "magma.h"
 #include "mlkem.h"
 #include "mldsa.h"
+#include "slhdsa.h"
 #include "mmap.h"
 #include "pki.h"
 #include "random.h"
@@ -3371,6 +3372,22 @@ void test_mldsa() {
     f(ml_dsa<87>{}, seed, msg, ctx, rnd, t87);
 }
 
+void test_slh_dsa() {
+    LOG_TEST();
+
+    using namespace crypto;
+
+    auto seed = "061550234D158C5EC95595FE04EF7A25767F2E24CC2BC479D09D86DC9ABCFDE7056A8C266F9EF97ED08541DBD2E1FFA1"_sb;
+    auto msg = "d81c4d8d734fcbfbeade3d3f8a039faa2a2c9957e835ad55b22e75bf57bb556ac8"_sb;
+    auto pk = "B505D7CFAD1B497499323C8686325E47AC524902FC81F5032BC27B17D9261EBD"_sb;
+    auto sk = "7C9935A0B07694AA0C6D10E4DB6B1ADD2FD81A25CCB148032DCD739936737F2DB505D7CFAD1B497499323C8686325E47AC524902FC81F5032BC27B17D9261EBD"_sb;
+
+    slh_dsa_shake_s<128> s;
+    s.keygen(bytes_concept{seed});
+    cmp_bytes(bytes_concept{s.sk}, sk);
+    cmp_bytes(bytes_concept{s.sk.pk}, pk);
+}
+
 void test_base64() {
     LOG_TEST();
 
@@ -3450,6 +3467,7 @@ auto test_all() {
     test_hpke();
     test_mlkem();
     test_mldsa();
+    test_slh_dsa();
     test_dns();
     test_tls();
     test_email();
@@ -3501,7 +3519,8 @@ int main() {
         //test_jwt();
         // test_hpke();
         // test_mlkem();
-        test_mldsa();
+        //test_mldsa();
+        test_slh_dsa();
         //
         //test_dns();
         //test_tls();
