@@ -87,7 +87,7 @@ struct keccak_p {
 };
 
 // Padding: bits are counted from right to left (01234567), not as usual (76543210)!
-// So, 0b10 in code means 01000000
+// So, 0b10 in code means 0b01000000
 template <auto Capacity, auto Padding>
 struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding>> {
     static inline constexpr auto rate = StateBits - Capacity;
@@ -152,7 +152,10 @@ struct shake_base : keccak<2 * ShakeType, 0b1111> {
     auto finalize() noexcept {
         base::pad();
     }
-    auto squeeze(auto &out) noexcept {
+    auto squeeze(u8 *out, size_t len) noexcept {
+        return squeeze(bytes_concept{out,len});
+    }
+    auto squeeze(auto &&out) noexcept {
         auto ptr = out.data();
         auto end = ptr + out.size();
         auto step = [&](){
