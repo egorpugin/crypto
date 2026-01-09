@@ -208,12 +208,13 @@ template <auto param_set>
 struct slh_dsa_base {
     static constexpr inline auto pk_bytes = param_set.n * 2;
     static constexpr inline auto sig_bytes = param_set.sig_bytes();
+    static constexpr inline auto params = param_set;
 
     struct public_key {
         u8 seed[param_set.n];
         u8 root[param_set.n];
 
-        operator u8 *() { return seed; }
+        operator u8*() { return seed; }
         operator bytes_concept() { return { seed,param_set.n * 2 }; }
     };
     struct private_key {
@@ -757,8 +758,8 @@ template <> struct slh_dsa_shake_s<192> : slh_dsa_shake_base<slh_dsa_params<192,
 template <> struct slh_dsa_shake_s<256> : slh_dsa_shake_base<slh_dsa_params<256, 's'>> {};
 
 template <auto> struct slh_dsa_shake_f;
-template <> struct slh_dsa_shake_f<192> : slh_dsa_shake_base<slh_dsa_params<192, 'f'>> {};
 template <> struct slh_dsa_shake_f<128> : slh_dsa_shake_base<slh_dsa_params<128, 'f'>> {};
+template <> struct slh_dsa_shake_f<192> : slh_dsa_shake_base<slh_dsa_params<192, 'f'>> {};
 template <> struct slh_dsa_shake_f<256> : slh_dsa_shake_base<slh_dsa_params<256, 'f'>> {};
 
 }

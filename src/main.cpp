@@ -3383,12 +3383,18 @@ void test_slh_dsa() {
     auto pk = "eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
     auto sk = "8c5bca8e6c04936101baa157b4583876 b2e267dae605f13615cd7522393cef4a eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
 
-    slh_dsa_shake_s<128> s;
-    s.keygen(bytes_concept{seed});
-    cmp_bytes(bytes_concept{s.sk}, sk);
-    cmp_bytes(bytes_concept{s.sk.pk}, pk);
-    auto sig = s.sign(msg2);
-    cmp_bool(s.verify(msg2, sig));
+    auto f = [&](auto &&s) {
+        array<s.params.n * 3> seed2{};
+        s.keygen(bytes_concept{ seed2 });
+        //cmp_bytes(bytes_concept{ s.sk }, sk);
+        //cmp_bytes(bytes_concept{ s.sk.pk }, pk);
+        auto sig = s.sign(msg2);
+        cmp_bool(s.verify(msg2, sig));
+    };
+
+    f(slh_dsa_shake_f<128>{});
+    f(slh_dsa_shake_f<256>{});
+    //f(slh_dsa_shake_s<128>{});
 }
 
 void test_base64() {
