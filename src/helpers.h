@@ -71,11 +71,14 @@ struct types {
 
 template <typename T>
 concept bytes_concept1 = requires (T t) {
+    //typename T::value_type;
     t.data();
     t.size();
 };
 
 struct bytes_concept {
+    using value_type = u8;
+
     u8 *p{};
     size_t sz{};
     bytes_concept() = default;
@@ -119,7 +122,7 @@ struct bytes_concept {
     }
     bytes_concept(bytes_concept1 auto &&s) {
         p = (u8 *)s.data();
-        sz = s.size();
+        sz = s.size() * sizeof(std::decay_t<decltype(s)>::value_type);
     }
     auto begin() const { return p; }
     auto end() const { return p+sz; }

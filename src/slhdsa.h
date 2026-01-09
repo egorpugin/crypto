@@ -139,6 +139,19 @@ struct param_set {
     size_t k;
     size_t lg_w;
     size_t m;
+
+    constexpr uint32_t get_len1() const {
+        return ((8 * n + lg_w - 1) / lg_w);
+    }
+    constexpr uint32_t get_len2() const {
+        //  Appedix B:
+        //  "When lg_w = 4 and 9 <= n <= 136, the value of len2 will be 3."
+        //assert(prm->lg_w == 4 && prm->n >= 9 && prm->n <= 136);
+        return 3;
+    }
+    constexpr uint32_t get_len() const {
+        return get_len1() + get_len2();
+    }
 };
 
 // s for small signatures
@@ -189,59 +202,81 @@ struct slh_dsa_base {
 
         // fill pk_root
         memcpy(obj.sk.pk.root, pk_root, param_set.n);
-        memcpy(obj.sk.prf, pk_root, param_set.n);
     }
+    auto sign(this auto &&obj, auto &&msg, auto &&rand) {
+        array<param_set.n + param_set.m> sig{};
+        //  randomized hashing; R
+        obj.PRF_msg(sig.data(), rand, msg);
+        obj.H_msg(sig.data() + param_set.n, sig.data(), msg);
+        //  create FORS and HT signature parts
+        //slh_do_sign(r + param_set.n, digest);
+        return sig;
+    }
+    auto sign(this auto &&obj, auto &&msg) {
+        obj.sign(msg, obj.sk.pk.seed);
+    }
+    void verify() {
 
-    static inline uint32_t get_len1() {
-        return ((8 * param_set.n + param_set.lg_w - 1) / param_set.lg_w);
-    }
-    static inline uint32_t get_len2() {
-        return 3;
-    }
-    static inline uint32_t get_len() {
-        return get_len1() + get_len2();
     }
 
     void xmss_node(this auto &&obj, uint8_t *node, uint32_t i, uint32_t z) {
-        uint32_t j, k;
-        int p;
-        uint8_t *h0, h[param_set.hp][param_set.n];
+        uint8_t h[param_set.hp][param_set.n];
         // SLH_MAX_LEN == (2 * SLH_MAX_N + 3)
         uint8_t tmp[(2 * param_set.n + 3) * param_set.n];
-        uint8_t *sk;
-        size_t n = param_set.n;
-        size_t len = get_len();
+        auto n = param_set.n;
+        constexpr auto len = param_set.get_len();
 
-        p = -1;
+        int p = -1;
         i <<= z;
-        for (j = 0; j < (1u << z); j++) {
+        for (u32 j = 0; j < (1u << z); ++j, ++i) {
             obj.adrs->set_key_pair_address(i);
 
             //  === Generate a WOTS+ public key.
             //  Algorithm 5: wots_PKgen(SK.seed, PK.seed, ADRS)
-            sk = tmp;
-            for (k = 0; k < len; k++) {
+            auto sk = tmp;
+            for (auto k = 0; k < len; k++) {
                 obj.adrs->set_chain_address(k);
                 obj.wots_chain(sk, 15);   //  w-1 =  (1 << prm->lg_w) - 1;
                 sk += n;
             }
             obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
-            h0 = p >= 0 ? h[p] : node;
-            p++;
-            obj.h_t(h0, tmp, len * n);
+            auto h0 = p >= 0 ? h[p] : node;
+            ++p;
+            obj.T(h0, tmp, len * n);
 
-            //  this xmss_node() implementation is non-recursive
-            for (k = 0; (j >> k) & 1; k++) {
+            // this xmss_node() implementation is non-recursive
+            for (auto k = 0; (j >> k) & 1; k++) {
                 obj.adrs->set_type_and_clear(obj.adrs->TREE);
                 obj.adrs->set_tree_height(k + 1);
                 obj.adrs->set_tree_index(i >> (k + 1));
-                p--;
+                --p;
                 h0 = p >= 1 ? h[p - 1] : node;
-                obj.h_h(h0, h0, h[p]);
+                obj.H(h0, h0, h[p]);
             }
-            i++;        //  advance index
         }
     }
+    /*size_t slh_do_sign(uint8_t *sig, const uint8_t *digest) {
+        const uint8_t *md = digest;
+        uint64_t i_tree = 0;
+        uint32_t i_leaf = 0;
+        uint8_t pk_fors[SLH_MAX_N];
+        size_t sig_sz;
+
+        split_digest(&i_tree, &i_leaf, digest, ctx->prm);
+
+        adrs_zero(ctx);
+        adrs_set_tree_address(ctx, i_tree);
+        adrs_set_type_and_clear_not_kp(ctx, ADRS_FORS_TREE);
+        adrs_set_key_pair_address(ctx, i_leaf);
+
+        //  SIG_FORS
+        sig_sz = fors_sign(ctx, sig, md);
+        fors_pk_from_sig(ctx, pk_fors, sig, md);
+
+        //  SIG_HT
+        sig += sig_sz;
+        sig_sz += ht_sign(ctx, sig, pk_fors, i_tree, i_leaf);
+    }*/
 };
 
 //
@@ -270,13 +305,6 @@ template <auto param_set>
 struct slh_dsa_shake_base : slh_dsa_base<param_set> {
     using shake_type = shake<256>;
 
-    auto H_msg() {}
-    auto PRF() {}
-    auto PRF_msg() {}
-    auto F() {}
-    auto H() {}
-    auto Tl() {}
-
     void mk_ctx(const u8 *pk, const u8 *sk) {
         auto n = param_set.n;
         if (sk) {
@@ -296,7 +324,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         //  PRF secret key
         this->adrs->set_type(this->adrs->WOTS_PRF);
         this->adrs->set_tree_index(0);
-        shake_prf(tmp);
+        PRF(tmp);
 
         //  chain
         this->adrs->set_type(this->adrs->WOTS_HASH);
@@ -337,41 +365,61 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
                 ks[k] = 0;
             }
 
-            kc.permute();                   //  permutation
+            kc.permute();
         }
         memcpy(tmp, ks, n);
     }
-    void shake_prf(uint8_t *h) {
-        shake_f(h, this->sk.seed);
+
+    auto H_msg(uint8_t *h, u8 *r, auto &&msg) {
+        shake_type s;
+        s.update(r, param_set.n);
+        s.update(this->sk.pk.seed);
+        s.update(this->sk.pk.root);
+        s.update(msg);
+        s.finalize();
+        s.squeeze(h, param_set.m);
     }
-    void shake_f(uint8_t *h, const uint8_t *m1) {
+    auto PRF_msg(uint8_t *h, u8 *rand, auto &&msg) {
+        auto n = param_set.n;
+
+        shake_type s;
+        s.update(this->sk.prf);
+        s.update(rand, n);
+        s.update(msg);
+        s.finalize();
+        s.squeeze(h, n);
+    }
+    void PRF(uint8_t *h) {
+        F(h, this->sk.seed);
+    }
+    void F(uint8_t *h, const uint8_t *m1) {
         auto n = param_set.n;
 
         shake_type s;
         s.update(this->sk.pk.seed);
-        s.update(this->adrs->data(), 32);
+        s.update(this->adrs->value);
         s.update(m1, n);
         s.finalize();
         s.squeeze(h, n);
     }
-    void h_t(uint8_t *h, const uint8_t *m, size_t m_sz) {
+    void H(uint8_t *h, const uint8_t *m1, const uint8_t *m2) {
         auto n = param_set.n;
 
         shake_type s;
         s.update(this->sk.pk.seed);
-        s.update(this->adrs->data(), 32);
-        s.update(m, m_sz);
-        s.finalize();
-        s.squeeze(h, n);
-    }
-    void h_h(uint8_t *h, const uint8_t *m1, const uint8_t *m2) {
-        auto n = param_set.n;
-
-        shake_type s;
-        s.update(this->sk.pk.seed);
-        s.update(this->adrs->data(), 32);
+        s.update(this->adrs->value);
         s.update(m1, n);
         s.update(m2, n);
+        s.finalize();
+        s.squeeze(h, n);
+    }
+    void T(uint8_t *h, const uint8_t *m, size_t m_sz) {
+        auto n = param_set.n;
+
+        shake_type s;
+        s.update(this->sk.pk.seed);
+        s.update(this->adrs->value);
+        s.update(m, m_sz);
         s.finalize();
         s.squeeze(h, n);
     }

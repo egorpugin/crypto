@@ -3377,15 +3377,16 @@ void test_slh_dsa() {
 
     using namespace crypto;
 
-    auto seed = "061550234D158C5EC95595FE04EF7A25767F2E24CC2BC479D09D86DC9ABCFDE7056A8C266F9EF97ED08541DBD2E1FFA1"_sb;
+    auto seed = "8c5bca8e6c04936101baa157b4583876b2e267dae605f13615cd7522393cef4aeb3f468836dd5e4bda7ccf103144224e"_sb;
     auto msg = "d81c4d8d734fcbfbeade3d3f8a039faa2a2c9957e835ad55b22e75bf57bb556ac8"_sb;
-    auto pk = "B505D7CFAD1B497499323C8686325E47AC524902FC81F5032BC27B17D9261EBD"_sb;
-    auto sk = "7C9935A0B07694AA0C6D10E4DB6B1ADD2FD81A25CCB148032DCD739936737F2DB505D7CFAD1B497499323C8686325E47AC524902FC81F5032BC27B17D9261EBD"_sb;
+    auto pk = "eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
+    auto sk = "8c5bca8e6c04936101baa157b4583876 b2e267dae605f13615cd7522393cef4a eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
 
     slh_dsa_shake_s<128> s;
     s.keygen(bytes_concept{seed});
     cmp_bytes(bytes_concept{s.sk}, sk);
     cmp_bytes(bytes_concept{s.sk.pk}, pk);
+    s.sign("Hello World!");
 }
 
 void test_base64() {
