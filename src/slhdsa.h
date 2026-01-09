@@ -27,48 +27,74 @@ namespace crypto {
 
 namespace slh_dsa_detail {
 
-struct adrs_base {
-    u32 layer_address;
-    u32 tree_address[3];
-    u32 type;
-};
-
-struct wots_hash : adrs_base {
-    u32 key_pair_address;
-    u32 chain_address;
-    u32 hash_address;
-};
-struct wots_pk : adrs_base {
-    u32 key_pair_address;
-    u32 padding[2]{};
-};
-struct tree : adrs_base {
-    u32 padding{};
-    u32 tree_height;
-    u32 tree_index;
-};
-struct fors_tree : adrs_base {
-    u32 key_pair_address;
-    u32 tree_height;
-    u32 tree_index;
-};
-struct fors_roots : adrs_base {
-    u32 key_pair_address;
-    u32 padding[2]{};
-};
-struct wots_prf : adrs_base {
-    u32 key_pair_address;
-    u32 chain_address;
-    u32 hash_address{};
-};
-struct fors_prf : fors_tree {
-    u32 key_pair_address;
-    u32 tree_height{};
-    u32 tree_index;
-};
-
 auto rev8_be32(u32 x) {
     return std::byteswap(x);
+}
+
+uint64_t slh_toint(const uint8_t *x, unsigned n) {
+    unsigned i;
+    uint64_t t;
+
+    if (n == 0)
+        return 0;
+    t = (uint64_t)x[0];
+    for (i = 1; i < n; i++) {
+        t <<= 8;
+        t += (uint64_t)x[i];
+    }
+    return t;
+}
+void slh_tobyte(uint8_t *x, uint64_t t, unsigned n) {
+    unsigned i;
+
+    if (n == 0)
+        return;
+    for (i = n - 1; i > 0; i--) {
+        x[i] = (uint8_t)(t & 0xFF);
+        t >>= 8;
+    }
+    x[0] = (uint8_t)t;
+}
+
+size_t base_2b(uint32_t *v, const uint8_t *x, uint32_t b, size_t v_len) {
+    size_t i, j;
+    uint32_t l, t, m;
+
+    j = 0;
+    l = 0;
+    t = 0;
+    m = (1 << b) - 1;
+    for (i = 0; i < v_len; i++) {
+        while (l < b) {
+            t = (t << 8) + x[j++];
+            l += 8;
+        }
+        l -= b;
+        v[i] = (t >> l) & m;
+    }
+    return j;
+}
+size_t base_16(uint32_t *v, const uint8_t *x, int v_len) {
+    int i, j, l, t;
+
+    j = 0;
+    for (i = 0; i < v_len - 2; i += 2) {
+        t = x[j++];
+        v[i] = t >> 4;
+        v[i + 1] = t & 0xF;
+    }
+
+    l = 0;
+    t = 0;
+    for (; i < v_len; i++) {
+        while (l < 4) {
+            t = (t << 8) + x[j++];
+            l += 8;
+        }
+        l -= 4;
+        v[i] = (t >> l) & 0xF;
+    }
+    return j;
 }
 
 struct adrs {
@@ -93,6 +119,11 @@ struct adrs {
 
     void set_layer_address(u32 x) {
         value[0] = rev8_be32(x);
+    }
+    void set_tree_address(uint64_t x) {
+        // bytes a[4:8] of tree address are always zero
+        value[2] = rev8_be32(x >> 32);
+        value[3] = rev8_be32(x & 0xFFFFFFFF);
     }
     void set_type(uint32_t x) {
         value[4] = rev8_be32(x);
@@ -144,9 +175,11 @@ struct param_set {
         return ((8 * n + lg_w - 1) / lg_w);
     }
     constexpr uint32_t get_len2() const {
-        //  Appedix B:
+        //  Appendix B:
         //  "When lg_w = 4 and 9 <= n <= 136, the value of len2 will be 3."
-        //assert(prm->lg_w == 4 && prm->n >= 9 && prm->n <= 136);
+        //assert(lg_w == 4 && n >= 9 && n <= 136);
+        // w = 2^lg_w
+        // log2(len1() * (w-1))/lg_w + 1
         return 3;
     }
     constexpr uint32_t get_len() const {
@@ -190,7 +223,7 @@ struct slh_dsa_base {
     slh_dsa_detail::adrs *adrs;
 
     void keygen(this auto &&obj, std::span<const u8, param_set.n * 3> seed) {
-        uint8_t pk_root[param_set.n];
+        u8 pk_root[param_set.n];
 
         memcpy(obj.sk.seed, seed.data(), seed.size()); // SK.seed || SK.prf || PK.seed
         memset(obj.sk.pk.root, 0x00, param_set.n); // PK.root not generated yet
@@ -204,12 +237,13 @@ struct slh_dsa_base {
         memcpy(obj.sk.pk.root, pk_root, param_set.n);
     }
     auto sign(this auto &&obj, auto &&msg, auto &&rand) {
-        array<param_set.n + param_set.m> sig{};
-        //  randomized hashing; R
+        array<param_set.n + param_set.m + 100000> sig{};
+        // randomized hashing; R
         obj.PRF_msg(sig.data(), rand, msg);
-        obj.H_msg(sig.data() + param_set.n, sig.data(), msg);
-        //  create FORS and HT signature parts
-        //slh_do_sign(r + param_set.n, digest);
+        u8 digest[param_set.m];
+        obj.H_msg(digest, sig.data(), msg);
+        // create FORS and HT signature parts
+        obj.do_sign(sig.data() + param_set.n, digest);
         return sig;
     }
     auto sign(this auto &&obj, auto &&msg) {
@@ -219,10 +253,9 @@ struct slh_dsa_base {
 
     }
 
-    void xmss_node(this auto &&obj, uint8_t *node, uint32_t i, uint32_t z) {
-        uint8_t h[param_set.hp][param_set.n];
-        // SLH_MAX_LEN == (2 * SLH_MAX_N + 3)
-        uint8_t tmp[(2 * param_set.n + 3) * param_set.n];
+    void xmss_node(this auto &&obj, u8 *node, uint32_t i, uint32_t z) {
+        u8 h[param_set.hp][param_set.n];
+        u8 tmp[param_set.get_len() * param_set.n];
         auto n = param_set.n;
         constexpr auto len = param_set.get_len();
 
@@ -231,12 +264,12 @@ struct slh_dsa_base {
         for (u32 j = 0; j < (1u << z); ++j, ++i) {
             obj.adrs->set_key_pair_address(i);
 
-            //  === Generate a WOTS+ public key.
-            //  Algorithm 5: wots_PKgen(SK.seed, PK.seed, ADRS)
+            // === Generate a WOTS+ public key.
+            // Algorithm 5: wots_PKgen(SK.seed, PK.seed, ADRS)
             auto sk = tmp;
             for (auto k = 0; k < len; k++) {
                 obj.adrs->set_chain_address(k);
-                obj.wots_chain(sk, 15);   //  w-1 =  (1 << prm->lg_w) - 1;
+                obj.wots_chain(sk, 15);   // w-1 = (1 << param_set.lg_w) - 1;
                 sk += n;
             }
             obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
@@ -255,28 +288,253 @@ struct slh_dsa_base {
             }
         }
     }
-    /*size_t slh_do_sign(uint8_t *sig, const uint8_t *digest) {
-        const uint8_t *md = digest;
+    void do_sign(this auto &&obj, u8 *sig, const u8 *digest) {
+        const u8 *md = digest;
         uint64_t i_tree = 0;
         uint32_t i_leaf = 0;
-        uint8_t pk_fors[SLH_MAX_N];
-        size_t sig_sz;
+        u8 pk_fors[param_set.n];
 
-        split_digest(&i_tree, &i_leaf, digest, ctx->prm);
+        split_digest(&i_tree, &i_leaf, digest);
 
-        adrs_zero(ctx);
-        adrs_set_tree_address(ctx, i_tree);
-        adrs_set_type_and_clear_not_kp(ctx, ADRS_FORS_TREE);
-        adrs_set_key_pair_address(ctx, i_leaf);
+        obj.adrs->zero();
+        obj.adrs->set_tree_address(i_tree);
+        obj.adrs->set_type_and_clear_not_kp(obj.adrs->FORS_TREE);
+        obj.adrs->set_key_pair_address(i_leaf);
 
-        //  SIG_FORS
-        sig_sz = fors_sign(ctx, sig, md);
-        fors_pk_from_sig(ctx, pk_fors, sig, md);
+        // SIG_FORS
+        auto sig_sz = obj.fors_sign(sig, md);
+        obj.fors_pk_from_sig(pk_fors, sig, md);
 
-        //  SIG_HT
+        // SIG_HT
         sig += sig_sz;
-        sig_sz += ht_sign(ctx, sig, pk_fors, i_tree, i_leaf);
-    }*/
+        sig_sz += obj.ht_sign(sig, pk_fors, i_tree, i_leaf);
+    }
+    static void split_digest(uint64_t *i_tree, uint32_t *i_leaf, const uint8_t *digest) {
+        size_t md_sz = (param_set.k * param_set.a + 7) / 8;
+        const uint8_t *pi_tree = digest + md_sz;
+        size_t i_tree_sz = (param_set.h - param_set.hp + 7) / 8;
+        *i_tree = slh_dsa_detail::slh_toint(pi_tree, i_tree_sz);
+        size_t i_leaf_sz = (param_set.hp + 7) / 8;
+        const uint8_t *pi_leaf = pi_tree + i_tree_sz;
+        *i_leaf = slh_dsa_detail::slh_toint(pi_leaf, i_leaf_sz);
+        if ((param_set.h - param_set.hp) != 64) {
+            *i_tree &= (UINT64_C(1) << (param_set.h - param_set.hp)) - UINT64_C(1);
+        }
+        *i_leaf &= (1 << param_set.hp) - 1;
+    }
+    size_t fors_sign(this auto &&obj, uint8_t *sf, const uint8_t *md) {
+        uint32_t i, j, s;
+        uint32_t vi[param_set.k];
+        size_t  n = param_set.n;
+
+        slh_dsa_detail::base_2b(vi, md, param_set.a, param_set.k);
+
+        for (i = 0; i < param_set.k; i++) {
+
+            //  fors_SKgen()
+            obj.adrs->set_tree_index((i << param_set.a) + vi[i]);
+            obj.fors_hash(sf, 0);
+            sf += n;
+
+            for (j = 0; j < param_set.a; j++) {
+                s = (vi[i] >> j) ^ 1;
+                obj.fors_node(sf, (i << (param_set.a - j)) + s, j);
+                sf += n;
+            }
+        }
+        return n * param_set.k * (1 + param_set.a);
+    }
+    void fors_node(this auto &&obj, uint8_t *node, uint32_t i, uint32_t z) {
+        uint8_t h[param_set.a][param_set.n], *h0;
+        uint32_t j, k;
+        int p;
+
+        p = -1;
+        i <<= z;
+        for (j = 0; j < (1u << z); j++) {
+
+            // fors_SKgen() + hash
+            obj.adrs->set_tree_index(i);
+            h0 = p >= 0 ? h[p] : node;
+            p++;
+            obj.fors_hash(h0, 1);
+
+            // this fors_node() implementation is non-recursive
+            for (k = 0; (j >> k) & 1; k++) {
+                obj.adrs->set_tree_height(k + 1);
+                obj.adrs->set_tree_index(i >> (k + 1));
+                p--;
+                h0 = p > 0 ? h[p - 1] : node;
+                obj.H(h0, h0, h[p]);
+            }
+            i++;        //  advance index
+        }
+    }
+    void fors_pk_from_sig(this auto &&obj, uint8_t *pk, const uint8_t *sf, const uint8_t *md) {
+        uint32_t i, j, idx;
+        uint32_t vi[param_set.k];
+        uint8_t root[param_set.k * param_set.n];
+        uint8_t *node;
+        size_t n = param_set.n;
+
+        slh_dsa_detail::base_2b(vi, md, param_set.a, param_set.k);
+
+        node = root;
+        for (i = 0; i < param_set.k; i++) {
+            obj.adrs->set_tree_height(0);
+
+            idx = (i << param_set.a) + vi[i];
+            obj.adrs->set_tree_index(idx);
+
+            obj.F(node, sf);
+            sf += n;
+
+            for (j = 0; j < param_set.a; j++) {
+                obj.adrs->set_tree_height(j + 1);
+                obj.adrs->set_tree_index(idx >> (j + 1));
+
+                if (((vi[i] >> j) & 1) == 0) {
+                    obj.H(node, node, sf);
+                } else {
+                    obj.H(node, sf, node);
+                }
+                sf += n;
+            }
+            node += n;
+        }
+
+        obj.adrs->set_type_and_clear_not_kp(obj.adrs->FORS_ROOTS);
+        obj.T(pk, root, param_set.k * n);
+    }
+    size_t ht_sign(this auto &&obj, uint8_t *sh, uint8_t *m, uint64_t i_tree, uint32_t i_leaf) {
+        uint32_t j;
+        size_t sx_sz;
+
+        obj.adrs->zero();
+        obj.adrs->set_tree_address(i_tree);
+        sx_sz = obj.xmss_sign(sh, m, i_leaf);
+
+        for (j = 1; j < param_set.d; j++) {
+            obj.xmss_pk_from_sig(m, i_leaf, sh, m);
+            sh += sx_sz;
+
+            i_leaf = i_tree & ((1 << param_set.hp) - 1);
+            i_tree >>= param_set.hp;
+            obj.adrs->set_layer_address(j);
+            obj.adrs->set_tree_address(i_tree);
+            obj.xmss_sign(sh, m, i_leaf);
+        }
+
+        return sx_sz * param_set.d;
+    }
+    size_t xmss_sign(this auto &&obj, uint8_t *sx, const uint8_t *m, uint32_t idx) {
+        uint32_t j, k;
+        uint8_t *auth;
+        size_t sx_sz = 0;
+        size_t n = param_set.n;
+
+        sx_sz = param_set.get_len() * n;
+        auth = sx + sx_sz;
+
+        for (j = 0; j < param_set.hp; j++) {
+            k = (idx >> j) ^ 1;
+            obj.xmss_node(auth, k, j);
+            auth += n;
+        }
+        sx_sz += param_set.hp * n;
+
+        obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_HASH);
+        obj.adrs->set_key_pair_address(idx);
+        obj.wots_sign(sx, m);
+
+        return sx_sz;
+    }
+    void xmss_pk_from_sig(this auto &&obj, uint8_t *root, uint32_t idx, const uint8_t *sig, const uint8_t *m) {
+        uint32_t k;
+        const uint8_t *auth;
+        size_t n = param_set.n;
+
+        obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_HASH);
+        obj.adrs->set_key_pair_address(idx);
+
+        obj.wots_pk_from_sig(root, sig, m);
+        obj.adrs->set_type_and_clear(obj.adrs->TREE);
+
+        auth = sig + (param_set.get_len() * n);
+
+        for (k = 0; k < param_set.hp; k++) {
+            obj.adrs->set_tree_height(k + 1);
+            obj.adrs->set_tree_index(idx >> (k + 1));
+
+            if (((idx >> k) & 1) == 0) {
+                obj.H(root, root, auth);
+            } else {
+                obj.H(root, auth, root);
+            }
+            auth += n;
+        }
+    }
+    size_t wots_sign(this auto &&obj, uint8_t *sig, const uint8_t *m) {
+        uint32_t i, len;
+        uint32_t vm[param_set.get_len()];
+        size_t n = param_set.n;
+
+        len = param_set.get_len();
+        obj.wots_csum(vm, m);
+
+        for (i = 0; i < len; i++) {
+            obj.adrs->set_chain_address(i);
+            obj.wots_chain(sig, vm[i]);
+            sig += n;
+        }
+        return n * len;
+    }
+    void wots_csum(uint32_t *vm, const uint8_t *m) {
+        uint32_t csum, i, t;
+        uint32_t len1, len2;
+        uint8_t buf[4];
+
+        len1 = param_set.get_len1();
+        len2 = param_set.get_len2();
+
+        //base_2b(vm, m, prm->lg_w, len1);
+        slh_dsa_detail::base_16(vm, m, len1);
+
+        csum = 0;
+        t = (1 << param_set.lg_w) - 1;
+        for (i = 0; i < len1; i++) {
+            csum += t - vm[i];
+        }
+        csum <<= (8 - ((len2 * param_set.lg_w) & 7)) & 7;
+
+        t = (len2 * param_set.lg_w + 7) / 8;
+        memset(buf, 0, sizeof(buf));
+        slh_dsa_detail::slh_tobyte(buf, csum, t);
+
+        //base_2b(&vm[len1], buf, prm->lg_w, len2);
+        slh_dsa_detail::base_16(&vm[len1], buf, len2);
+    }
+    void wots_pk_from_sig(this auto &&obj, uint8_t *pk, const uint8_t *sig, const uint8_t *m) {
+        uint32_t i, t, len;
+        uint32_t vm[param_set.get_len()];
+        uint8_t tmp[param_set.get_len() * param_set.n];
+        size_t n = param_set.n;
+        size_t tmp_sz;
+
+        obj.wots_csum(vm, m);
+
+        len = param_set.get_len();
+        t = 15; // (1 << prm->lg_w) - 1;
+        tmp_sz = 0;
+        for (i = 0; i < len; i++) {
+            obj.adrs->set_chain_address(i);
+            obj.chain(tmp + tmp_sz, sig + tmp_sz, vm[i], t - vm[i]);
+            tmp_sz += n;
+        }
+
+        obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
+        obj.T(pk, tmp, tmp_sz);
+    }
 };
 
 //
@@ -317,20 +575,20 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
             memcpy(this->sk.pk.root, pk + n, n);
         }
 
-        //  local ADRS buffer
+        // local ADRS buffer
         this->adrs = &this->t_adrs;
     }
-    void wots_chain(uint8_t *tmp, uint32_t s) {
-        //  PRF secret key
+    void wots_chain(u8 *tmp, uint32_t s) {
+        // PRF secret key
         this->adrs->set_type(this->adrs->WOTS_PRF);
         this->adrs->set_tree_index(0);
         PRF(tmp);
 
-        //  chain
+        // chain
         this->adrs->set_type(this->adrs->WOTS_HASH);
-        shake_chain(tmp, tmp, 0, s);
+        chain(tmp, tmp, 0, s);
     }
-    void shake_chain(uint8_t *tmp, const uint8_t *x, uint32_t i, uint32_t s) {
+    void chain(u8 *tmp, const u8 *x, uint32_t i, uint32_t s) {
         uint32_t j, k;
         keccak_p<1600> kc;
         auto &ks = kc.A;
@@ -369,8 +627,20 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         }
         memcpy(tmp, ks, n);
     }
+    void fors_hash(uint8_t *tmp, uint32_t s) {
+        //  PRF secret key
+        this->adrs->set_type(this->adrs->FORS_PRF);
+        this->adrs->set_tree_height(0);
+        PRF(tmp);
 
-    auto H_msg(uint8_t *h, u8 *r, auto &&msg) {
+        //  hash it again
+        if (s == 1) {
+            this->adrs->set_type(this->adrs->FORS_TREE);
+            F(tmp, tmp);
+        }
+    }
+
+    auto H_msg(u8 *h, u8 *r, auto &&msg) {
         shake_type s;
         s.update(r, param_set.n);
         s.update(this->sk.pk.seed);
@@ -379,7 +649,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         s.finalize();
         s.squeeze(h, param_set.m);
     }
-    auto PRF_msg(uint8_t *h, u8 *rand, auto &&msg) {
+    auto PRF_msg(u8 *h, u8 *rand, auto &&msg) {
         auto n = param_set.n;
 
         shake_type s;
@@ -389,10 +659,10 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         s.finalize();
         s.squeeze(h, n);
     }
-    void PRF(uint8_t *h) {
+    void PRF(u8 *h) {
         F(h, this->sk.seed);
     }
-    void F(uint8_t *h, const uint8_t *m1) {
+    void F(u8 *h, const u8 *m1) {
         auto n = param_set.n;
 
         shake_type s;
@@ -402,7 +672,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         s.finalize();
         s.squeeze(h, n);
     }
-    void H(uint8_t *h, const uint8_t *m1, const uint8_t *m2) {
+    void H(u8 *h, const u8 *m1, const u8 *m2) {
         auto n = param_set.n;
 
         shake_type s;
@@ -413,7 +683,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         s.finalize();
         s.squeeze(h, n);
     }
-    void T(uint8_t *h, const uint8_t *m, size_t m_sz) {
+    void T(u8 *h, const u8 *m, size_t m_sz) {
         auto n = param_set.n;
 
         shake_type s;
