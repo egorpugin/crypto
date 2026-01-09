@@ -1450,6 +1450,15 @@ struct ml_dsa_base {
     static inline constexpr size_t PubKeyByteLen = 32 + k * 32 * (ml_dsa_field::Q_BIT_WIDTH - d);
 
     // Byte length of ML-DSA secret key.
+    /*
+    * for mldsa44
+        rho[32];
+        K[32];
+        tr[64];
+        s1[384];
+        s2[384];
+        t0[1664];
+    */
     static inline constexpr size_t SecKeyByteLen = 32 + 32 + 64 + 32 * (std::bit_width(2 * eta) * (k + l) + k * d);
 
     // Byte length of ML-DSA signature.
