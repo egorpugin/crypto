@@ -185,6 +185,10 @@ struct param_set {
     constexpr uint32_t get_len() const {
         return get_len1() + get_len2();
     }
+
+    constexpr uint32_t sig_bytes() const {
+        return (1 + k * (1 + a) + h + d * get_len()) * n;
+    }
 };
 
 // s for small signatures
@@ -203,10 +207,13 @@ template <> constexpr param_set slh_dsa_params<256, 'f'> = { 32, 68, 17, 4, 9, 3
 template <auto param_set>
 struct slh_dsa_base {
     static constexpr inline auto pk_bytes = param_set.n * 2;
+    static constexpr inline auto sig_bytes = param_set.sig_bytes();
 
     struct public_key {
         u8 seed[param_set.n];
         u8 root[param_set.n];
+
+        operator u8 *() { return seed; }
         operator bytes_concept() { return { seed,param_set.n * 2 }; }
     };
     struct private_key {
@@ -237,7 +244,7 @@ struct slh_dsa_base {
         memcpy(obj.sk.pk.root, pk_root, param_set.n);
     }
     auto sign(this auto &&obj, auto &&msg, auto &&rand) {
-        array<param_set.n + param_set.m + 100000> sig{};
+        array<sig_bytes> sig{};
         // randomized hashing; R
         obj.PRF_msg(sig.data(), rand, msg);
         u8 digest[param_set.m];
@@ -247,47 +254,34 @@ struct slh_dsa_base {
         return sig;
     }
     auto sign(this auto &&obj, auto &&msg) {
-        obj.sign(msg, obj.sk.pk.seed);
+        return obj.sign(msg, obj.sk.pk.seed);
     }
-    void verify() {
+    bool verify(this auto &&obj, auto &&m, auto &&sig) {
+        uint8_t digest[param_set.m];
+        uint8_t pk_fors[param_set.n];
 
+        const uint8_t *r = sig.data();
+        const uint8_t *sig_fors = sig.data() + param_set.n;
+        const uint8_t *sig_ht = sig.data() + ((1 + param_set.k * (1 + param_set.a)) * param_set.n);
+
+        obj.mk_ctx(obj.sk.pk, nullptr);
+        obj.H_msg(digest, r, m);
+
+        const uint8_t *md = digest;
+        uint64_t        i_tree = 0;
+        uint32_t        i_leaf = 0;
+        split_digest(&i_tree, &i_leaf, digest);
+
+        obj.adrs->zero();
+        obj.adrs->set_tree_address(i_tree);
+        obj.adrs->set_type_and_clear_not_kp(obj.adrs->FORS_TREE);
+        obj.adrs->set_key_pair_address(i_leaf);
+
+        obj.fors_pk_from_sig(pk_fors, sig_fors, md);
+
+        return obj.ht_verify(pk_fors, sig_ht, i_tree, i_leaf);
     }
 
-    void xmss_node(this auto &&obj, u8 *node, uint32_t i, uint32_t z) {
-        u8 h[param_set.hp][param_set.n];
-        u8 tmp[param_set.get_len() * param_set.n];
-        auto n = param_set.n;
-        constexpr auto len = param_set.get_len();
-
-        int p = -1;
-        i <<= z;
-        for (u32 j = 0; j < (1u << z); ++j, ++i) {
-            obj.adrs->set_key_pair_address(i);
-
-            // === Generate a WOTS+ public key.
-            // Algorithm 5: wots_PKgen(SK.seed, PK.seed, ADRS)
-            auto sk = tmp;
-            for (auto k = 0; k < len; k++) {
-                obj.adrs->set_chain_address(k);
-                obj.wots_chain(sk, 15);   // w-1 = (1 << param_set.lg_w) - 1;
-                sk += n;
-            }
-            obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
-            auto h0 = p >= 0 ? h[p] : node;
-            ++p;
-            obj.T(h0, tmp, len * n);
-
-            // this xmss_node() implementation is non-recursive
-            for (auto k = 0; (j >> k) & 1; k++) {
-                obj.adrs->set_type_and_clear(obj.adrs->TREE);
-                obj.adrs->set_tree_height(k + 1);
-                obj.adrs->set_tree_index(i >> (k + 1));
-                --p;
-                h0 = p >= 1 ? h[p - 1] : node;
-                obj.H(h0, h0, h[p]);
-            }
-        }
-    }
     void do_sign(this auto &&obj, u8 *sig, const u8 *digest) {
         const u8 *md = digest;
         uint64_t i_tree = 0;
@@ -308,6 +302,33 @@ struct slh_dsa_base {
         // SIG_HT
         sig += sig_sz;
         sig_sz += obj.ht_sign(sig, pk_fors, i_tree, i_leaf);
+    }
+    bool ht_verify(this auto &&obj, const uint8_t *m, const uint8_t *sig_ht, uint64_t i_tree, uint32_t i_leaf) {
+        uint32_t i, j;
+        uint8_t node[param_set.n];
+        size_t st_sz;
+
+        obj.adrs->zero();
+        obj.adrs->set_tree_address(i_tree);
+
+        obj.xmss_pk_from_sig(node, i_leaf, sig_ht, m);
+
+        st_sz = (param_set.hp + param_set.get_len()) * param_set.n;
+        for (j = 1; j < param_set.d; j++) {
+            i_leaf = i_tree & ((1 << param_set.hp) - 1);
+            i_tree >>= param_set.hp;
+            obj.adrs->set_layer_address(j);
+            obj.adrs->set_tree_address(i_tree);
+            sig_ht += st_sz;
+            obj.xmss_pk_from_sig(node, i_leaf, sig_ht, node);
+        }
+
+        uint8_t t;
+        t = 0;
+        for (i = 0; i < param_set.n; i++) {
+            t |= node[i] ^ obj.sk.pk.root[i];
+        }
+        return t == 0;
     }
     static void split_digest(uint64_t *i_tree, uint32_t *i_leaf, const uint8_t *digest) {
         size_t md_sz = (param_set.k * param_set.a + 7) / 8;
@@ -448,6 +469,41 @@ struct slh_dsa_base {
         obj.wots_sign(sx, m);
 
         return sx_sz;
+    }
+    void xmss_node(this auto &&obj, u8 *node, uint32_t i, uint32_t z) {
+        u8 h[param_set.hp][param_set.n];
+        u8 tmp[param_set.get_len() * param_set.n];
+        auto n = param_set.n;
+        constexpr auto len = param_set.get_len();
+
+        int p = -1;
+        i <<= z;
+        for (u32 j = 0; j < (1u << z); ++j, ++i) {
+            obj.adrs->set_key_pair_address(i);
+
+            // === Generate a WOTS+ public key.
+            // Algorithm 5: wots_PKgen(SK.seed, PK.seed, ADRS)
+            auto sk = tmp;
+            for (auto k = 0; k < len; k++) {
+                obj.adrs->set_chain_address(k);
+                obj.wots_chain(sk, 15);   // w-1 = (1 << param_set.lg_w) - 1;
+                sk += n;
+            }
+            obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
+            auto h0 = p >= 0 ? h[p] : node;
+            ++p;
+            obj.T(h0, tmp, len * n);
+
+            // this xmss_node() implementation is non-recursive
+            for (auto k = 0; (j >> k) & 1; k++) {
+                obj.adrs->set_type_and_clear(obj.adrs->TREE);
+                obj.adrs->set_tree_height(k + 1);
+                obj.adrs->set_tree_index(i >> (k + 1));
+                --p;
+                h0 = p >= 1 ? h[p - 1] : node;
+                obj.H(h0, h0, h[p]);
+            }
+        }
     }
     void xmss_pk_from_sig(this auto &&obj, uint8_t *root, uint32_t idx, const uint8_t *sig, const uint8_t *m) {
         uint32_t k;
@@ -640,7 +696,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         }
     }
 
-    auto H_msg(u8 *h, u8 *r, auto &&msg) {
+    auto H_msg(u8 *h, const u8 *r, auto &&msg) {
         shake_type s;
         s.update(r, param_set.n);
         s.update(this->sk.pk.seed);

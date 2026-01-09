@@ -3379,6 +3379,7 @@ void test_slh_dsa() {
 
     auto seed = "8c5bca8e6c04936101baa157b4583876b2e267dae605f13615cd7522393cef4aeb3f468836dd5e4bda7ccf103144224e"_sb;
     auto msg = "d81c4d8d734fcbfbeade3d3f8a039faa2a2c9957e835ad55b22e75bf57bb556ac8"_sb;
+    auto msg2 = "Hello World!"s;
     auto pk = "eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
     auto sk = "8c5bca8e6c04936101baa157b4583876 b2e267dae605f13615cd7522393cef4a eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
 
@@ -3386,7 +3387,8 @@ void test_slh_dsa() {
     s.keygen(bytes_concept{seed});
     cmp_bytes(bytes_concept{s.sk}, sk);
     cmp_bytes(bytes_concept{s.sk.pk}, pk);
-    s.sign("Hello World!");
+    auto sig = s.sign(msg2);
+    cmp_bool(s.verify(msg2, sig));
 }
 
 void test_base64() {
