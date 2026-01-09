@@ -122,7 +122,7 @@ struct bytes_concept {
     }
     bytes_concept(bytes_concept1 auto &&s) {
         p = (u8 *)s.data();
-        sz = s.size() * sizeof(std::decay_t<decltype(s)>::value_type);
+        sz = s.size() * sizeof(typename std::decay_t<decltype(s)>::value_type);
     }
     auto begin() const { return p; }
     auto end() const { return p+sz; }
