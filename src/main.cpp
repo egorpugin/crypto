@@ -3392,8 +3392,15 @@ void test_slh_dsa() {
         cmp_bool(s.verify(msg2, sig));
     };
 
-    f(slh_dsa_shake_f<128>{});
-    f(slh_dsa_shake_f<256>{});
+    // something is wrong with out sha2 version
+    f(slh_dsa_sha2_f<128>{});
+    //f(slh_dsa_sha2_f<192>{});
+    //f(slh_dsa_sha2_f<256>{});
+    //
+    //f(slh_dsa_shake_f<128>{});
+    //f(slh_dsa_shake_f<192>{});
+    //f(slh_dsa_shake_f<256>{});
+    //
     //f(slh_dsa_shake_s<128>{});
 }
 

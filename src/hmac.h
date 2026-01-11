@@ -42,11 +42,11 @@ constexpr auto hmac_bytes(sha3<Settings...>) {
 
 // https://en.wikipedia.org/wiki/HMAC
 template <typename Hash>
-struct hmac2 {
+struct hmac_t {
     Hash inner;
     Hash outer;
 
-    hmac2(bytes_concept key) {
+    hmac_t(bytes_concept key) {
         constexpr int b = detail::hmac_bytes(Hash{});
         constexpr int hash_bytes = Hash::digest_size_bytes;
 
@@ -71,7 +71,7 @@ struct hmac2 {
 };
 template <typename Hash>
 auto hmac(bytes_concept key, bytes_concept message, auto &&...more) {
-    hmac2<Hash> h{key};
+    hmac_t<Hash> h{key};
     h.update(message, more...);
     return h.digest();
 }
@@ -91,13 +91,13 @@ struct hmac_drbg {
     void update(auto &&...provided_data) {
         size_t len{};
         auto update1 = [&](u8 byte) {
-            hmac2<Hash> hmk{k};
+            hmac_t<Hash> hmk{k};
             hmk.update(v);
             hmk.update(&byte, 1);
             ((hmk.update(provided_data),len+=provided_data.size()),...);
             k = hmk.digest();
 
-            hmac2<Hash> hmv{k};
+            hmac_t<Hash> hmv{k};
             hmv.update(v);
             v = hmv.digest();
         };
@@ -181,7 +181,7 @@ auto hkdf_expand(bytes_concept pseudorandom_key, bytes_concept info) {
     constexpr auto n = divceil(Len, hash_bytes);
     std::array<u8, Len> r;
     for (int i = 1, pos = 0; i <= n; ++i) {
-        hmac2<Hash> h{pseudorandom_key};
+        hmac_t<Hash> h{pseudorandom_key};
         if (i > 1) {
             h.update(r.data() + pos - hash_bytes, hash_bytes);
         }
@@ -210,6 +210,25 @@ struct hkdf {
         return hkdf_expand<hash_type, Len>(pseudorandom_key, info);
     }
 };
+
+// mask generation function 1
+template <typename Hash>
+static auto mgf1_f(auto &&p, auto &&sz, auto &&f) {
+    for (u32 i = 0, outlen = 0; outlen < sz; ++i) {
+        Hash h;
+        f(h);
+        auto counter = std::byteswap(i);
+        h.update((const u8 *)&counter, 4);
+        auto r = h.digest();
+        auto to_copy = std::min<int>(sz - outlen, r.size());
+        memcpy(p + outlen, r.data(), to_copy);
+        outlen += to_copy;
+    }
+}
+template <typename Hash>
+static auto mgf1(auto &&p, auto &&sz, auto &&seed) {
+    mgf1_f<Hash>(p, sz, [&](auto &h) {h.update(seed);});
+}
 
 namespace tls13 {
 

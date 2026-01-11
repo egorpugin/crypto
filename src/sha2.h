@@ -154,13 +154,17 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
             return hash;
         }
     }
+    void finalize() noexcept {
+        pad();
+    }
 
-private:
+//private: // we want some data to be exposed
     u8 m_data[chunk_size_bytes];
     std::array<state_type, state_size> h{sha2_data::h<ShaType, DigestSizeBits>()};
     message_length_type bitlen{};
     int blockpos{};
 
+private:
     static constexpr auto choose(auto e, auto f, auto g) noexcept {
         return (e & f) ^ (~e & g);
     }
@@ -175,6 +179,7 @@ private:
         using std::rotr;
         return rotr(x, P.r1) ^ rotr(x, P.r2) ^ rotr(x, P.r3);
     }
+public: // we want this method to be exposed
     constexpr void transform() noexcept {
         state_type w[rounds];
         for (u8 i = 0; i < 16; ++i) {
@@ -202,6 +207,7 @@ private:
             h[i] += state[i];
         }
     }
+private:
     constexpr void pad() noexcept {
         constexpr auto padding_size = chunk_size_bytes;
         constexpr auto bigint_size = padding_size / 8;
@@ -218,7 +224,7 @@ private:
 
         // Append to the padding the total message's length in bits and transform.
         for (int i = 0; i < bigint_size; ++i) {
-            //                              vvvvvvv msvc
+            //                              vvvvvvv msvc 128 bit int issue
             m_data[padding_size - i - 1] = (u8)(bitlen >> (i * 8));
         }
         transform();

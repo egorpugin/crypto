@@ -6,6 +6,7 @@
 #include "base64.h"
 #include "bigint.h"
 #include "sha2.h"
+#include "hmac.h"
 
 namespace crypto::rsa {
 
@@ -114,16 +115,7 @@ struct public_key {
     }
     template <auto Bits>
     static auto mgf1(auto &&p, auto &&sz, auto &&seed) {
-        for (u32 i = 0, outlen = 0; outlen < sz; ++i) {
-            sha2<Bits> h;
-            h.update(seed);
-            auto counter = std::byteswap(i);
-            h.update((const u8 *)&counter, 4);
-            auto r = h.digest();
-            auto to_copy = std::min<int>(sz - outlen, r.size());
-            memcpy(p + outlen, r.data(), to_copy);
-            outlen += to_copy;
-        }
+        ::crypto::mgf1<sha2<Bits>>(p, sz, seed);
     }
 
     template <auto Bits>
