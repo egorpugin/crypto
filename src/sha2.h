@@ -139,17 +139,17 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
     auto digest() noexcept {
         pad();
         array<DigestSizeBits / 8> hash;
-        //if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
-        //    decltype(h) swapped;
-        //    for (u8 i = 0; i < 8; i++) {
-        //        swapped[i] = std::byteswap(h[i]);
-        //    }
-        //    memcpy(hash.data(), swapped.data(), DigestSizeBits / 8);
-        //} else {
+        if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
+            decltype(h) swapped;
+            for (u8 i = 0; i < 8; i++) {
+                swapped[i] = std::byteswap(h[i]);
+            }
+            memcpy(hash.data(), swapped.data(), DigestSizeBits / 8);
+        } else {
             for (u8 i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
                 *(state_type *)(hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
             }
-        //}
+        }
         return hash;
     }
     void finalize() noexcept {
