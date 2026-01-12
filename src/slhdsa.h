@@ -170,6 +170,15 @@ struct param_set {
         return get_len1() + get_len2();
     }
 
+    constexpr u32 get_max_n() const {
+        return 32;
+    }
+    constexpr u32 get_max_len() const {
+        //return 2 * n + 3;
+        //return 2 * get_max_n() + 3;
+        return get_len();
+    }
+
     constexpr u32 sig_bytes() const {
         return (1 + k * (1 + a) + h + d * get_len()) * n;
     }
@@ -228,20 +237,53 @@ struct slh_dsa_base {
         // fill pk_root
         memcpy(obj.sk.pk.root, pk_root, param_set.n);
     }
-    auto sign(this auto &&obj, auto &&msg, auto &&rand) {
+    auto sign(this auto &&obj, auto &&msg, auto &&rand, auto &&ctx) {
+        if (ctx.size() > 255) {
+            throw std::runtime_error{"too long ctx"};
+        }
+
+        //auto msg_f = [&](auto &s){s.update(msg);}; // pure or 'internal' non fips or pre fips version
+        // pure fips version
+        auto msg_f = [&](auto &s) {
+            s.update(array<1>{0});
+            s.update(array<1>{(u8)ctx.size()});
+            s.update(ctx);
+            s.update(msg);
+        };
+        // prehash versipn
+        /*auto msg_f = [&](auto &s) {
+            s.update(array<1>{1});
+            s.update(array<1>{(u8)ctx.size()});
+            s.update(ctx);
+            s.update(oid);
+            s.update(ph(m));
+            s.update(msg);
+        };*/
+
         array<sig_bytes> sig{};
         // randomized hashing; R
-        obj.PRF_msg(sig.data(), rand, msg);
+        obj.PRF_msg(sig.data(), rand, msg_f);
         u8 digest[param_set.m];
-        obj.H_msg(digest, sig.data(), msg);
+        obj.H_msg(digest, sig.data(), msg_f);
         // create FORS and HT signature parts
         obj.do_sign(sig.data() + param_set.n, digest);
         return sig;
     }
     auto sign(this auto &&obj, auto &&msg) {
-        return obj.sign(msg, obj.sk.pk.seed);
+        return obj.sign(msg, obj.sk.pk.seed, bytes_concept{});
     }
-    bool verify(this auto &&obj, auto &&m, auto &&sig) {
+    bool verify(this auto &&obj, auto &&msg, auto &&sig, auto &&ctx) {
+        if (ctx.size() > 255) {
+            throw std::runtime_error{ "too long ctx" };
+        }
+
+        auto msg_f = [&](auto &s) {
+            s.update(array<1>{0});
+            s.update(array<1>{(u8)ctx.size()});
+            s.update(ctx);
+            s.update(msg);
+        };
+
         u8 digest[param_set.m];
         u8 pk_fors[param_set.n];
 
@@ -250,11 +292,11 @@ struct slh_dsa_base {
         const u8 *sig_ht = sig.data() + ((1 + param_set.k * (1 + param_set.a)) * param_set.n);
 
         obj.mk_ctx(obj.sk.pk, nullptr);
-        obj.H_msg(digest, r, m);
+        obj.H_msg(digest, r, msg_f);
 
         const u8 *md = digest;
-        uint64_t        i_tree = 0;
-        u32        i_leaf = 0;
+        uint64_t i_tree = 0;
+        u32 i_leaf = 0;
         split_digest(&i_tree, &i_leaf, digest);
 
         obj.adrs->zero();
@@ -265,6 +307,9 @@ struct slh_dsa_base {
         obj.fors_pk_from_sig(pk_fors, sig_fors, md);
 
         return obj.ht_verify(pk_fors, sig_ht, i_tree, i_leaf);
+    }
+    bool verify(this auto &&obj, auto &&msg, auto &&sig) {
+        return obj.verify(msg, sig, bytes_concept{});
     }
 
     void do_sign(this auto &&obj, u8 *sig, const u8 *digest) {
@@ -457,7 +502,7 @@ struct slh_dsa_base {
     }
     void xmss_node(this auto &&obj, u8 *node, u32 i, u32 z) {
         u8 h[param_set.hp][param_set.n];
-        u8 tmp[param_set.get_len() * param_set.n];
+        u8 tmp[param_set.get_max_len() * param_set.n];
         auto n = param_set.n;
         constexpr auto len = param_set.get_len();
 
@@ -517,7 +562,7 @@ struct slh_dsa_base {
     }
     size_t wots_sign(this auto &&obj, u8 *sig, const u8 *m) {
         u32 i, len;
-        u32 vm[param_set.get_len()];
+        u32 vm[param_set.get_max_len()];
         size_t n = param_set.n;
 
         len = param_set.get_len();
@@ -557,8 +602,8 @@ struct slh_dsa_base {
     }
     void wots_pk_from_sig(this auto &&obj, u8 *pk, const u8 *sig, const u8 *m) {
         u32 i, t, len;
-        u32 vm[param_set.get_len()];
-        u8 tmp[param_set.get_len() * param_set.n];
+        u32 vm[param_set.get_max_len()];
+        u8 tmp[param_set.get_max_len() * param_set.n];
         size_t n = param_set.n;
         size_t tmp_sz;
 
@@ -657,7 +702,7 @@ struct slh_dsa_sha2_base : slh_dsa_base<param_set> {
     }
     void chain(u8 *tmp, const u8 *x, u32 i, u32 s) {
         memcpy(tmp, x, param_set.n);
-        for (int j = i; j < s; j++) {
+        for (int j = i; j < s + i; j++) {
             this->adrs->set_hash_address(j);
             F(tmp, tmp);
         }
@@ -675,12 +720,12 @@ struct slh_dsa_sha2_base : slh_dsa_base<param_set> {
         }
     }
 
-    auto H_msg(u8 *h, const u8 *r, auto &&msg) {
+    auto H_msg(u8 *h, const u8 *r, auto &&msg_f) {
         sha2_type2 s;
         s.update(r, param_set.n);
         s.update(this->sk.pk.seed);
         s.update(this->sk.pk.root);
-        s.update(msg);
+        msg_f(s);
         auto dgst = s.digest();
 
         mgf1_f<sha2_type2>(h, param_set.m, [&](auto &h) {
@@ -689,10 +734,10 @@ struct slh_dsa_sha2_base : slh_dsa_base<param_set> {
             h.update(dgst);
         });
     }
-    auto PRF_msg(u8 *h, u8 *rand, auto &&msg) {
+    auto PRF_msg(u8 *h, u8 *rand, auto &&msg_f) {
         hmac_t<sha2_type2> s{this->sk.prf};
         s.update(rand, param_set.n);
-        s.update(msg);
+        msg_f(s);
         auto dgst = s.digest();
         memcpy(h, dgst.data(), param_set.n);
     }
@@ -835,22 +880,22 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         }
     }
 
-    auto H_msg(u8 *h, const u8 *r, auto &&msg) {
+    auto H_msg(u8 *h, const u8 *r, auto &&msg_f) {
         shake_type s;
         s.update(r, param_set.n);
         s.update(this->sk.pk.seed);
         s.update(this->sk.pk.root);
-        s.update(msg);
+        msg_f(s);
         s.finalize();
         s.squeeze(h, param_set.m);
     }
-    auto PRF_msg(u8 *h, u8 *rand, auto &&msg) {
+    auto PRF_msg(u8 *h, u8 *rand, auto &&msg_f) {
         auto n = param_set.n;
 
         shake_type s;
         s.update(this->sk.prf);
         s.update(rand, n);
-        s.update(msg);
+        msg_f(s);
         s.finalize();
         s.squeeze(h, n);
     }

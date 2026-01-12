@@ -3380,19 +3380,24 @@ void test_slh_dsa() {
     auto seed = "8c5bca8e6c04936101baa157b4583876b2e267dae605f13615cd7522393cef4aeb3f468836dd5e4bda7ccf103144224e"_sb;
     auto msg = "d81c4d8d734fcbfbeade3d3f8a039faa2a2c9957e835ad55b22e75bf57bb556ac8"_sb;
     auto msg2 = "Hello World!"s;
+    auto msg3 = "3F"_sb;
     auto pk = "eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
     auto sk = "8c5bca8e6c04936101baa157b4583876 b2e267dae605f13615cd7522393cef4a eb3f468836dd5e4bda7ccf103144224efcf1a34b476fe45adeb2b1d585bc042a"_sb;
 
     auto f = [&](auto &&s) {
         array<s.params.n * 3> seed2{};
+        memcpy(seed2.data(), "D5213BA4BB6470F1B9EDA88CBC94E6277A58A951EF7F2B81461DBAC41B5A6B83FA495FB834DEFEA7CC96A81309479135"_sb.data(), s.params.n * 3);
         s.keygen(bytes_concept{ seed2 });
+        //memcpy(s.sk.seed, "D5213BA4BB6470F1B9EDA88CBC94E6277A58A951EF7F2B81461DBAC41B5A6B83FA495FB834DEFEA7CC96A81309479135A67029E90668C5A58B96E60111491F3D"_sb.data(), s.params.n * 4);
         //cmp_bytes(bytes_concept{ s.sk }, sk);
         //cmp_bytes(bytes_concept{ s.sk.pk }, pk);
-        auto sig = s.sign(msg2);
-        cmp_bool(s.verify(msg2, sig));
+        auto sig = s.sign(msg3);
+        cmp_bool(s.verify(msg3, sig));
     };
 
     // something is wrong with out sha2 version
+    //f(slh_dsa_sha2_s<128>{});
+    //
     f(slh_dsa_sha2_f<128>{});
     //f(slh_dsa_sha2_f<192>{});
     //f(slh_dsa_sha2_f<256>{});
