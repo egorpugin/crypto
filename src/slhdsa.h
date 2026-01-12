@@ -216,6 +216,7 @@ struct slh_dsa_base {
         public_key pk;
 
         operator u8*() {return seed;}
+        u8 *data() {return seed;}
         operator bytes_concept() {return {seed,param_set.n * 4};}
     };
 
@@ -223,6 +224,9 @@ struct slh_dsa_base {
     slh_dsa_detail::adrs t_adrs;
     slh_dsa_detail::adrs *adrs;
 
+    slh_dsa_base() {
+        adrs = &t_adrs;
+    }
     void keygen(this auto &&obj, std::span<const u8, param_set.n * 3> seed) {
         u8 pk_root[param_set.n];
 
@@ -271,6 +275,9 @@ struct slh_dsa_base {
     }
     auto sign(this auto &&obj, auto &&msg) {
         return obj.sign(msg, obj.sk.pk.seed, bytes_concept{});
+    }
+    auto sign_with_ctx(this auto &&obj, auto &&msg, auto &&ctx) {
+        return obj.sign(msg, obj.sk.pk.seed, ctx);
     }
     bool verify(this auto &&obj, auto &&msg, auto &&sig, auto &&ctx) {
         if (ctx.size() > 255) {
