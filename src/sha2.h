@@ -138,29 +138,27 @@ struct sha2_base : hash_traits<sha2_base<ShaType, DigestSizeBits>> {
     }
     auto digest() noexcept {
         pad();
-        if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
-            decltype(h) swapped;
-            for (u8 i = 0; i < 8; i++) {
-                swapped[i] = std::byteswap(h[i]);
-            }
-            array<DigestSizeBits / 8> hash;
-            memcpy(hash.data(), swapped.data(), DigestSizeBits / 8);
-            return hash;
-        } else {
-            array<DigestSizeBits / 8> hash;
+        array<DigestSizeBits / 8> hash;
+        //if constexpr (ShaType == 512 && DigestSizeBits < ShaType) {
+        //    decltype(h) swapped;
+        //    for (u8 i = 0; i < 8; i++) {
+        //        swapped[i] = std::byteswap(h[i]);
+        //    }
+        //    memcpy(hash.data(), swapped.data(), DigestSizeBits / 8);
+        //} else {
             for (u8 i = 0; i < DigestSizeBits / 8 / sizeof(state_type); i++) {
                 *(state_type *)(hash.data() + i * sizeof(state_type)) = std::byteswap(h[i]);
             }
-            return hash;
-        }
+        //}
+        return hash;
     }
     void finalize() noexcept {
         pad();
     }
 
 //private: // we want some data to be exposed
-    u8 m_data[chunk_size_bytes];
-    std::array<state_type, state_size> h{sha2_data::h<ShaType, DigestSizeBits>()};
+    std::array<state_type, state_size> h{ sha2_data::h<ShaType, DigestSizeBits>() };
+    u8 m_data[chunk_size_bytes]; // after h; some algorithms can rely on this
     message_length_type bitlen{};
     int blockpos{};
 
