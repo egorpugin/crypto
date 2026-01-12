@@ -171,9 +171,8 @@ struct streebog_base : streebog_data {
     static void l(vect &state) noexcept {
         u64 *internal_in = (u64 *)state.data();
         u64 internal_out[8]{};
-        int i, j;
-        for (i = 7; i >= 0; i--) {
-            for (j = 63; j >= 0; j--)
+        for (int i = 7; i >= 0; i--) {
+            for (int j = 63; j >= 0; j--)
                 if ((internal_in[i] >> j) & 1)
                     internal_out[i] ^= A[63 - j];
         }
