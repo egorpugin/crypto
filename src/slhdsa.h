@@ -141,8 +141,6 @@ struct adrs {
     }
 };
 
-}
-
 struct param_set {
     using param_type = size_t;
 
@@ -175,17 +173,19 @@ struct param_set {
     }
 };
 
+} // namespace slh_dsa_detail
+
 // s for small signatures
 // f for fast signature generation
 
 template <int, char>
-constexpr param_set slh_dsa_params;
-template <> constexpr param_set slh_dsa_params<128, 's'> = { 16, 63, 7, 9, 12, 14, 4, 30 };
-template <> constexpr param_set slh_dsa_params<128, 'f'> = { 16, 66, 22, 3, 6, 33, 4, 34 };
-template <> constexpr param_set slh_dsa_params<192, 's'> = { 24, 63, 7, 9, 14, 17, 4, 39 };
-template <> constexpr param_set slh_dsa_params<192, 'f'> = { 24, 66, 22, 3, 8, 33, 4, 42 };
-template <> constexpr param_set slh_dsa_params<256, 's'> = { 32, 64, 8, 8, 14, 22, 4, 47 };
-template <> constexpr param_set slh_dsa_params<256, 'f'> = { 32, 68, 17, 4, 9, 35, 4, 49 };
+constexpr slh_dsa_detail::param_set slh_dsa_params;
+template <> constexpr slh_dsa_detail::param_set slh_dsa_params<128, 's'> = { 16, 63, 7, 9, 12, 14, 4, 30 };
+template <> constexpr slh_dsa_detail::param_set slh_dsa_params<128, 'f'> = { 16, 66, 22, 3, 6, 33, 4, 34 };
+template <> constexpr slh_dsa_detail::param_set slh_dsa_params<192, 's'> = { 24, 63, 7, 9, 14, 17, 4, 39 };
+template <> constexpr slh_dsa_detail::param_set slh_dsa_params<192, 'f'> = { 24, 66, 22, 3, 8, 33, 4, 42 };
+template <> constexpr slh_dsa_detail::param_set slh_dsa_params<256, 's'> = { 32, 64, 8, 8, 14, 22, 4, 47 };
+template <> constexpr slh_dsa_detail::param_set slh_dsa_params<256, 'f'> = { 32, 68, 17, 4, 9, 35, 4, 49 };
 
 //
 template <auto param_set>
