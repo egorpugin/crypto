@@ -17,20 +17,20 @@ auto rev8_be32(u32 x) {
     return std::byteswap(x);
 }
 
-uint64_t slh_toint(const u8 *x, unsigned n) {
+u64 slh_toint(const u8 *x, unsigned n) {
     unsigned i;
-    uint64_t t;
+    u64 t;
 
     if (n == 0)
         return 0;
-    t = (uint64_t)x[0];
+    t = (u64)x[0];
     for (i = 1; i < n; i++) {
         t <<= 8;
-        t += (uint64_t)x[i];
+        t += (u64)x[i];
     }
     return t;
 }
-void slh_tobyte(u8 *x, uint64_t t, unsigned n) {
+void slh_tobyte(u8 *x, u64 t, unsigned n) {
     unsigned i;
 
     if (n == 0)
@@ -106,7 +106,7 @@ struct adrs {
     void set_layer_address(u32 x) {
         value[0] = rev8_be32(x);
     }
-    void set_tree_address(uint64_t x) {
+    void set_tree_address(u64 x) {
         // bytes a[4:8] of tree address are always zero
         value[2] = rev8_be32(x >> 32);
         value[3] = rev8_be32(x & 0xFFFFFFFF);
@@ -262,7 +262,7 @@ struct slh_dsa_base {
 
         obj.H_msg(digest, r, msg_f);
 
-        uint64_t i_tree = 0;
+        u64 i_tree = 0;
         u32 i_leaf = 0;
         split_digest(&i_tree, &i_leaf, digest);
 
@@ -302,7 +302,7 @@ private:
 private:
     void do_sign(this auto &&obj, u8 *sig, const u8 *digest) {
         const u8 *md = digest;
-        uint64_t i_tree = 0;
+        u64 i_tree = 0;
         u32 i_leaf = 0;
         u8 pk_fors[param_set.n];
 
@@ -321,7 +321,7 @@ private:
         sig += sig_sz;
         sig_sz += obj.ht_sign(sig, pk_fors, i_tree, i_leaf);
     }
-    bool ht_verify(this auto &&obj, const u8 *m, const u8 *sig_ht, uint64_t i_tree, u32 i_leaf) {
+    bool ht_verify(this auto &&obj, const u8 *m, const u8 *sig_ht, u64 i_tree, u32 i_leaf) {
         u8 node[param_set.n];
         size_t st_sz;
 
@@ -346,7 +346,7 @@ private:
         }
         return t == 0;
     }
-    static void split_digest(uint64_t *i_tree, u32 *i_leaf, const u8 *digest) {
+    static void split_digest(u64 *i_tree, u32 *i_leaf, const u8 *digest) {
         size_t md_sz = (param_set.k * param_set.a + 7) / 8;
         const u8 *pi_tree = digest + md_sz;
         size_t i_tree_sz = (param_set.h - param_set.hp + 7) / 8;
@@ -441,7 +441,7 @@ private:
         obj.adrs.set_type_and_clear_not_kp(obj.adrs.FORS_ROOTS);
         obj.T(pk, root, param_set.k * n);
     }
-    size_t ht_sign(this auto &&obj, u8 *sh, u8 *m, uint64_t i_tree, u32 i_leaf) {
+    size_t ht_sign(this auto &&obj, u8 *sh, u8 *m, u64 i_tree, u32 i_leaf) {
         u32 j;
         size_t sx_sz;
 
@@ -735,48 +735,40 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
         s.squeeze(h, param_set.m);
     }
     auto PRF_msg(u8 *h, u8 *rand, auto &&msg_f) {
-        auto n = param_set.n;
-
         shake_type s;
         s.update(this->sk.prf);
-        s.update(rand, n);
+        s.update(rand, param_set.n);
         msg_f(s);
         s.finalize();
-        s.squeeze(h, n);
+        s.squeeze(h, param_set.n);
     }
     void PRF(u8 *h) {
         F(h, this->sk.seed);
     }
     void F(u8 *h, const u8 *m1) {
-        auto n = param_set.n;
-
         shake_type s;
         s.update(this->sk.pk.seed);
         s.update(this->adrs.value);
-        s.update(m1, n);
+        s.update(m1, param_set.n);
         s.finalize();
-        s.squeeze(h, n);
+        s.squeeze(h, param_set.n);
     }
     void H(u8 *h, const u8 *m1, const u8 *m2) {
-        auto n = param_set.n;
-
         shake_type s;
         s.update(this->sk.pk.seed);
         s.update(this->adrs.value);
-        s.update(m1, n);
-        s.update(m2, n);
+        s.update(m1, param_set.n);
+        s.update(m2, param_set.n);
         s.finalize();
-        s.squeeze(h, n);
+        s.squeeze(h, param_set.n);
     }
     void T(u8 *h, const u8 *m, size_t m_sz) {
-        auto n = param_set.n;
-
         shake_type s;
         s.update(this->sk.pk.seed);
         s.update(this->adrs.value);
         s.update(m, m_sz);
         s.finalize();
-        s.squeeze(h, n);
+        s.squeeze(h, param_set.n);
     }
 };
 
