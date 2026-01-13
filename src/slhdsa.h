@@ -228,18 +228,20 @@ struct slh_dsa_base {
         adrs = &t_adrs;
     }
     void keygen(this auto &&obj, std::span<const u8, param_set.n * 3> seed) {
-        u8 pk_root[param_set.n];
+        constexpr auto n = param_set.n;
 
         memcpy(obj.sk.seed, seed.data(), seed.size()); // SK.seed || SK.prf || PK.seed
-        memset(obj.sk.pk.root, 0x00, param_set.n); // PK.root not generated yet
-        obj.mk_ctx(nullptr, obj.sk); // fill in partial
+        memset(obj.sk.pk.root, 0x00, n); // PK.root not generated yet
+
+        // only for static function
+        //memcpy(obj.sk.seed, sk, n);
+        //memcpy(obj.sk.prf, sk + n, n);
+        //memcpy(obj.sk.pk.seed, sk + 2 * n, n);
+        //memcpy(obj.sk.pk.root, sk + 3 * n, n);
 
         obj.adrs->zero();
         obj.adrs->set_layer_address(param_set.d - 1);
-        obj.xmss_node(pk_root, 0, param_set.hp);
-
-        // fill pk_root
-        memcpy(obj.sk.pk.root, pk_root, param_set.n);
+        obj.xmss_node(obj.sk.pk.root, 0, param_set.hp);
     }
     auto sign(this auto &&obj, auto &&msg, auto &&rand, auto &&ctx) {
         if (ctx.size() > 255) {
@@ -298,7 +300,10 @@ struct slh_dsa_base {
         const u8 *sig_fors = sig.data() + param_set.n;
         const u8 *sig_ht = sig.data() + ((1 + param_set.k * (1 + param_set.a)) * param_set.n);
 
-        obj.mk_ctx(obj.sk.pk, nullptr);
+        // mk_ctx - only for static function
+        //memcpy(obj.sk.pk.seed, pk, n);
+        //memcpy(obj.sk.pk.root, pk + n, n);
+
         obj.H_msg(digest, r, msg_f);
 
         const u8 *md = digest;
@@ -319,6 +324,7 @@ struct slh_dsa_base {
         return obj.verify(msg, sig, bytes_concept{});
     }
 
+private:
     void do_sign(this auto &&obj, u8 *sig, const u8 *digest) {
         const u8 *md = digest;
         uint64_t i_tree = 0;
@@ -628,6 +634,35 @@ struct slh_dsa_base {
         obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
         obj.T(pk, tmp, tmp_sz);
     }
+    void chain(this auto &&obj, u8 *tmp, const u8 *x, u32 i, u32 s) {
+        memcpy(tmp, x, param_set.n);
+        for (int j = i; j < s + i; j++) {
+            obj.adrs->set_hash_address(j);
+            obj.F(tmp, tmp);
+        }
+    }
+    void wots_chain(this auto &&obj, u8 *tmp, u32 s) {
+        // PRF secret key
+        obj.adrs->set_type(obj.adrs->WOTS_PRF);
+        obj.adrs->set_tree_index(0);
+        obj.PRF(tmp);
+
+        // chain
+        obj.adrs->set_type(obj.adrs->WOTS_HASH);
+        obj.chain(tmp, tmp, 0, s);
+    }
+    void fors_hash(this auto &&obj, u8 *tmp, u32 s) {
+        // PRF secret key
+        obj.adrs->set_type(obj.adrs->FORS_PRF);
+        obj.adrs->set_tree_height(0);
+        obj.PRF(tmp);
+
+        // hash it again
+        if (s == 1) {
+            obj.adrs->set_type(obj.adrs->FORS_TREE);
+            obj.F(tmp, tmp);
+        }
+    }
 };
 
 //
@@ -635,97 +670,6 @@ template <typename HashAlgo1, typename HashAlgo2, auto param_set>
 struct slh_dsa_sha2_base : slh_dsa_base<param_set> {
     using sha2_type1 = HashAlgo1;
     using sha2_type2 = HashAlgo2;
-
-    void mk_ctx(const u8 *pk, const u8 *sk) {
-        size_t n = param_set.n;
-
-        if (sk) {
-            memcpy(this->sk.seed, sk, n);
-            memcpy(this->sk.prf, sk + n, n);
-            memcpy(this->sk.pk.seed, sk + 2 * n, n);
-            memcpy(this->sk.pk.root, sk + 3 * n, n);
-        } else if (pk) {
-            memcpy(this->sk.pk.seed, pk, n);
-            memcpy(this->sk.pk.root, pk + n, n);
-        }
-
-        //  local ADRS buffer
-        this->adrs = &this->t_adrs;
-    }
-    void wots_chain(u8 *tmp, u32 s) {
-        //  PRF secret key
-        this->adrs->set_type(this->adrs->WOTS_PRF);
-        this->adrs->set_tree_index(0);
-        PRF(tmp);
-
-        //  chain
-        this->adrs->set_type(this->adrs->WOTS_HASH);
-        this->adrs->set_tree_index(0);
-        chain(tmp, tmp, 0, s);
-    }
-    void chain1(u8 *tmp, const u8 *x, u32 i, u32 s) {
-        u32 j;
-        size_t n = param_set.n;
-        sha2_type1 sha2, sha2sp;
-        u8 *sp = (u8 *)&sha2sp.h[0];
-        u8 *mp = (u8 *)&sha2sp.h[8];
-        u8 *op = (u8 *)&sha2.h[8];
-
-        // these cases exist
-        if (s == 0) {
-            memcpy(tmp, x, n);
-            return;
-        }
-
-        // set initial address
-        this->adrs->set_hash_address(i);
-
-        // initial set-up
-        sha2.update(this->sk.pk.seed);
-        sha2.update(array<sha2.chunk_size_bytes-param_set.n>{});
-        update_adrsc(sha2);
-        sha2.update(x, n);
-        if (s == 1) {
-            // just one hash
-            auto dgst = sha2.digest();
-            memcpy(tmp, dgst.data(), param_set.n);
-            return;
-        }
-        sha2.finalize();
-        sha2sp.h = sha2.h;
-        sha2sp.transform();
-
-        // iteration
-        for (j = 1; j < s; j++) {
-            memcpy(mp + 22, sp, n);         //  copy result back to input
-            slh_dsa_detail::slh_tobyte(mp + 18, i + j, 4);  //  hash address, last part of ADSc
-            memcpy(sp, sha2.h.data(), 32 + 18);    //  PK.seed compressed, start of ADRSc
-            memcpy(mp + 22 + n, op + 22 + n, 64 - 22 - n);  //  padding
-            sha2sp.transform();
-        }
-
-        // final output
-        memcpy(tmp, sp, n);
-    }
-    void chain(u8 *tmp, const u8 *x, u32 i, u32 s) {
-        memcpy(tmp, x, param_set.n);
-        for (int j = i; j < s + i; j++) {
-            this->adrs->set_hash_address(j);
-            F(tmp, tmp);
-        }
-    }
-    void fors_hash(u8 *tmp, u32 s) {
-        // PRF secret key
-        this->adrs->set_type(this->adrs->FORS_PRF);
-        this->adrs->set_tree_height(0);
-        PRF(tmp);
-
-        // hash it again
-        if (s == 1) {
-            this->adrs->set_type(this->adrs->FORS_TREE);
-            F(tmp, tmp);
-        }
-    }
 
     auto H_msg(u8 *h, const u8 *r, auto &&msg_f) {
         sha2_type2 s;
@@ -809,83 +753,6 @@ template <> struct slh_dsa_sha2_f<256> : slh_dsa_sha2_base<sha256, sha512, slh_d
 template <auto param_set>
 struct slh_dsa_shake_base : slh_dsa_base<param_set> {
     using shake_type = shake<256>;
-
-    void mk_ctx(const u8 *pk, const u8 *sk) {
-        auto n = param_set.n;
-        if (sk) {
-            memcpy(this->sk.seed, sk, n);
-            memcpy(this->sk.prf, sk + n, n);
-            memcpy(this->sk.pk.seed, sk + 2 * n, n);
-            memcpy(this->sk.pk.root, sk + 3 * n, n);
-        } else if (pk) {
-            memcpy(this->sk.pk.seed, pk, n);
-            memcpy(this->sk.pk.root, pk + n, n);
-        }
-
-        // local ADRS buffer
-        this->adrs = &this->t_adrs;
-    }
-    void wots_chain(u8 *tmp, u32 s) {
-        // PRF secret key
-        this->adrs->set_type(this->adrs->WOTS_PRF);
-        this->adrs->set_tree_index(0);
-        PRF(tmp);
-
-        // chain
-        this->adrs->set_type(this->adrs->WOTS_HASH);
-        chain(tmp, tmp, 0, s);
-    }
-    void chain(u8 *tmp, const u8 *x, u32 i, u32 s) {
-        u32 j, k;
-        keccak_p<1600> kc;
-        auto &ks = kc.A;
-        auto n = param_set.n;
-
-        if (s == 0) {                           //  no-op
-            memcpy(tmp, x, n);
-            return;
-        }
-
-        const u32 r = shake_type::rate / 64;     //  SHAKE256 rate
-        u32 n8 = n / 8;                    //  number of words
-        u32 h = n8 + (32 / 8);             //  static part len
-        u32 l = h + n8;                    //  input length
-
-        memcpy(ks + h, x, n);                   //  start node
-        for (j = 0; j < s; j++) {
-            if (j > 0) {
-                memcpy(ks + h, ks, n);          //  chaining
-            }
-            memcpy(ks, this->sk.pk.seed, n);        //  PK.seed
-            this->adrs->set_hash_address(i + j);  //  address
-            memcpy(ks + n8, this->adrs->data(), 32);
-
-            //  padding
-            ks[l] = 0x1F;                       //  shake padding
-            for (k = l + 1; k < r - 1; k++) {
-                ks[k] = 0;
-            }
-            ks[r - 1] = UINT64_C(1) << 63;      //  rate padding
-            for (k = r; k < 25; k++) {
-                ks[k] = 0;
-            }
-
-            kc.permute();
-        }
-        memcpy(tmp, ks, n);
-    }
-    void fors_hash(u8 *tmp, u32 s) {
-        //  PRF secret key
-        this->adrs->set_type(this->adrs->FORS_PRF);
-        this->adrs->set_tree_height(0);
-        PRF(tmp);
-
-        //  hash it again
-        if (s == 1) {
-            this->adrs->set_type(this->adrs->FORS_TREE);
-            F(tmp, tmp);
-        }
-    }
 
     auto H_msg(u8 *h, const u8 *r, auto &&msg_f) {
         shake_type s;
