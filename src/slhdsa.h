@@ -170,15 +170,6 @@ struct param_set {
         return get_len1() + get_len2();
     }
 
-    constexpr u32 get_max_n() const {
-        return 32;
-    }
-    constexpr u32 get_max_len() const {
-        //return 2 * n + 3;
-        //return 2 * get_max_n() + 3;
-        return get_len();
-    }
-
     constexpr u32 sig_bytes() const {
         return (1 + k * (1 + a) + h + d * get_len()) * n;
     }
@@ -221,26 +212,16 @@ struct slh_dsa_base {
     };
 
     private_key sk;
-    slh_dsa_detail::adrs t_adrs;
-    slh_dsa_detail::adrs *adrs;
+    slh_dsa_detail::adrs adrs;
 
-    slh_dsa_base() {
-        adrs = &t_adrs;
-    }
     void keygen(this auto &&obj, std::span<const u8, param_set.n * 3> seed) {
         constexpr auto n = param_set.n;
 
         memcpy(obj.sk.seed, seed.data(), seed.size()); // SK.seed || SK.prf || PK.seed
         memset(obj.sk.pk.root, 0x00, n); // PK.root not generated yet
 
-        // only for static function
-        //memcpy(obj.sk.seed, sk, n);
-        //memcpy(obj.sk.prf, sk + n, n);
-        //memcpy(obj.sk.pk.seed, sk + 2 * n, n);
-        //memcpy(obj.sk.pk.root, sk + 3 * n, n);
-
-        obj.adrs->zero();
-        obj.adrs->set_layer_address(param_set.d - 1);
+        obj.adrs.zero();
+        obj.adrs.set_layer_address(param_set.d - 1);
         obj.xmss_node(obj.sk.pk.root, 0, param_set.hp);
     }
     auto sign(this auto &&obj, auto &&msg, auto &&rand, auto &&ctx) {
@@ -300,10 +281,6 @@ struct slh_dsa_base {
         const u8 *sig_fors = sig.data() + param_set.n;
         const u8 *sig_ht = sig.data() + ((1 + param_set.k * (1 + param_set.a)) * param_set.n);
 
-        // mk_ctx - only for static function
-        //memcpy(obj.sk.pk.seed, pk, n);
-        //memcpy(obj.sk.pk.root, pk + n, n);
-
         obj.H_msg(digest, r, msg_f);
 
         const u8 *md = digest;
@@ -311,10 +288,10 @@ struct slh_dsa_base {
         u32 i_leaf = 0;
         split_digest(&i_tree, &i_leaf, digest);
 
-        obj.adrs->zero();
-        obj.adrs->set_tree_address(i_tree);
-        obj.adrs->set_type_and_clear_not_kp(obj.adrs->FORS_TREE);
-        obj.adrs->set_key_pair_address(i_leaf);
+        obj.adrs.zero();
+        obj.adrs.set_tree_address(i_tree);
+        obj.adrs.set_type_and_clear_not_kp(obj.adrs.FORS_TREE);
+        obj.adrs.set_key_pair_address(i_leaf);
 
         obj.fors_pk_from_sig(pk_fors, sig_fors, md);
 
@@ -333,10 +310,10 @@ private:
 
         split_digest(&i_tree, &i_leaf, digest);
 
-        obj.adrs->zero();
-        obj.adrs->set_tree_address(i_tree);
-        obj.adrs->set_type_and_clear_not_kp(obj.adrs->FORS_TREE);
-        obj.adrs->set_key_pair_address(i_leaf);
+        obj.adrs.zero();
+        obj.adrs.set_tree_address(i_tree);
+        obj.adrs.set_type_and_clear_not_kp(obj.adrs.FORS_TREE);
+        obj.adrs.set_key_pair_address(i_leaf);
 
         // SIG_FORS
         auto sig_sz = obj.fors_sign(sig, md);
@@ -351,8 +328,8 @@ private:
         u8 node[param_set.n];
         size_t st_sz;
 
-        obj.adrs->zero();
-        obj.adrs->set_tree_address(i_tree);
+        obj.adrs.zero();
+        obj.adrs.set_tree_address(i_tree);
 
         obj.xmss_pk_from_sig(node, i_leaf, sig_ht, m);
 
@@ -360,8 +337,8 @@ private:
         for (j = 1; j < param_set.d; j++) {
             i_leaf = i_tree & ((1 << param_set.hp) - 1);
             i_tree >>= param_set.hp;
-            obj.adrs->set_layer_address(j);
-            obj.adrs->set_tree_address(i_tree);
+            obj.adrs.set_layer_address(j);
+            obj.adrs.set_tree_address(i_tree);
             sig_ht += st_sz;
             obj.xmss_pk_from_sig(node, i_leaf, sig_ht, node);
         }
@@ -396,7 +373,7 @@ private:
         for (i = 0; i < param_set.k; i++) {
 
             //  fors_SKgen()
-            obj.adrs->set_tree_index((i << param_set.a) + vi[i]);
+            obj.adrs.set_tree_index((i << param_set.a) + vi[i]);
             obj.fors_hash(sf, 0);
             sf += n;
 
@@ -418,15 +395,15 @@ private:
         for (j = 0; j < (1u << z); j++) {
 
             // fors_SKgen() + hash
-            obj.adrs->set_tree_index(i);
+            obj.adrs.set_tree_index(i);
             h0 = p >= 0 ? h[p] : node;
             p++;
             obj.fors_hash(h0, 1);
 
             // this fors_node() implementation is non-recursive
             for (k = 0; (j >> k) & 1; k++) {
-                obj.adrs->set_tree_height(k + 1);
-                obj.adrs->set_tree_index(i >> (k + 1));
+                obj.adrs.set_tree_height(k + 1);
+                obj.adrs.set_tree_index(i >> (k + 1));
                 p--;
                 h0 = p > 0 ? h[p - 1] : node;
                 obj.H(h0, h0, h[p]);
@@ -445,17 +422,17 @@ private:
 
         node = root;
         for (i = 0; i < param_set.k; i++) {
-            obj.adrs->set_tree_height(0);
+            obj.adrs.set_tree_height(0);
 
             idx = (i << param_set.a) + vi[i];
-            obj.adrs->set_tree_index(idx);
+            obj.adrs.set_tree_index(idx);
 
             obj.F(node, sf);
             sf += n;
 
             for (j = 0; j < param_set.a; j++) {
-                obj.adrs->set_tree_height(j + 1);
-                obj.adrs->set_tree_index(idx >> (j + 1));
+                obj.adrs.set_tree_height(j + 1);
+                obj.adrs.set_tree_index(idx >> (j + 1));
 
                 if (((vi[i] >> j) & 1) == 0) {
                     obj.H(node, node, sf);
@@ -467,15 +444,15 @@ private:
             node += n;
         }
 
-        obj.adrs->set_type_and_clear_not_kp(obj.adrs->FORS_ROOTS);
+        obj.adrs.set_type_and_clear_not_kp(obj.adrs.FORS_ROOTS);
         obj.T(pk, root, param_set.k * n);
     }
     size_t ht_sign(this auto &&obj, u8 *sh, u8 *m, uint64_t i_tree, u32 i_leaf) {
         u32 j;
         size_t sx_sz;
 
-        obj.adrs->zero();
-        obj.adrs->set_tree_address(i_tree);
+        obj.adrs.zero();
+        obj.adrs.set_tree_address(i_tree);
         sx_sz = obj.xmss_sign(sh, m, i_leaf);
 
         for (j = 1; j < param_set.d; j++) {
@@ -484,8 +461,8 @@ private:
 
             i_leaf = i_tree & ((1 << param_set.hp) - 1);
             i_tree >>= param_set.hp;
-            obj.adrs->set_layer_address(j);
-            obj.adrs->set_tree_address(i_tree);
+            obj.adrs.set_layer_address(j);
+            obj.adrs.set_tree_address(i_tree);
             obj.xmss_sign(sh, m, i_leaf);
         }
 
@@ -507,41 +484,41 @@ private:
         }
         sx_sz += param_set.hp * n;
 
-        obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_HASH);
-        obj.adrs->set_key_pair_address(idx);
+        obj.adrs.set_type_and_clear_not_kp(obj.adrs.WOTS_HASH);
+        obj.adrs.set_key_pair_address(idx);
         obj.wots_sign(sx, m);
 
         return sx_sz;
     }
     void xmss_node(this auto &&obj, u8 *node, u32 i, u32 z) {
         u8 h[param_set.hp][param_set.n];
-        u8 tmp[param_set.get_max_len() * param_set.n];
+        u8 tmp[param_set.get_len() * param_set.n];
         auto n = param_set.n;
         constexpr auto len = param_set.get_len();
 
         int p = -1;
         i <<= z;
         for (u32 j = 0; j < (1u << z); ++j, ++i) {
-            obj.adrs->set_key_pair_address(i);
+            obj.adrs.set_key_pair_address(i);
 
             // === Generate a WOTS+ public key.
             // Algorithm 5: wots_PKgen(SK.seed, PK.seed, ADRS)
             auto sk = tmp;
             for (auto k = 0; k < len; k++) {
-                obj.adrs->set_chain_address(k);
+                obj.adrs.set_chain_address(k);
                 obj.wots_chain(sk, 15);   // w-1 = (1 << param_set.lg_w) - 1;
                 sk += n;
             }
-            obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
+            obj.adrs.set_type_and_clear_not_kp(obj.adrs.WOTS_PK);
             auto h0 = p >= 0 ? h[p] : node;
             ++p;
             obj.T(h0, tmp, len * n);
 
             // this xmss_node() implementation is non-recursive
             for (auto k = 0; (j >> k) & 1; k++) {
-                obj.adrs->set_type_and_clear(obj.adrs->TREE);
-                obj.adrs->set_tree_height(k + 1);
-                obj.adrs->set_tree_index(i >> (k + 1));
+                obj.adrs.set_type_and_clear(obj.adrs.TREE);
+                obj.adrs.set_tree_height(k + 1);
+                obj.adrs.set_tree_index(i >> (k + 1));
                 --p;
                 h0 = p >= 1 ? h[p - 1] : node;
                 obj.H(h0, h0, h[p]);
@@ -553,17 +530,17 @@ private:
         const u8 *auth;
         size_t n = param_set.n;
 
-        obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_HASH);
-        obj.adrs->set_key_pair_address(idx);
+        obj.adrs.set_type_and_clear_not_kp(obj.adrs.WOTS_HASH);
+        obj.adrs.set_key_pair_address(idx);
 
         obj.wots_pk_from_sig(root, sig, m);
-        obj.adrs->set_type_and_clear(obj.adrs->TREE);
+        obj.adrs.set_type_and_clear(obj.adrs.TREE);
 
         auth = sig + (param_set.get_len() * n);
 
         for (k = 0; k < param_set.hp; k++) {
-            obj.adrs->set_tree_height(k + 1);
-            obj.adrs->set_tree_index(idx >> (k + 1));
+            obj.adrs.set_tree_height(k + 1);
+            obj.adrs.set_tree_index(idx >> (k + 1));
 
             if (((idx >> k) & 1) == 0) {
                 obj.H(root, root, auth);
@@ -575,14 +552,14 @@ private:
     }
     size_t wots_sign(this auto &&obj, u8 *sig, const u8 *m) {
         u32 i, len;
-        u32 vm[param_set.get_max_len()];
+        u32 vm[param_set.get_len()];
         size_t n = param_set.n;
 
         len = param_set.get_len();
         obj.wots_csum(vm, m);
 
         for (i = 0; i < len; i++) {
-            obj.adrs->set_chain_address(i);
+            obj.adrs.set_chain_address(i);
             obj.wots_chain(sig, vm[i]);
             sig += n;
         }
@@ -615,8 +592,8 @@ private:
     }
     void wots_pk_from_sig(this auto &&obj, u8 *pk, const u8 *sig, const u8 *m) {
         u32 i, t, len;
-        u32 vm[param_set.get_max_len()];
-        u8 tmp[param_set.get_max_len() * param_set.n];
+        u32 vm[param_set.get_len()];
+        u8 tmp[param_set.get_len() * param_set.n];
         size_t n = param_set.n;
         size_t tmp_sz;
 
@@ -626,40 +603,40 @@ private:
         t = 15; // (1 << prm->lg_w) - 1;
         tmp_sz = 0;
         for (i = 0; i < len; i++) {
-            obj.adrs->set_chain_address(i);
+            obj.adrs.set_chain_address(i);
             obj.chain(tmp + tmp_sz, sig + tmp_sz, vm[i], t - vm[i]);
             tmp_sz += n;
         }
 
-        obj.adrs->set_type_and_clear_not_kp(obj.adrs->WOTS_PK);
+        obj.adrs.set_type_and_clear_not_kp(obj.adrs.WOTS_PK);
         obj.T(pk, tmp, tmp_sz);
     }
     void chain(this auto &&obj, u8 *tmp, const u8 *x, u32 i, u32 s) {
         memcpy(tmp, x, param_set.n);
         for (int j = i; j < s + i; j++) {
-            obj.adrs->set_hash_address(j);
+            obj.adrs.set_hash_address(j);
             obj.F(tmp, tmp);
         }
     }
     void wots_chain(this auto &&obj, u8 *tmp, u32 s) {
         // PRF secret key
-        obj.adrs->set_type(obj.adrs->WOTS_PRF);
-        obj.adrs->set_tree_index(0);
+        obj.adrs.set_type(obj.adrs.WOTS_PRF);
+        obj.adrs.set_tree_index(0);
         obj.PRF(tmp);
 
         // chain
-        obj.adrs->set_type(obj.adrs->WOTS_HASH);
+        obj.adrs.set_type(obj.adrs.WOTS_HASH);
         obj.chain(tmp, tmp, 0, s);
     }
     void fors_hash(this auto &&obj, u8 *tmp, u32 s) {
         // PRF secret key
-        obj.adrs->set_type(obj.adrs->FORS_PRF);
-        obj.adrs->set_tree_height(0);
+        obj.adrs.set_type(obj.adrs.FORS_PRF);
+        obj.adrs.set_tree_height(0);
         obj.PRF(tmp);
 
         // hash it again
         if (s == 1) {
-            obj.adrs->set_type(obj.adrs->FORS_TREE);
+            obj.adrs.set_type(obj.adrs.FORS_TREE);
             obj.F(tmp, tmp);
         }
     }
@@ -730,24 +707,21 @@ struct slh_dsa_sha2_base : slh_dsa_base<param_set> {
         memcpy(h, dgst.data(), param_set.n);
     }
     void update_adrsc(auto &&s) {
-        auto *p = this->adrs->data();
+        auto *p = this->adrs.data();
         s.update(p + 3, 1);
         s.update(p + 8, 8);
         s.update(p + 19, 32-19);
     }
 };
 
-// something is wrong with out sha2 version
-template <auto> struct slh_dsa_sha2_s;
-template <> struct slh_dsa_sha2_s<128> : slh_dsa_sha2_base<sha256, sha256, slh_dsa_params<128, 's'>> {};
-template <> struct slh_dsa_sha2_s<192> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<192, 's'>> {};
-template <> struct slh_dsa_sha2_s<256> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<256, 's'>> {};
+template <int, char> struct slh_dsa_sha2;
+template <> struct slh_dsa_sha2<128, 's'> : slh_dsa_sha2_base<sha256, sha256, slh_dsa_params<128, 's'>> {};
+template <> struct slh_dsa_sha2<192, 's'> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<192, 's'>> {};
+template <> struct slh_dsa_sha2<256, 's'> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<256, 's'>> {};
 
-// something is wrong with out sha2 version
-template <auto> struct slh_dsa_sha2_f;
-template <> struct slh_dsa_sha2_f<128> : slh_dsa_sha2_base<sha256, sha256, slh_dsa_params<128, 'f'>> {};
-template <> struct slh_dsa_sha2_f<192> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<192, 'f'>> {};
-template <> struct slh_dsa_sha2_f<256> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<256, 'f'>> {};
+template <> struct slh_dsa_sha2<128, 'f'> : slh_dsa_sha2_base<sha256, sha256, slh_dsa_params<128, 'f'>> {};
+template <> struct slh_dsa_sha2<192, 'f'> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<192, 'f'>> {};
+template <> struct slh_dsa_sha2<256, 'f'> : slh_dsa_sha2_base<sha256, sha512, slh_dsa_params<256, 'f'>> {};
 
 //
 template <auto param_set>
@@ -781,7 +755,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
 
         shake_type s;
         s.update(this->sk.pk.seed);
-        s.update(this->adrs->value);
+        s.update(this->adrs.value);
         s.update(m1, n);
         s.finalize();
         s.squeeze(h, n);
@@ -791,7 +765,7 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
 
         shake_type s;
         s.update(this->sk.pk.seed);
-        s.update(this->adrs->value);
+        s.update(this->adrs.value);
         s.update(m1, n);
         s.update(m2, n);
         s.finalize();
@@ -802,21 +776,20 @@ struct slh_dsa_shake_base : slh_dsa_base<param_set> {
 
         shake_type s;
         s.update(this->sk.pk.seed);
-        s.update(this->adrs->value);
+        s.update(this->adrs.value);
         s.update(m, m_sz);
         s.finalize();
         s.squeeze(h, n);
     }
 };
 
-template <auto> struct slh_dsa_shake_s;
-template <> struct slh_dsa_shake_s<128> : slh_dsa_shake_base<slh_dsa_params<128, 's'>> {};
-template <> struct slh_dsa_shake_s<192> : slh_dsa_shake_base<slh_dsa_params<192, 's'>> {};
-template <> struct slh_dsa_shake_s<256> : slh_dsa_shake_base<slh_dsa_params<256, 's'>> {};
+template <int, char> struct slh_dsa_shake;
+template <> struct slh_dsa_shake<128, 's'> : slh_dsa_shake_base<slh_dsa_params<128, 's'>> {};
+template <> struct slh_dsa_shake<192, 's'> : slh_dsa_shake_base<slh_dsa_params<192, 's'>> {};
+template <> struct slh_dsa_shake<256, 's'> : slh_dsa_shake_base<slh_dsa_params<256, 's'>> {};
 
-template <auto> struct slh_dsa_shake_f;
-template <> struct slh_dsa_shake_f<128> : slh_dsa_shake_base<slh_dsa_params<128, 'f'>> {};
-template <> struct slh_dsa_shake_f<192> : slh_dsa_shake_base<slh_dsa_params<192, 'f'>> {};
-template <> struct slh_dsa_shake_f<256> : slh_dsa_shake_base<slh_dsa_params<256, 'f'>> {};
+template <> struct slh_dsa_shake<128, 'f'> : slh_dsa_shake_base<slh_dsa_params<128, 'f'>> {};
+template <> struct slh_dsa_shake<192, 'f'> : slh_dsa_shake_base<slh_dsa_params<192, 'f'>> {};
+template <> struct slh_dsa_shake<256, 'f'> : slh_dsa_shake_base<slh_dsa_params<256, 'f'>> {};
 
 }
