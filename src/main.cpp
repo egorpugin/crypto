@@ -145,7 +145,18 @@ auto cmp_bytes = [](crypto::bytes_concept left, crypto::bytes_concept right, boo
     return r;
 };
 auto cmp_head_and_tail = [](crypto::bytes_concept left, crypto::bytes_concept right_head, crypto::bytes_concept right_tail, bool with_xor = false, SRCLOC) {
-    auto r = cmp_base_op([&](){return std::ranges::starts_with(left, right_head) && std::ranges::ends_with(left, right_tail);}, loc);
+    auto r = cmp_base_op([&](){
+#if !defined(__GNUG__)
+//#if __has_cpp_attribute(__cpp_lib_ranges_starts_ends_with)
+        return std::ranges::starts_with(left, right_head) && std::ranges::ends_with(left, right_tail);
+//#endif
+#else
+        return 1
+            && memcmp(left.data(), right_head.data(), right_head.size()) == 0
+            && memcmp(left.data() + left.size() - right_tail.size(), right_tail.data(), right_tail.size()) == 0
+            ;
+#endif
+        }, loc);
     if (!r) {
         std::cout << "bytes not equal" << "\n";
         std::cout << "left_head:" << "\n";
