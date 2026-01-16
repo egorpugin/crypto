@@ -1,8 +1,10 @@
 void build(Solution &s) {
+    auto cppstd = cpp26;
+
     auto &crypto = s.addTarget<StaticLibrary>("crypto");
     {
         auto &t = crypto;
-        t += cpp23;
+        t += cppstd;
         t += "src/.*\\.h"_rr;
         t.Public += "src/.*\\.natvis"_rr;
 
@@ -20,7 +22,7 @@ void build(Solution &s) {
     auto &test = s.addTarget<Executable>("test");
     {
         auto &t = test;
-        t += cpp23;
+        t += cppstd;
         t += "src/main.cpp";
         t += crypto;
         if (s.getExternalVariables()["ci-build"] == "true") {
@@ -31,7 +33,7 @@ void build(Solution &s) {
     {
         auto &t = s.addTarget<Executable>("tlsparams");
         t.PackageDefinitions = true;
-        t += cpp23;
+        t += cppstd;
         t += "tools/tlsparams.cpp";
         //t += "pub.egorpugin.primitives.http"_dep;
         t += "pub.egorpugin.primitives.sw.main"_dep;
@@ -41,7 +43,7 @@ void build(Solution &s) {
     auto &test2 = s.addTarget<Executable>("test2");
     {
         auto &t = test2;
-        t += cpp23;
+        t += cppstd;
         t += "src/test.cpp";
     }
 }
