@@ -181,7 +181,7 @@ struct param_set {
 // f for fast signature generation
 
 template <int, char>
-constexpr slh_dsa_detail::param_set slh_dsa_params;
+constexpr slh_dsa_detail::param_set slh_dsa_params{};
 template <> constexpr slh_dsa_detail::param_set slh_dsa_params<128, 's'> = { 16, 63, 7, 9, 12, 14, 4, 30 };
 template <> constexpr slh_dsa_detail::param_set slh_dsa_params<128, 'f'> = { 16, 66, 22, 3, 6, 33, 4, 34 };
 template <> constexpr slh_dsa_detail::param_set slh_dsa_params<192, 's'> = { 24, 63, 7, 9, 14, 17, 4, 39 };

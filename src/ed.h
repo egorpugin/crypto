@@ -15,7 +15,7 @@ struct ed_base {
 
         auto point_mul(this auto &&obj, auto &&s, auto &&P) {
             typename T::edwards_point Q{ 0,1,1 };
-            return obj.edwards_calc_base::point_mul(s, P, Q);
+            return obj.point_mul(s, P, Q);
         }
         // check for Montgomery ladder in multiplication to prevent side-channel attacks
         auto point_mul(this auto &&obj, auto &&s, auto &&P, auto &&Q) {
