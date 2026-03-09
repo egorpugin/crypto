@@ -73,6 +73,12 @@ struct x509_storage {
     using clock = std::chrono::system_clock;
     using time_point = clock::time_point;
 
+    using issuer_type = bytes_concept;
+    using keyid_type = bytes_concept;
+
+    using storage_type = std::vector<u8>;
+    using storage_type_ptr = std::unique_ptr<storage_type>;
+
     struct value {
         bytes_concept data;
         bool trusted{};
@@ -102,10 +108,8 @@ struct x509_storage {
         }
     };
 
-    using issuer_type = bytes_concept;
-    using keyid_type = bytes_concept;
     std::map<issuer_type, std::map<keyid_type, std::vector<value>>> index;
-    std::vector<std::vector<u8>> storage;
+    std::vector<storage_type_ptr> storage;
 
     static auto extract_keyid(auto &&kid) {
         bytes_concept keyid;
@@ -130,7 +134,7 @@ struct x509_storage {
             // see 4.2.1.2.  Subject Key Identifier
             auto spk = x509(data).get_tbs_field<asn1_bit_string>(x509::subject_public_key_info, x509::subject_public_key);
             auto h = sha1::digest(spk.data.subspan(1));
-            keyid = storage.emplace_back(std::from_range, h);
+            keyid = add_to_storage(h);
         }
         return keyid;
     }
@@ -145,6 +149,9 @@ struct x509_storage {
         return nullptr;
     }
 
+    bytes_concept add_to_storage(auto &&h) {
+        return *storage.emplace_back(std::make_unique<storage_type>(std::from_range, h));
+    }
     auto &add(bytes_concept data, bool trusted = false) {
         x509 x{data};
         auto subject = x.get_tbs_field<asn1_sequence>(x509::subject_name);
@@ -174,15 +181,14 @@ struct x509_storage {
             }
             sv = sv.substr(0, sv.find("---"sv));
             auto decoded = base64::decode<true>(sv);
-            auto &data = storage.emplace_back(std::from_range, decoded);
-            auto &p = add(data);
+            auto &p = add(add_to_storage(decoded));
             p.trusted = trusted;
             ++n_loaded;
         }
         return n_loaded;
     }
     auto &load_der(std::string_view data, bool trusted = false) {
-        auto &p = add(storage.emplace_back(std::from_range, data));
+        auto &p = add(add_to_storage(data));
         p.trusted = trusted;
         return p;
     }
