@@ -73,8 +73,8 @@ struct x509_storage {
     using clock = std::chrono::system_clock;
     using time_point = clock::time_point;
 
-    using issuer_type = bytes_concept;
-    using keyid_type = bytes_concept;
+    using issuer_type = std::string;
+    using keyid_type = std::string;
 
     using storage_type = std::vector<u8>;
     using storage_type_ptr = std::unique_ptr<storage_type>;
@@ -154,7 +154,7 @@ struct x509_storage {
     }
     auto &add(bytes_concept data, bool trusted = false) {
         x509 x{data};
-        auto subject = x.get_tbs_field<asn1_sequence>(x509::subject_name);
+        bytes_concept subject = x.get_tbs_field<asn1_sequence>(x509::subject_name);
         //auto issuer = x.get_tbs_field<asn1_sequence>(x509::issuer_name);
         auto keyid = get_subject_keyid(data);
         auto &certs = index[subject][keyid];
@@ -206,8 +206,8 @@ struct x509_storage {
             std::println("{}:{}: {}", loc.file_name(), loc.line(), text);
         };
 
-        auto issuer = cert.get<asn1_sequence>(x509::issuer_name);
-        auto subject = cert.get<asn1_sequence>(x509::subject_name);
+        bytes_concept issuer = cert.get<asn1_sequence>(x509::issuer_name);
+        bytes_concept subject = cert.get<asn1_sequence>(x509::subject_name);
         auto root_cert = issuer == subject;
         if (root_cert) {
             if (!trusted_storage.index[issuer][get_subject_keyid(v.data)].empty()) {
