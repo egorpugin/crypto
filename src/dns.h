@@ -175,7 +175,7 @@ struct dns_packet {
         question().labels_end(*this).qclass = qclass;
         ++h.qdcount;
     }
-    std::string string_at(auto &&start) {
+    auto string_at(auto &&start) {
         std::string s;
         for (auto &l : labels(start)) {
             s += l;
@@ -186,7 +186,7 @@ struct dns_packet {
         }
         return s;
     }
-    std::vector<std::string_view> labels(auto &&start) {
+    auto labels(auto &&start) {
         std::vector<std::string_view> r;
         start = labels(start, [&](auto sv) {r.push_back(sv);});
         return r;
