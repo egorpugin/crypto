@@ -2847,7 +2847,7 @@ void test_tls() {
 
     load_system_certs();
 
-    auto run0 = [](auto &&t, auto &&url) {
+    auto run0 = [](auto &&t, auto &&url, SRCLOC) {
         t.follow_location = false;
         t.tls_layer.ignore_server_hostname_check = true;
 #ifndef CI_TESTS
@@ -2858,13 +2858,13 @@ void test_tls() {
 #ifndef CI_TESTS
             std::cout << "ok" << "\n";
 #endif
-            cmp_base(0, 0);
+            cmp_base(0, 0, loc);
         } catch (std::exception &e) {
 #ifdef CI_TESTS
             std::cout << "connecting to " << url << "\n";
 #endif
             std::cout << e.what() << "\n";
-            cmp_base(0, 1);
+            cmp_base(0, 1, loc);
         }
     };
     auto run = [&](auto &&url) {
