@@ -220,8 +220,9 @@ auto cacert_pem() {
         );
         write_file(name, t.m.body);
     }
-    auto &tcs = crypto::x509_storage::trusted_storage();
-    tcs.load_pem(read_file(name), true);
+    auto &tcs = crypto::x509_trusted_storage();
+    auto n = tcs.load_pem(read_file(name), true);
+    std::println(std::cerr, "loaded {} certs", n);
     return name;
 }
 auto infotecs_ca() {
@@ -236,18 +237,21 @@ auto infotecs_ca() {
 void load_system_certs() {
     using namespace crypto;
 
-    auto &tcs = x509_storage::trusted_storage();
-    tcs.load_pem(read_file(cacert_pem()), true);
+    auto &tcs = x509_trusted_storage();
+    auto n = tcs.load_pem(read_file(cacert_pem()), true);
     tcs.load_der(read_file(infotecs_ca()), true);
+    ++n;
 #ifdef _WIN32
     auto load_certs = [&](auto &&store) {
         for (auto &&s : win32::enum_certificate_store(store)) {
             tcs.load_der(s, true);
+            ++n;
         }
     };
     load_certs("CA");
     load_certs("ROOT");
 #endif
+    std::println(std::cerr, "loaded {} certs", n);
 }
 
 void test_aes() {
@@ -2553,22 +2557,60 @@ void test_x509() {
 
     using namespace crypto;
 
-    x509_storage ss;
-    ss.load_pem(read_file(cacert_pem()), true);
-    ss.load_der(read_file(infotecs_ca()), true);
+    // chain is: data3(root) <- data2 <- data1
 
     auto data1 = read_file("test1.der");
+    std::chrono::sys_days until1 = 2025y / 6 / 1;
+
     auto data2 = read_file("test2.der");
+    auto until2 = until1; // actual is until Sep
 
-    /*x509_storage s;
-    s.add(data1);
-    s.add(data2);
-    cmp_bool(s.verify(ss), true);
+    auto data3 = read_file("test3.der");
+    auto until3 = until1; // actual is until 2038
 
-    x509_storage s2;
-    auto data3 = read_file("infotecs.der");
-    s2.add(data3);
-    cmp_bool(s2.verify(ss), true);*/
+    x509_storage trusted_all;
+    auto n = trusted_all.load_pem(read_file(cacert_pem()), true);
+    trusted_all.load_der(read_file(infotecs_ca()), true);
+    ++n;
+
+    std::println(std::cerr, "loaded {} certs", n);
+
+    x509_storage trusted3;
+    trusted3.add(data3, true);
+
+    {
+        x509_storage s;
+        s.add(data1);
+        cmp_bool(s.verify(trusted_all, data1, until1), false);
+        s.add(data2);
+        cmp_bool(s.verify(trusted_all, data2, until1));
+        cmp_bool(s.verify(trusted_all, data1, until1));
+
+        x509_storage s2;
+        auto data3 = read_file("infotecs.der");
+        s2.add(data3);
+        cmp_bool(s2.verify(trusted_all, data3, until1));
+    }
+    {
+        x509_storage s;
+        s.add(data2);
+        cmp_bool(s.verify(trusted_all, data1, until1));
+        cmp_bool(s.verify(trusted_all, data2, until1));
+    }
+    {
+        x509_storage s;
+        s.add(data1);
+        cmp_bool(s.verify(trusted3, data1, until1), false);
+        s.add(data2);
+        cmp_bool(s.verify(trusted3, data2, until1));
+        cmp_bool(s.verify(trusted3, data1, until1));
+    }
+    {
+        x509_storage s;
+        s.add(data1);
+        s.add(data2);
+        cmp_bool(s.verify_all(trusted3, until1));
+    }
 }
 
 void test_pki() {
@@ -2587,7 +2629,7 @@ void test_pki() {
     s.load_der(p.certs[cakey], true);
     s.load_der(p.certs[cakey3], true);
     s.add(p.certs[cakey2]);
-    // cmp_bool(s.verify(s), true);
+    cmp_bool(s.verify(s, p.certs[cakey2], std::chrono::system_clock::now()));
 }
 
 void test_streebog() {
@@ -3655,8 +3697,8 @@ int main() {
         //test_chacha20_aead();
         // test_scrypt();
         // test_argon2();
-        // test_x509();
-        // test_pki();
+        test_x509();
+        test_pki();
         // test_streebog();
         // test_grasshopper();
         // test_mgm();
@@ -3665,7 +3707,7 @@ int main() {
         // test_hpke();
         // test_mlkem();
         //test_mldsa();
-        test_slh_dsa();
+        //test_slh_dsa();
         //
         //test_dns();
         //test_tls();
