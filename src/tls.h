@@ -890,7 +890,7 @@ struct tls13_ {
                         throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
                     }
                 }
-                if (!certs.verify(server_certificate) && !ignore_server_certificate_check) {
+                if (!certs.verify(x509_trusted_storage(), server_certificate, std::chrono::system_clock::now()) && !ignore_server_certificate_check) {
                     throw std::runtime_error{"certificate verification failed"};
                 }
                 break;

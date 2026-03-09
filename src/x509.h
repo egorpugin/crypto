@@ -71,6 +71,8 @@ struct asn1_x509_extensions : asn1_base {
 
 struct x509_storage {
     using clock = std::chrono::system_clock;
+    using time_point = clock::time_point;
+
     struct value {
         bytes_concept data;
         bool trusted{};
@@ -104,11 +106,6 @@ struct x509_storage {
     using keyid_type = bytes_concept;
     std::map<issuer_type, std::map<keyid_type, std::vector<value>>> index;
     std::vector<std::vector<u8>> storage;
-
-    static auto &trusted_storage() {
-        static x509_storage s;
-        return s;
-    }
 
     static auto extract_keyid(auto &&kid) {
         bytes_concept keyid;
@@ -148,7 +145,7 @@ struct x509_storage {
         return nullptr;
     }
 
-    auto &add(bytes_concept data) {
+    auto &add(bytes_concept data, bool trusted = false) {
         x509 x{data};
         auto subject = x.get_tbs_field<asn1_sequence>(x509::subject_name);
         //auto issuer = x.get_tbs_field<asn1_sequence>(x509::issuer_name);
@@ -158,13 +155,16 @@ struct x509_storage {
         if (it != certs.end()) {
             return *it;
         }
-        return certs.emplace_back(data);
+        auto &p = certs.emplace_back(data);
+        p.trusted = trusted;
+        return p;
     }
-    void load_pem(std::string_view data, bool trusted = false) {
+    size_t load_pem(std::string_view data, bool trusted = false) {
+        size_t n_loaded{};
         auto delim = "-----BEGIN CERTIFICATE-----"sv;
         auto p = data.find(delim);
         if (p == -1) {
-            return;
+            return n_loaded;
         }
         data = data.substr(p);
         for (auto &&cert : data | std::views::split(delim)) {
@@ -177,7 +177,9 @@ struct x509_storage {
             auto &data = storage.emplace_back(std::from_range, decoded);
             auto &p = add(data);
             p.trusted = trusted;
+            ++n_loaded;
         }
+        return n_loaded;
     }
     auto &load_der(std::string_view data, bool trusted = false) {
         auto &p = add(storage.emplace_back(std::from_range, data));
@@ -185,11 +187,7 @@ struct x509_storage {
         return p;
     }
 
-    bool verify(auto &&cert) {
-        auto now = clock::now();
-        return verify(trusted_storage(), cert, now);
-    }
-    bool verify(auto &&trusted_storage, auto &&in_data, auto &&now) {
+    bool verify(auto &&trusted_storage, auto &&in_data, const time_point &now) {
         auto &v = add(in_data);
         if (v.trusted) {
             return v.is_valid(now);
@@ -382,215 +380,27 @@ struct x509_storage {
         print_error("");
         return false;
     }
-    /*bool verify(auto &&trusted_storage) {
-        auto now = clock::now();
-        while (1) {
-            bool did_verify{};
-            for (auto &&[sk,v] : index) {
-                if (v.trusted) {
-                    continue;
-                }
-                asn1 current_cert{v.data};
-                auto [cert_raw,cert_start] = current_cert.get_raw(x509::main, x509::certificate);
-                asn1_sequence cert{cert_raw.subspan(cert_start)}; // tbsCertificate
-
-                auto issuer = cert.get<asn1_sequence>(x509::issuer_name);
-                auto subject = cert.get<asn1_sequence>(x509::subject_name);
-                auto root_cert = issuer == subject;
-                if (root_cert) {
-                    if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-                        constexpr auto subject_keyid = make_oid<2, 5, 29, 14>();
-                        if (auto sk = exts->get_extension(subject_keyid)) {
-                            auto keystor = sk->get<asn1_octet_string>(0, 1);
-                            bytes_concept keyid;
-                            if (keystor.get_tag() == asn1_octet_string::tag) {
-                                keyid = keystor.get<asn1_octet_string>(0);
-                            } else if (keystor.get_tag() == asn1_sequence::tag) {
-                                keyid = keystor.get(0, 0);
-                            }
-                            bytes_concept issuer_cert_data;
-                            auto find = [&](auto &&store) {
-                                auto i = store.index.find(key{issuer,keyid});
-                                if (i != store.index.end() && i->second.is_valid(now)) {
-                                    issuer_cert_data = i->second.data;
-                                }
-                            };
-                            find(trusted_storage);
-                            if (!issuer_cert_data.empty()) {
-                                v.trusted = true;
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-                    constexpr auto old_authority_keyid = make_oid<2, 5, 29, 1>();
-                    constexpr auto authority_keyid = make_oid<2, 5, 29, 35>(); // old authority_keyid = 1
-                    if (auto sk = exts->get_extension(authority_keyid)) {
-                        auto keystor = sk->get<asn1_octet_string>(0, 1);
-                        bytes_concept keyid;
-                        if (keystor.get_tag() == asn1_octet_string::tag) {
-                            keyid = keystor.get<asn1_octet_string>(0);
-                        } else if (keystor.get_tag() == asn1_sequence::tag) {
-                            keyid = keystor.get(0, 0);
-                        }
-                        bytes_concept issuer_cert_data;
-                        auto find = [&](auto &&store) {
-                            auto i = store.index.find(key{issuer,keyid});
-                            if (i != store.index.end() && i->second.is_valid(now)) {
-                                issuer_cert_data = i->second.data;
-                            }
-                        };
-                        find(*this);
-                        if (issuer_cert_data.empty()) {
-                            find(trusted_storage);
-                        }
-                        if (issuer_cert_data.empty()) {
-                            continue;
-                        }
-
-                        did_verify = true;
-
-                        asn1 issuer_cert{issuer_cert_data};
-
-                        auto alg = current_cert.get<asn1_oid>(x509::main, x509::certificate_signature_algorithm, 0);
-                        auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature).data.subspan(1);
-
-                        // https://www.rfc-editor.org/rfc/rfc8017 pkcs #1
-                        // 1.3.6.1.5.5.7.3.1 serverAuth
-
-                        constexpr auto sha256WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 11>();
-                        constexpr auto sha384WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 12>();
-                        constexpr auto sha512WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 13>();
-                        constexpr auto ecdsa_with_SHA256 = make_oid<1,2,840,10045,4,3,2>();
-                        constexpr auto ecdsa_with_SHA384 = make_oid<1,2,840,10045,4,3,3>();
-                        constexpr auto ecdsa_with_SHA512 = make_oid<1,2,840,10045,4,3,4>();
-
-                        // rsaEncryption (PKCS #1)
-                        //constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
-                        //constexpr auto ecPublicKey = make_oid<1, 2, 840, 10045, 2, 1>();
-                        //constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
-                        //constexpr auto GOST_R3410_12_256 = make_oid<1, 2, 643, 7, 1, 1, 1, 1>();
-                        //constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
-                        //constexpr auto sm2 = make_oid<1, 2, 156, 10197, 1, 301>();
-
-                        auto pubk_info = issuer_cert.get<asn1_sequence>(x509::main, x509::certificate, x509::subject_public_key_info);
-                        auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
-                        auto issuer_pubkey_data = issuer_pubkey.data.subspan(1);
-
-                        auto rsa_sha2 = [&]<auto Bits>() {
-                            auto pubk = rsa::public_key::load(issuer_pubkey_data);
-                            if (pubk.verify<Bits>(cert_raw, sig)) {
-                                v.trusted = true;
-                                if (v.is_valid(now)) {
-                                    return true;
-                                }
-                            }
-                            return false;
-                        };
-                        auto ecdsa_sha2 = [&]<auto Bits>() {
-                            constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
-                            constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
-                            auto curve = pubk_info.get<asn1_oid>(0, 1);
-
-                            auto r = asn1_sequence{sig}.get<asn1_integer>(0,0).data;
-                            auto s = asn1_sequence{sig}.get<asn1_integer>(0,1).data;
-
-                            auto h = sha2<Bits>::digest(cert_raw);
-
-                            auto f = [&]<typename Curve>(Curve **) {
-                                if (Curve::verify(h, issuer_pubkey_data, r, s)) {
-                                    v.trusted = true;
-                                    if (v.is_valid(now)) {
-                                        return true;
-                                    }
-                                }
-                                return false;
-                            };
-
-                            if (curve == prime256v1) {
-                                if (!f((ec::secp256r1**)nullptr)) {
-                                    return false;
-                                }
-                            } else if (curve == secp384r1) {
-                                if (!f((ec::secp384r1**)nullptr)) {
-                                    return false;
-                                }
-                            } else {
-                                string s = curve;
-                                throw std::runtime_error{"curve is not impl: " + s};
-                            }
-                            return true;
-                        };
-
-                        if (alg == sha256WithRSAEncryption) {
-                            if (!rsa_sha2.template operator()<256>()) {
-                                return false;
-                            }
-                        } else if (alg == sha384WithRSAEncryption) {
-                            if (!rsa_sha2.template operator()<384>()) {
-                                return false;
-                            }
-                        } else if (alg == sha512WithRSAEncryption) {
-                            if (!rsa_sha2.template operator()<512>()) {
-                                return false;
-                            }
-                        } else if (alg == ecdsa_with_SHA256) {
-                            if (!ecdsa_sha2.template operator()<256>()) {
-                                return false;
-                            }
-                        } else if (alg == ecdsa_with_SHA384) {
-                            if (!ecdsa_sha2.template operator()<384>()) {
-                                return false;
-                            }
-                        } else if (alg == ecdsa_with_SHA512) {
-                            if (!ecdsa_sha2.template operator()<512>()) {
-                                return false;
-                            }
-                        } else if (alg == oid::gost2012Signature256) {
-                            auto param_set = pubk_info.get<asn1_oid>(0, 1, 0);
-
-                            auto f = [&](auto &&c) {
-                                auto pubk = asn1{issuer_pubkey_data}.get<asn1_octet_string>().data;
-                                auto h = streebog<256>::digest(cert_raw);
-                                std::vector<u8> h2{std::from_range, h | std::views::reverse};
-                                if (c.verify(h2, pubk, sig)) {
-                                    v.trusted = true;
-                                    if (v.is_valid(now)) {
-                                        return true;
-                                    }
-                                }
-                                return false;
-                            };
-
-                            if (param_set == oid::gost_r34102001_param_set_a) {
-                                if (!f(ec::gost::r34102001::ec256a{})) {
-                                    return false;
-                                }
-                            } else {
-                                string s = param_set;
-                                throw std::runtime_error{"param set is not impl: " + s};
-                            }
-                        } else if (alg == oid::gost2012Signature512) {
-                            throw std::runtime_error{"gost2012Signature512 is not impl"};
-                        } else {
-                            string s = alg;
-                            std::cerr << "unknown x509::signature_algorithm: " << s << "\n";
-                            throw std::runtime_error{"unknown x509::signature_algorithm"};
-                        }
-                    } else if (auto sk = exts->get_extension(old_authority_keyid)) {
-                        throw std::runtime_error{"not impl"}; // old_authority_keyid?
-                    } else {
-                        throw std::runtime_error{"not impl"};
-                    }
-                }
-            }
-            if (!did_verify) {
-                return std::ranges::all_of(index | std::views::values, [](auto &&v){return v.trusted;});
-            }
-        }
-    }*/
+    bool verify_all(auto &&trusted_storage, const time_point &now) {
+        return for_each_cert([&](auto &&v){return verify(trusted_storage, v.data, now);});
+    }
+    bool for_each_cert(this auto &&obj, auto &&range, auto &&f) {
+        return range(obj.index | std::views::values, [&](auto &&v) {
+            return range(v | std::views::values, [&](auto &&v) {
+                return range(v, f);
+            });
+        });
+    }
+    bool for_each_cert(this auto &&obj, auto &&f) {
+        return obj.for_each_cert(std::ranges::all_of, f);
+    }
+    bool is_all_trusted(auto &&now) const {
+        return for_each_cert([&](auto &&v){return v.is_valid(now);});
+    }
 };
+
+static auto &x509_trusted_storage() {
+    static x509_storage s;
+    return s;
+}
 
 } // namespace crypto
