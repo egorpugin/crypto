@@ -222,6 +222,7 @@ struct x509_storage {
             constexpr auto authority_keyid = make_oid<2, 5, 29, 35>();
             if (auto sk = exts->get_extension(authority_keyid)) {
                 auto keyid = extract_keyid(sk);
+                print_buffer(keyid, "keyid");
                 bytes_concept issuer_cert_data;
                 auto find = [&](auto &&store) {
                     auto &certs = store.index[issuer][keyid];
@@ -233,6 +234,7 @@ struct x509_storage {
                     });
                     if (it != certs.end()) {
                         issuer_cert_data = it->data;
+                        print_error("found!");
                     } else {
                         print_error("not found");
                     }
