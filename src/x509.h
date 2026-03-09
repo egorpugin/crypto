@@ -453,9 +453,10 @@ auto load_system_certificates(auto &storage) {
 #else
     auto load = [&](auto &&fn) {
         if (fs::exists(fn)) {
-            n_loaded += storage.load_pem(read_file(fn), true);
+            crypto::mmap_file<> f{ fn };
+            n_loaded += storage.load_pem(std::string_view((const char *)f.p, (const char *)f.p + f.sz), true);
         }
-        };
+    };
     load("/etc/ssl/cert.pem");
     load("/etc/ssl/certs/ca-certificates.crt");
 #endif
