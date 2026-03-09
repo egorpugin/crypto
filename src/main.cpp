@@ -2588,35 +2588,35 @@ void test_x509() {
     {
         x509_storage s;
         s.add(data1);
-        //cmp_bool(s.verify(trusted_all, data1, until1), false);
+        cmp_bool(s.verify(trusted_all, data1, until1), false);
         s.add(data2);
         cmp_bool(s.verify(trusted_all, data2, until1));
-        //cmp_bool(s.verify(trusted_all, data1, until1));
-        //
-        //x509_storage s2;
-        //auto data3 = read_file("infotecs.der");
-        //s2.add(data3);
-        //cmp_bool(s2.verify(trusted_all, data3, until1));
-    }   //
-    {   //
-        //x509_storage s;
-        //s.add(data2);
-        //cmp_bool(s.verify(trusted_all, data1, until1));
-        //cmp_bool(s.verify(trusted_all, data2, until1));
-    }   //
-    {   //
-        //x509_storage s;
-        //s.add(data1);
-        //cmp_bool(s.verify(trusted3, data1, until1), false);
-        //s.add(data2);
-        //cmp_bool(s.verify(trusted3, data2, until1));
-        //cmp_bool(s.verify(trusted3, data1, until1));
-    }   //
-    {   //
-        //x509_storage s;
-        //s.add(data1);
-        //s.add(data2);
-        //cmp_bool(s.verify_all(trusted3, until1));
+        cmp_bool(s.verify(trusted_all, data1, until1));
+
+        x509_storage s2;
+        auto data3 = read_file("infotecs.der");
+        s2.add(data3);
+        cmp_bool(s2.verify(trusted_all, data3, until1));
+    }
+    {
+        x509_storage s;
+        s.add(data2);
+        cmp_bool(s.verify(trusted_all, data1, until1));
+        cmp_bool(s.verify(trusted_all, data2, until1));
+    }
+    {
+        x509_storage s;
+        s.add(data1);
+        cmp_bool(s.verify(trusted3, data1, until1), false);
+        s.add(data2);
+        cmp_bool(s.verify(trusted3, data2, until1));
+        cmp_bool(s.verify(trusted3, data1, until1));
+    }
+    {
+        x509_storage s;
+        s.add(data1);
+        s.add(data2);
+        cmp_bool(s.verify_all(trusted3, until1));
     }
 }
 
