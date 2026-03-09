@@ -241,6 +241,7 @@ void load_system_certs() {
     auto n = tcs.load_pem(read_file(cacert_pem()), true);
     tcs.load_der(read_file(infotecs_ca()), true);
     ++n;
+    std::println(std::cerr, "loaded {} certs 1", n);
 #ifdef _WIN32
     auto load_certs = [&](auto &&store) {
         for (auto &&s : win32::enum_certificate_store(store)) {
@@ -250,8 +251,14 @@ void load_system_certs() {
     };
     load_certs("CA");
     load_certs("ROOT");
+#elif defined(__APPLE__)
+#else
+    auto cert_pem = "/etc/ssl/cert.pem";
+    if (fs::exists(cert_pem)) {
+        n += tcs.load_pem(read_file(cert_pem), true);
+    }
 #endif
-    std::println(std::cerr, "loaded {} certs", n);
+    std::println(std::cerr, "loaded {} certs 2", n);
 }
 
 void test_aes() {
