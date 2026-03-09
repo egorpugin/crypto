@@ -276,7 +276,7 @@ void load_system_certs() {
         }
     }
 #else
-    auto load = [](auto &&fn) {
+    auto load = [&](auto &&fn) {
         if (fs::exists(fn)) {
             n_loaded += tcs.load_pem(read_file(fn), true);
         }
