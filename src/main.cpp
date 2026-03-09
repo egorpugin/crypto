@@ -2091,6 +2091,8 @@ void test_scrypt() {
 
     auto f = [](auto &&scr)
     {
+        scoped_timer st;
+
         cmp_bytes(scr(""s, ""s, 16, 1, 1, 64), R"(
        77 d6 57 62 38 65 7b 20 3b 19 ca 42 c1 8a 04 97
        f1 6b 48 44 e3 07 4a e8 df df fa 3f ed e2 14 42
