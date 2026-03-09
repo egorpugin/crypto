@@ -439,6 +439,7 @@ auto load_system_certificates(auto &storage) {
 #elif defined(__APPLE__)
     CFArrayRef certificates{};
     if (auto status = SecTrustCopyAnchorCertificates(&certificates); status != errSecSuccess) {
+        // throw? but for linux we don't throw
         std::println(std::cerr, "failed to get certificates: status = {}", status);
         return n_loaded;
     }

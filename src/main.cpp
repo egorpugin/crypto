@@ -242,11 +242,14 @@ auto infotecs_ca() {
     return name;
 }
 void load_test_certs() {
-    auto &tcs = crypto::x509_trusted_storage();
-    auto n_loaded = load_system_certificates(tcs);
-    tcs.load_der(read_file(infotecs_ca()), true);
-    ++n_loaded;
-    std::println("loaded {} certs", n_loaded);
+    static auto once = [](){
+        auto &tcs = crypto::x509_trusted_storage();
+        auto n_loaded = load_system_certificates(tcs);
+        tcs.load_der(read_file(infotecs_ca()), true);
+        ++n_loaded;
+        std::println("loaded {} certs", n_loaded);
+        return 0;
+    }();
 }
 
 void test_aes() {
