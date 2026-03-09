@@ -416,6 +416,8 @@ static auto &x509_trusted_storage() {
 
 } // namespace crypto
 
+#include "mmap.h"
+#include "win32.h"
 #if defined(__APPLE__)
 #include <Security/Security.h>
 #endif
