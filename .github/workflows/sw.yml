@@ -16,8 +16,8 @@ jobs:
     #- name: build
       #run: ./sw -Dci-build=true build --target test-0.0.1
     - name: test
-      #run: ./sw -Dci-build=true run test-0.0.1
-      run: ./sw run test-0.0.1
+      run: ./sw -Dci-build=true run test-0.0.1
+      #run: ./sw run test-0.0.1
 
   linux:
     #if: false
@@ -36,8 +36,8 @@ jobs:
     #- name: build
       #run: ./sw -Dci-build=true build --target test-0.0.1
     - name: test
-      #run: ./sw -compiler gcc -Dci-build=true run test-0.0.1
-      run: ./sw -compiler gcc run test-0.0.1
+      run: ./sw -compiler gcc -Dci-build=true run test-0.0.1
+      #run: ./sw -compiler gcc run test-0.0.1
 
   macos:
     runs-on: macos-latest
@@ -67,6 +67,6 @@ jobs:
         export PATH="/opt/homebrew/opt/m4/bin:$PATH"
         export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
         export PATH="/opt/homebrew/opt/gcc/bin:$PATH"
-        #./sw -compiler gcc -Dci-build=true run test-0.0.1
-        ./sw -compiler gcc run test-0.0.1
+        ./sw -compiler gcc -Dci-build=true run test-0.0.1
+        #./sw -compiler gcc run test-0.0.1
         #./sw -compiler clang -Dci-build=true run test-0.0.1

@@ -275,10 +275,13 @@ void load_system_certs() {
         }
     }
 #else
-    auto cert_pem = "/etc/ssl/cert.pem";
-    if (fs::exists(cert_pem)) {
-        n_loaded += tcs.load_pem(read_file(cert_pem), true);
-    }
+    auto load = [](auto &&fn) {
+        if (fs::exists(fn)) {
+            n_loaded += tcs.load_pem(read_file(fn), true);
+        }
+    };
+    load("/etc/ssl/cert.pem");
+    load("/etc/ssl/certs/ca-certificates.crt");
 #endif
     std::println("loaded {} certs", n_loaded);
 }
@@ -3734,13 +3737,13 @@ auto test_all() {
     test_dns();
     test_tls();
     test_email();
+    return return_code();
 }
 
 #ifdef CI_TESTS
 int main() {
     try {
-        test_all();
-        return return_code();
+        return test_all();
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {
