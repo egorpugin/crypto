@@ -198,6 +198,10 @@ struct x509_storage {
         auto [cert_raw,cert_start] = current_cert.get_raw(x509::main, x509::tbs_certificate);
         asn1_sequence cert{cert_raw.subspan(cert_start)}; // tbsCertificate
 
+        auto print_error = [](auto &&text, std::source_location loc = std::source_location::current()){
+            std::println(std::cerr, "{}:{}: {}", loc.file_name(), loc.line(), text);
+        };
+
         auto issuer = cert.get<asn1_sequence>(x509::issuer_name);
         auto subject = cert.get<asn1_sequence>(x509::subject_name);
         auto root_cert = issuer == subject;
@@ -206,6 +210,7 @@ struct x509_storage {
                 v.trusted = true;
                 return v.is_valid(now);
             }
+            print_error("");
             return false;
         }
         if (auto exts = cert.get_next<asn1_x509_extensions>()) {
@@ -231,6 +236,7 @@ struct x509_storage {
                     find(trusted_storage);
                 }
                 if (issuer_cert_data.empty()) {
+                    print_error("");
                     return false;
                 }
 
@@ -266,6 +272,7 @@ struct x509_storage {
                         v.trusted = true;
                         return v.is_valid(now);
                     }
+                    print_error("");
                     return false;
                 };
                 auto ecdsa_sha2 = [&]<auto Bits>() {
@@ -283,15 +290,18 @@ struct x509_storage {
                             v.trusted = true;
                             return v.is_valid(now);
                         }
+                        print_error("");
                         return false;
                     };
 
                     if (curve == prime256v1) {
-                        if (!f((ec::secp256r1**)nullptr)) {
+                        if (!f((ec::secp256r1 **)nullptr)) {
+                            print_error("");
                             return false;
                         }
                     } else if (curve == secp384r1) {
-                        if (!f((ec::secp384r1**)nullptr)) {
+                        if (!f((ec::secp384r1 **)nullptr)) {
+                            print_error("");
                             return false;
                         }
                     } else {
@@ -301,18 +311,23 @@ struct x509_storage {
                     return true;
                 };
 
+                auto print_error_on_cond = [&](bool r, std::source_location loc = std::source_location::current()) {
+                    if (!r) print_error("", loc);
+                    return r;
+                    };
+
                 if (alg == sha256WithRSAEncryption) {
-                    return rsa_sha2.template operator()<256>();
+                    return print_error_on_cond(rsa_sha2.template operator()<256>());
                 } else if (alg == sha384WithRSAEncryption) {
-                    return rsa_sha2.template operator()<384>();
+                    return print_error_on_cond(rsa_sha2.template operator()<384>());
                 } else if (alg == sha512WithRSAEncryption) {
-                    return rsa_sha2.template operator()<512>();
+                    return print_error_on_cond(rsa_sha2.template operator()<512>());
                 } else if (alg == ecdsa_with_SHA256) {
-                    return ecdsa_sha2.template operator()<256>();
+                    return print_error_on_cond(ecdsa_sha2.template operator()<256>());
                 } else if (alg == ecdsa_with_SHA384) {
-                    return ecdsa_sha2.template operator()<384>();
+                    return print_error_on_cond(ecdsa_sha2.template operator()<384>());
                 } else if (alg == ecdsa_with_SHA512) {
-                    return ecdsa_sha2.template operator()<512>();
+                    return print_error_on_cond(ecdsa_sha2.template operator()<512>());
                 } else if (alg == oid::gost2012Signature256) {
                     auto param_set = pubk_info.get<asn1_oid>(0, 1, 0);
 
@@ -324,6 +339,7 @@ struct x509_storage {
                             v.trusted = true;
                             return v.is_valid(now);
                         }
+                        print_error("");
                         return false;
                     };
 
@@ -363,6 +379,7 @@ struct x509_storage {
                 throw std::runtime_error{"not impl"};
             }
         }
+        print_error("");
         return false;
     }
     /*bool verify(auto &&trusted_storage) {
