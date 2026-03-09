@@ -2148,7 +2148,7 @@ void test_scrypt() {
         return scrypt(args...);
         });
     f([](auto &&...args) {
-        return scrypt_()(args...);
+        return scrypt_(args...);;
         });
 }
 

@@ -50,12 +50,14 @@ auto scrypt(bytes_concept password, bytes_concept salt, int N, int r, int p, int
     return pbkdf2<sha2<256>>(password, B, 1, dklen);
 }
 
-struct scrypt_ {
+struct scrypt__ {
     static inline constexpr auto block_size = 64;
 
     int N, r, p;
-    std::vector<u8> V, X, Y;
-    int sz{128 * r};
+    int sz{ block_size * 2 * r };
+    //std::vector<u8> V, X, Y;
+    std::unique_ptr<u8[]> data{ new u8[sz * (N + 2)] };
+    u8 *V{ &data[sz * 2] }, *X{ &data[0] }, *Y{ &data[sz] };
 
     void BlockMix(u8 *B) {
         u8 X[block_size];
@@ -65,29 +67,29 @@ struct scrypt_ {
                 X[j] ^= B[i * block_size + j];
             }
             salsa_block((u32 *)X, (u32 *)X, 8);
-            memcpy(Y.data() + block_size * (i / 2 + (i % 2) * r), X, block_size);
+            memcpy(Y + block_size * (i / 2 + (i % 2) * r), X, block_size);
         }
-        memcpy(B, Y.data(), Y.size());
+        memcpy(B, Y, sz);
     }
     void ROMix(u8 *B) {
-        memcpy(X.data(), B, sz);
+        memcpy(X, B, sz);
         for (int i = 0; i < N; ++i) {
-            memcpy(V.data() + sz * i, X.data(), sz);
-            BlockMix(X.data());
+            memcpy(V + sz * i, X, sz);
+            BlockMix(X);
         }
         for (int i = 0; i < N; ++i) {
             auto j = *(u32 *)&X[(2 * r - 1) * 64] % N;
             for (int k = 0; k < sz; ++k) {
                 X[k] ^= V[j * sz + k];
             }
-            BlockMix(X.data());
+            BlockMix(X);
         }
-        memcpy(B, X.data(), sz);
+        memcpy(B, X, sz);
     }
     auto operator()(bytes_concept password, bytes_concept salt, int dklen) {
-        X.resize(sz);
-        V.resize(sz * N);
-        Y.resize(block_size * 2 * r);
+        //X.resize(sz);
+        //V.resize(sz * N);
+        //Y.resize(sz);
 
         auto B = pbkdf2<sha2<256>>(password, salt, 1, p * sz);
         for (int i = 0; i < p; ++i) {
@@ -96,9 +98,9 @@ struct scrypt_ {
         return pbkdf2<sha2<256>>(password, B, 1, dklen);
     }
     static auto operator()(bytes_concept password, bytes_concept salt, int N, int r, int p, int dklen) {
-        scrypt_ s{N,r,p};
+        scrypt__ s{N,r,p};
         return s(password, salt, dklen);
     }
-};
+} scrypt_;
 
 }
