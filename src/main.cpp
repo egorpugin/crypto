@@ -272,6 +272,7 @@ void load_system_certs() {
         if (auto d = SecCertificateCopyData(cert)) {
             cf_releaser rdata{ d };
             tcs.load_der(bytes_concept{ CFDataGetBytePtr(d), (size_t)CFDataGetLength(d) }, true);
+            ++n_loaded;
         }
     }
 #else
