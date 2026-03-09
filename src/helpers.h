@@ -197,6 +197,10 @@ struct bytes_concept {
         std::string a{p,p+sz};
         return a;
     }
+    operator std::string_view() const {
+        std::string_view a{ (const char*)p, (const char*)p + sz };
+        return a;
+    }
 
     template <auto N>
     operator std::span<u8, N>() const {

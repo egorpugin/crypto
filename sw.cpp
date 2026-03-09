@@ -17,6 +17,10 @@ void build(Solution &s) {
             t += "bcrypt.lib"_slib;
             t += "Crypt32.lib"_slib;
         }
+        if (t.getBuildSettings().TargetOS.isApple()) {
+            t += "CoreFoundation"_framework;
+            t += "Security"_framework;
+        }
     }
 
     auto &test = s.addTarget<Executable>("test");

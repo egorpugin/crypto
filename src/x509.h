@@ -46,7 +46,7 @@ struct x509 {
 
     asn1 a;
 
-    x509(asn1 a) : a{a} {}
+    //x509(asn1 a) : a{a} {}
     x509(std::string_view a) : a{a} {}
 
     template <typename T>
@@ -73,9 +73,9 @@ struct x509_storage {
     using clock = std::chrono::system_clock;
     using time_point = clock::time_point;
 
-    using issuer_type = std::string;
-    using keyid_type = std::string;
-    using value_type = std::string;
+    using issuer_type   = bytes_concept;
+    using keyid_type    = bytes_concept;
+    using value_type    = bytes_concept;
 
     using storage_type = std::vector<u8>;
     using storage_type_ptr = std::unique_ptr<storage_type>;
@@ -204,7 +204,7 @@ struct x509_storage {
         asn1_sequence cert{cert_raw.subspan(cert_start)}; // tbsCertificate
 
         auto print_error = [](auto &&text, std::source_location loc = std::source_location::current()){
-            std::println("{}:{}: {}", loc.file_name(), loc.line(), text);
+            //std::println("{}:{}: {}", loc.file_name(), loc.line(), text);
         };
 
         bytes_concept issuer = cert.get<asn1_sequence>(x509::issuer_name);
@@ -223,7 +223,7 @@ struct x509_storage {
             constexpr auto authority_keyid = make_oid<2, 5, 29, 35>();
             if (auto sk = exts->get_extension(authority_keyid)) {
                 auto keyid = extract_keyid(sk);
-                print_buffer("keyid", keyid);
+                //print_buffer("keyid", keyid);
                 bytes_concept issuer_cert_data;
                 auto find = [&](auto &&store) {
                     auto &certs = store.index[issuer][keyid];

@@ -229,7 +229,7 @@ auto cacert_pem() {
     }
     auto &tcs = crypto::x509_trusted_storage();
     auto n = tcs.load_pem(read_file(name), true);
-    std::println(std::cerr, "loaded {} certs", n);
+    std::println("loaded {} certs", n);
     return name;
 }
 auto infotecs_ca() {
@@ -241,31 +241,46 @@ auto infotecs_ca() {
     }*/
     return name;
 }
+#if defined(__APPLE__)
+#include <Security/Security.h>
+template <typename T> struct cf_releaser { T value; ~cf_releaser() { CFRelease(value); } };
+#endif
 void load_system_certs() {
     using namespace crypto;
 
     auto &tcs = x509_trusted_storage();
-    auto n = tcs.load_pem(read_file(cacert_pem()), true);
-    tcs.load_der(read_file(infotecs_ca()), true);
-    ++n;
-    std::println(std::cerr, "loaded {} certs 1", n);
+    size_t n_loaded{};
 #ifdef _WIN32
     auto load_certs = [&](auto &&store) {
         for (auto &&s : win32::enum_certificate_store(store)) {
             tcs.load_der(s, true);
-            ++n;
+            ++n_loaded;
         }
-    };
+        };
     load_certs("CA");
     load_certs("ROOT");
 #elif defined(__APPLE__)
+    CFArrayRef certificates{};
+    if (auto status = SecTrustCopyAnchorCertificates(&certificates); status != errSecSuccess) {
+        std::println(std::cerr, "failed to get certificates: status = {}", status);
+        return;
+    }
+    cf_releaser rcerts{certificates};
+    auto count = CFArrayGetCount(certificates);
+    for (decltype(count) i = 0; i < count; i++) {
+        auto cert = (SecCertificateRef)CFArrayGetValueAtIndex(certificates, i);
+        if (auto d = SecCertificateCopyData(cert)) {
+            cf_releaser rdata{ d };
+            tcs.load_der(bytes_concept{ CFDataGetBytePtr(d), (size_t)CFDataGetLength(d) }, true);
+        }
+    }
 #else
     auto cert_pem = "/etc/ssl/cert.pem";
     if (fs::exists(cert_pem)) {
-        n += tcs.load_pem(read_file(cert_pem), true);
+        n_loaded += tcs.load_pem(read_file(cert_pem), true);
     }
 #endif
-    std::println(std::cerr, "loaded {} certs 2", n);
+    std::println("loaded {} certs", n_loaded);
 }
 
 void test_aes() {
@@ -2582,39 +2597,29 @@ void test_x509() {
     auto data3 = read_file("test3.der");
     auto until3 = until1; // actual is until 2038
 
-    x509_storage trusted_all;
-    trusted_all.add(data3, true);
-#ifdef __linux__
-    //auto n = trusted_all.load_pem(read_file("/etc/ssl/cert.pem"), true);
-#else
-    //auto n = trusted_all.load_pem(read_file(cacert_pem()), true);
-#endif
-    trusted_all.load_der(read_file(infotecs_ca()), true);
-    //++n;
-
-    //std::println("loaded {} certs", n);
-
     x509_storage trusted3;
     trusted3.add(data3, true);
 
     {
         x509_storage s;
         s.add(data1);
-        cmp_bool(s.verify(trusted_all, data1, until1), false);
+        cmp_bool(s.verify(trusted3, data1, until1), false);
         s.add(data2);
-        cmp_bool(s.verify(trusted_all, data2, until1));
-        cmp_bool(s.verify(trusted_all, data1, until1));
+        cmp_bool(s.verify(trusted3, data2, until1));
+        cmp_bool(s.verify(trusted3, data1, until1));
 
         x509_storage s2;
         auto data3 = read_file("infotecs.der");
         s2.add(data3);
-        cmp_bool(s2.verify(trusted_all, data3, until1));
+        cmp_bool(s2.verify(trusted3, data3, until1), false);
+        trusted3.load_der(read_file(infotecs_ca()), true);
+        cmp_bool(s2.verify(trusted3, data3, until1));
     }
     {
         x509_storage s;
         s.add(data2);
-        cmp_bool(s.verify(trusted_all, data1, until1));
-        cmp_bool(s.verify(trusted_all, data2, until1));
+        cmp_bool(s.verify(trusted3, data1, until1));
+        cmp_bool(s.verify(trusted3, data2, until1));
     }
     {
         x509_storage s;
@@ -2933,11 +2938,16 @@ void test_tls() {
     // run("127.0.0.1:11111");
 
     // some other tests
+#ifdef CI_TESTS
+    // this block requires vpn now
     run("https://www.reuters.com/");
     run("https://edition.cnn.com/");
     run("https://www.cloudflare.com/");
+#endif
 #ifndef CI_TESTS
-    run("gosuslugi.ru"); // works bad on ci
+    // works bad on ci
+    // works bad everywhere (prob because of poor agent header)
+    //run("gosuslugi.ru");
 #endif
     //
     //// does not support tls13
