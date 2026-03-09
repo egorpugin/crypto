@@ -203,7 +203,7 @@ struct x509_storage {
         asn1_sequence cert{cert_raw.subspan(cert_start)}; // tbsCertificate
 
         auto print_error = [](auto &&text, std::source_location loc = std::source_location::current()){
-            std::println(std::cerr, "{}:{}: {}", loc.file_name(), loc.line(), text);
+            std::println("{}:{}: {}", loc.file_name(), loc.line(), text);
         };
 
         auto issuer = cert.get<asn1_sequence>(x509::issuer_name);

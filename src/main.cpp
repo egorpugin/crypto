@@ -2580,7 +2580,7 @@ void test_x509() {
     trusted_all.load_der(read_file(infotecs_ca()), true);
     ++n;
 
-    std::println(std::cerr, "loaded {} certs", n);
+    std::println("loaded {} certs", n);
 
     x509_storage trusted3;
     trusted3.add(data3, true);
