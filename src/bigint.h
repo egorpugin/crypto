@@ -206,14 +206,17 @@ struct bigint {
         return *this;
     }
     bigint &operator=(u64 p) {
+        mpz_clear(*this);
         mpz_init_set_ui(*this, p);
         return *this;
     }
     bigint &operator=(i64 p) {
+        mpz_clear(*this);
         mpz_init_set_si(*this, p);
         return *this;
     }
     bigint &operator=(int p) {
+        mpz_clear(*this);
         mpz_init_set_si(*this, p);
         return *this;
     }
