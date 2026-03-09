@@ -2089,11 +2089,7 @@ void test_scrypt() {
 )"_sb);
     }
 
-    auto scr = [](auto &&...args) {
-        return scrypt(args...);
-        // return scrypt2()(args...);
-    };
-
+    auto f = [](auto &&scr)
     {
         cmp_bytes(scr(""s, ""s, 16, 1, 1, 64), R"(
        77 d6 57 62 38 65 7b 20 3b 19 ca 42 c1 8a 04 97
@@ -2145,7 +2141,13 @@ void test_scrypt() {
         test(2, 64, 128, "b58b8ec24738af168b4e24de079102f1"_sb);
         test(2, 63, 128, "61de26be0f6609462bf66d88dece2d3c"_sb);
         test(4, 19, 17, "b21fc99ae1dd4067c2d2b906af62518e"_sb);
-    }
+    };
+    f([](auto &&...args) {
+        return scrypt(args...);
+        });
+    f([](auto &&...args) {
+        return scrypt_()(args...);
+        });
 }
 
 void test_argon2() {
@@ -3744,9 +3746,9 @@ int main() {
         //test_pbkdf2();
         //test_chacha20();
         //test_chacha20_aead();
-        // test_scrypt();
+        test_scrypt();
         // test_argon2();
-        test_x509();
+        //test_x509();
         //test_pki();
         // test_streebog();
         // test_grasshopper();
@@ -3757,9 +3759,8 @@ int main() {
         // test_mlkem();
         //test_mldsa();
         //test_slh_dsa();
-        //
         //test_dns();
-        test_tls();
+        //test_tls();
         //test_email();
         //test_ssh2();
 
