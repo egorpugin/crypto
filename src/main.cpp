@@ -247,8 +247,8 @@ void load_test_certs() {
         auto n_loaded = load_system_certificates(tcs);
         tcs.load_der(read_file(infotecs_ca()), true);
         ++n_loaded;
-        std::println("loaded {} certs", n_loaded);
-        return 0;
+        //std::println("loaded {} certs", n_loaded);
+        return n_loaded;
     }();
 }
 

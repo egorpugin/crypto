@@ -78,7 +78,8 @@ struct x509_storage {
     using value_type    = bytes_concept;
 
     using storage_type = std::vector<u8>;
-    using storage_type_ptr = std::unique_ptr<storage_type>;
+    //using storage_type_ptr = std::unique_ptr<storage_type>;
+    using storage_type_ptr = storage_type;
 
     struct value {
         value_type data;
@@ -151,7 +152,8 @@ struct x509_storage {
     }*/
 
     bytes_concept add_to_storage(auto &&h) {
-        return *storage.emplace_back(std::make_unique<storage_type>(std::from_range, h));
+        //return *storage.emplace_back(std::make_unique<storage_type>(std::from_range, h));
+        return storage.emplace_back(std::from_range, h);
     }
     auto &add(bytes_concept data, bool trusted = false) {
         x509 x{data};
