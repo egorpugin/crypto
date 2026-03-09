@@ -55,12 +55,15 @@ struct scrypt__ {
 
     int N, r, p;
     int sz{ block_size * 2 * r };
-    //std::vector<u8> V, X, Y;
-    std::unique_ptr<u8[]> data{ new u8[sz * (N + 2)] };
+    std::unique_ptr<u8[]> data{ new
+#ifdef __GNUC__
+        alignas(block_size)
+#endif
+        u8[sz * (N + 2)] };
     u8 *V{ &data[sz * 2] }, *X{ &data[0] }, *Y{ &data[sz] };
 
     void BlockMix(u8 *B) {
-        u8 X[block_size];
+        alignas(block_size) u8 X[block_size];
         memcpy(X, B + block_size * (2 * r - 1), block_size);
         for (int i = 0; i < 2 * r; ++i) {
             for (int j = 0; j < block_size; ++j) {
@@ -87,10 +90,6 @@ struct scrypt__ {
         memcpy(B, X, sz);
     }
     auto operator()(bytes_concept password, bytes_concept salt, int dklen) {
-        //X.resize(sz);
-        //V.resize(sz * N);
-        //Y.resize(sz);
-
         auto B = pbkdf2<sha2<256>>(password, salt, 1, p * sz);
         for (int i = 0; i < p; ++i) {
             ROMix(B.data() + i * sz);
