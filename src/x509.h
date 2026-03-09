@@ -415,3 +415,51 @@ static auto &x509_trusted_storage() {
 }
 
 } // namespace crypto
+
+#if defined(__APPLE__)
+#include <Security/Security.h>
+#endif
+namespace crypto {
+#if defined(__APPLE__)
+template <typename T> struct cf_releaser { T value; ~cf_releaser() { CFRelease(value); } };
+#endif
+auto load_system_certificates(auto &storage) {
+    size_t n_loaded{};
+#ifdef _WIN32
+    auto load_certs = [&](auto &&store) {
+        for (auto &&s : win32::enum_certificate_store(store)) {
+            storage.load_der(s, true);
+            ++n_loaded;
+        }
+    };
+    load_certs("CA");
+    load_certs("ROOT");
+#elif defined(__APPLE__)
+    CFArrayRef certificates{};
+    if (auto status = SecTrustCopyAnchorCertificates(&certificates); status != errSecSuccess) {
+        std::println(std::cerr, "failed to get certificates: status = {}", status);
+        return n_loaded;
+    }
+    cf_releaser rcerts{ certificates };
+    auto count = CFArrayGetCount(certificates);
+    for (decltype(count) i = 0; i < count; i++) {
+        auto cert = (SecCertificateRef)CFArrayGetValueAtIndex(certificates, i);
+        if (auto d = SecCertificateCopyData(cert)) {
+            cf_releaser rdata{ d };
+            storage.load_der(bytes_concept{ CFDataGetBytePtr(d), (size_t)CFDataGetLength(d) }, true);
+            ++n_loaded;
+        }
+    }
+#else
+    auto load = [&](auto &&fn) {
+        if (fs::exists(fn)) {
+            n_loaded += storage.load_pem(read_file(fn), true);
+        }
+        };
+    load("/etc/ssl/cert.pem");
+    load("/etc/ssl/certs/ca-certificates.crt");
+#endif
+    return n_loaded;
+}
+
+} // namespace crypto

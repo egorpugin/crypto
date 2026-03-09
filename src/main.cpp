@@ -241,49 +241,11 @@ auto infotecs_ca() {
     }*/
     return name;
 }
-#if defined(__APPLE__)
-#include <Security/Security.h>
-template <typename T> struct cf_releaser { T value; ~cf_releaser() { CFRelease(value); } };
-#endif
-void load_system_certs() {
-    using namespace crypto;
-
-    auto &tcs = x509_trusted_storage();
-    size_t n_loaded{};
-#ifdef _WIN32
-    auto load_certs = [&](auto &&store) {
-        for (auto &&s : win32::enum_certificate_store(store)) {
-            tcs.load_der(s, true);
-            ++n_loaded;
-        }
-        };
-    load_certs("CA");
-    load_certs("ROOT");
-#elif defined(__APPLE__)
-    CFArrayRef certificates{};
-    if (auto status = SecTrustCopyAnchorCertificates(&certificates); status != errSecSuccess) {
-        std::println(std::cerr, "failed to get certificates: status = {}", status);
-        return;
-    }
-    cf_releaser rcerts{certificates};
-    auto count = CFArrayGetCount(certificates);
-    for (decltype(count) i = 0; i < count; i++) {
-        auto cert = (SecCertificateRef)CFArrayGetValueAtIndex(certificates, i);
-        if (auto d = SecCertificateCopyData(cert)) {
-            cf_releaser rdata{ d };
-            tcs.load_der(bytes_concept{ CFDataGetBytePtr(d), (size_t)CFDataGetLength(d) }, true);
-            ++n_loaded;
-        }
-    }
-#else
-    auto load = [&](auto &&fn) {
-        if (fs::exists(fn)) {
-            n_loaded += tcs.load_pem(read_file(fn), true);
-        }
-    };
-    load("/etc/ssl/cert.pem");
-    load("/etc/ssl/certs/ca-certificates.crt");
-#endif
+void load_test_certs() {
+    auto &tcs = crypto::x509_trusted_storage();
+    auto n_loaded = load_system_certificates(tcs);
+    tcs.load_der(read_file(infotecs_ca()), true);
+    ++n_loaded;
     std::println("loaded {} certs", n_loaded);
 }
 
@@ -2852,7 +2814,7 @@ void test_tls() {
 
     using namespace crypto;
 
-    load_system_certs();
+    load_test_certs();
 
     auto run0 = [](auto &&t, auto &&url, SRCLOC) {
         t.follow_location = false;
@@ -2974,7 +2936,7 @@ void test_email() {
 
     using namespace crypto;
 
-    load_system_certs();
+    load_test_certs();
 
     //
     {
