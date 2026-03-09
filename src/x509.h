@@ -233,6 +233,8 @@ struct x509_storage {
                     });
                     if (it != certs.end()) {
                         issuer_cert_data = it->data;
+                    } else {
+                        print_error("not found");
                     }
                 };
                 find(*this);
@@ -240,7 +242,7 @@ struct x509_storage {
                     find(trusted_storage);
                 }
                 if (issuer_cert_data.empty()) {
-                    print_error("");
+                    print_error("end");
                     return false;
                 }
 
