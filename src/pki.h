@@ -166,7 +166,8 @@ struct public_key_infrastructure {
         return asn1_sequence::make(str);
     }
     auto make_cert(auto &&name, auto &&issuer_sig, auto &&subject_sig, auto &&cert_request) {
-        auto version = asn1_sequence::make(asn1_integer::make(3 - 1)); // ver 3
+        auto version_number = 3;
+        auto version = asn1_sequence::make(asn1_integer::make(version_number - 1));
         version[0] = 0xA0;
         auto serial_number = asn1_integer::make(this->serial_number++);
         auto issuer = make_subject(cert_request.issuer);
@@ -224,6 +225,9 @@ struct public_key_infrastructure {
     }
     auto make_cert(auto &&name, auto &&issuer_subj, auto &&issuer_sig, auto &&subject_sig, auto cert_request) {
         cert_request.issuer = issuer_subj;
+        if (cert_request.is_ca()) {
+            throw std::runtime_error{ "Bad issuer (trying to make CA (root) cert with issuer == subject)" };
+        }
         return make_cert(name, issuer_sig, subject_sig, cert_request);
     }
     auto make_ca(auto &&name, auto &&sig, auto cert_request) {
