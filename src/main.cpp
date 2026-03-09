@@ -2922,7 +2922,11 @@ void test_tls() {
 
     run("software-network.org");
     run("letsencrypt.org");
-    run("example.com");
+#ifndef __linux__
+    run("example.com"); // not available on linux (fedora)
+#endif
+    run("ya.ru");
+    run("yandex.ru");
 #ifdef CI_TESTS
     run("google.com"); // causes hangs
 #endif
