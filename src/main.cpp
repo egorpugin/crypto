@@ -2867,18 +2867,18 @@ void test_tls() {
             cmp_base(0, 1, loc);
         }
     };
-    auto run = [&](auto &&url) {
+    auto run = [&](auto &&url, SRCLOC) {
         http_client t{url};
-        run0(t, url);
+        run0(t, url, loc);
     };
-    auto run_with_params = [&](auto &&url, auto suite, auto kex) {
+    auto run_with_params = [&](auto &&url, auto suite, auto kex, SRCLOC) {
         http_client t{url};
         t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
 #ifndef CI_TESTS
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
 #endif
-        run0(t, url);
+        run0(t, url, loc);
     };
 
     //tcs.load_pem(read_file("d:/dev/wolfssl/certs/sm2/root-sm2.pem"), true);
