@@ -1,4 +1,5 @@
 .sw
+.s*
 *.lnk
 CMake*
 cmake*

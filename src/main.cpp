@@ -3750,7 +3750,7 @@ int main() {
         // test_scrypt();
         // test_argon2();
         test_x509();
-        test_pki();
+        //test_pki();
         // test_streebog();
         // test_grasshopper();
         // test_mgm();

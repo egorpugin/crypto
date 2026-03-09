@@ -201,6 +201,7 @@ struct bigint {
         return *this;
     }
     bigint &operator=(const bigint &p) {
+        mpz_clear(*this);
         mpz_init_set(*this, p);
         return *this;
     }
