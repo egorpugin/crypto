@@ -3710,13 +3710,13 @@ auto test_all() {
     test_dns();
     test_tls();
     test_email();
-    return success != total;
+    return success == total;
 }
 
 #ifdef CI_TESTS
 int main() {
     try {
-        return test_all();
+        return test_all() ? 0 : 1;
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {
