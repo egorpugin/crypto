@@ -75,12 +75,13 @@ struct x509_storage {
 
     using issuer_type = std::string;
     using keyid_type = std::string;
+    using value_type = std::string;
 
     using storage_type = std::vector<u8>;
     using storage_type_ptr = std::unique_ptr<storage_type>;
 
     struct value {
-        bytes_concept data;
+        value_type data;
         bool trusted{};
 
         bool operator==(const value &rhs) const {
@@ -90,7 +91,7 @@ struct x509_storage {
             return data == rhs;
         }
         bool is_valid(auto &&now) const {
-            if (!trusted) {
+            if (!trusted || data.empty()) {
                 return false;
             }
             x509 a{data};
@@ -138,7 +139,7 @@ struct x509_storage {
         }
         return keyid;
     }
-    value *find_valid_cert(auto &&issuer, auto &&keyid, auto &&now) {
+    /*value *find_valid_cert(auto &&issuer, auto &&keyid, auto &&now) {
         auto &certs = index[issuer][keyid];
         auto it = std::find_if(certs.begin(), certs.end(), [&](auto &&v) {
             return v.is_valid(now);
@@ -147,7 +148,7 @@ struct x509_storage {
             return &*it;
         }
         return nullptr;
-    }
+    }*/
 
     bytes_concept add_to_storage(auto &&h) {
         return *storage.emplace_back(std::make_unique<storage_type>(std::from_range, h));
@@ -188,7 +189,7 @@ struct x509_storage {
         return n_loaded;
     }
     auto &load_der(std::string_view data, bool trusted = false) {
-        auto &p = add(add_to_storage(data));
+        auto &p = add(add_to_storage(data), trusted);
         p.trusted = trusted;
         return p;
     }

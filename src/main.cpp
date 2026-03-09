@@ -2583,15 +2583,16 @@ void test_x509() {
     auto until3 = until1; // actual is until 2038
 
     x509_storage trusted_all;
+    trusted_all.add(data3, true);
 #ifdef __linux__
-    auto n = trusted_all.load_pem(read_file("/etc/ssl/cert.pem"), true);
+    //auto n = trusted_all.load_pem(read_file("/etc/ssl/cert.pem"), true);
 #else
-    auto n = trusted_all.load_pem(read_file(cacert_pem()), true);
+    //auto n = trusted_all.load_pem(read_file(cacert_pem()), true);
 #endif
     trusted_all.load_der(read_file(infotecs_ca()), true);
-    ++n;
+    //++n;
 
-    std::println("loaded {} certs", n);
+    //std::println("loaded {} certs", n);
 
     x509_storage trusted3;
     trusted3.add(data3, true);
