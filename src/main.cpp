@@ -2618,18 +2618,63 @@ void test_pki() {
 
     using namespace crypto;
 
-    public_key_infrastructure p{".sw/pki"};
-    gost_sig<ec::gost::r34102001::ec256a, oid::gost_r34102001_param_set_a, streebog<256>> gs256, gs256_child;
-    gost_sig<ec::gost::r34102012::ec512c, oid::gost_3410_12_512_param_set_c, streebog<512>> gs512;
-    auto &&[cakey, casubj] = p.make_ca("ca256", gs256, cert_request{.subject = {.common_name = "localhost CA 256", .country = "RU"}});
-    auto &&[cakey2, casubj2] = p.make_cert("ca256_child", casubj, gs256, gs256_child, cert_request{.subject = {.common_name = "localhost", .country = "RU"}});
-    auto &&[cakey3, casubj3] = p.make_ca("ca512", gs512, cert_request{.subject = {.common_name = "localhost CA 512", .country = "RU"}});
+    using keytype1 = gost_sig<ec::gost::r34102001::ec256a, oid::gost_r34102001_param_set_a, streebog<256>>;
+    using keytype2 = gost_sig<ec::gost::r34102012::ec512c, oid::gost_3410_12_512_param_set_c, streebog<512>>;
 
-    x509_storage s;
-    s.load_der(p.certs[cakey], true);
-    s.load_der(p.certs[cakey3], true);
-    s.add(p.certs[cakey2]);
-    cmp_bool(s.verify(s, p.certs[cakey2], std::chrono::system_clock::now()));
+    public_key_infrastructure p{".sw/pki"};
+    keytype1 ca_key1, key1_child[2], key1_child1_child1, key1_child1_child1_child1;
+    keytype2 ca_key2;
+    auto &&[cakeyid1, casubj1] = p.make_ca("ca256", ca_key1, cert_request{.subject = {.common_name = "localhost CA 256", .country = "RU"}});
+    auto &&[cakeyid2, casubj2] = p.make_ca("ca512", ca_key2, cert_request{ .subject = {.common_name = "localhost CA 512", .country = "RU"} });
+    auto &&[keyid1, keysubj1] = p.make_cert("ca256_child1", casubj1, ca_key1, key1_child[0], cert_request{ .subject = {.common_name = "localhost k 1", .country = "RU"} });
+    auto &&[keyid2, keysubj2] = p.make_cert("ca256_child2", casubj2, ca_key1, key1_child[1], cert_request{ .subject = {.common_name = "localhost k 2", .country = "RU"} });
+    auto &&[keyid3, keysubj3] = p.make_cert("ca256_child1_child1", keysubj1, key1_child[0], key1_child1_child1, cert_request{ .subject = {.common_name = "localhost k 3", .country = "RU"} });
+    auto &&[keyid4, keysubj4] = p.make_cert("ca256_child1_child1_child1", keysubj3, key1_child1_child1, key1_child1_child1_child1, cert_request{ .subject = {.common_name = "localhost k 4", .country = "RU"} });
+
+    auto now = std::chrono::system_clock::now();
+
+    {
+        x509_storage s;
+        s.load_der(p.certs[cakeyid1], true);
+        s.load_der(p.certs[cakeyid2], true);
+        s.add(p.certs[keyid1]);
+        cmp_bool(s.verify(s, p.certs[keyid1], now));
+    }
+    {
+        x509_storage s;
+        s.load_der(p.certs[cakeyid1], true);
+        cmp_bool(s.verify(s, p.certs[keyid1], now));
+    }
+    {
+        x509_storage s;
+        s.load_der(p.certs[cakeyid2], true);
+        cmp_bool(s.verify(s, p.certs[keyid1], now), false);
+        cmp_bool(s.verify(s, p.certs[keyid2], now), false);
+    }
+    {
+        x509_storage s;
+        s.load_der(p.certs[cakeyid1], true);
+        cmp_bool(s.verify(s, p.certs[keyid3], now), false);
+        cmp_bool(s.verify(s, p.certs[keyid1], now));
+        cmp_bool(s.verify(s, p.certs[keyid3], now));
+    }
+    {
+        x509_storage s;
+        s.load_der(p.certs[cakeyid1], true);
+        cmp_bool(s.verify(s, p.certs[keyid4], now), false);
+        cmp_bool(s.verify(s, p.certs[keyid3], now), false);
+        cmp_bool(s.verify(s, p.certs[keyid1], now));
+        cmp_bool(s.verify(s, p.certs[keyid4], now));
+        cmp_bool(s.verify(s, p.certs[keyid3], now));
+    }
+    {
+        x509_storage s;
+        s.load_der(p.certs[cakeyid1], true);
+        cmp_bool(s.verify(s, p.certs[keyid1], now));
+        cmp_bool(s.verify(s, p.certs[keyid4], now), false);
+        cmp_bool(s.verify(s, p.certs[keyid3], now));
+        cmp_bool(s.verify(s, p.certs[keyid4], now));
+    }
 }
 
 void test_streebog() {
