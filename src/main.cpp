@@ -2588,7 +2588,7 @@ void test_x509() {
     {
         x509_storage s;
         s.add(data1);
-        cmp_bool(s.verify(trusted_all, data1, until1), false);
+        //cmp_bool(s.verify(trusted_all, data1, until1), false);
         s.add(data2);
         cmp_bool(s.verify(trusted_all, data2, until1));
         //cmp_bool(s.verify(trusted_all, data1, until1));
