@@ -3677,6 +3677,10 @@ ed 10 1d ae d5 cf e9 f8 32 06 a4 bb 2b f5 1f a2
     test_url("ffff"sv, "ZmZmZg"s);
 }
 
+int return_code() {
+    return success == total ? 0 : 1;
+}
+
 auto test_all() {
     test_base64();
     test_aes();
@@ -3710,13 +3714,13 @@ auto test_all() {
     test_dns();
     test_tls();
     test_email();
-    return success == total;
 }
 
 #ifdef CI_TESTS
 int main() {
     try {
-        return test_all() ? 0 : 1;
+        test_all();
+        return return_code();
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {
@@ -3766,7 +3770,7 @@ int main() {
         //test_email();
         //test_ssh2();
 
-        return 0;
+        return return_code();
     } catch (std::exception &e) {
         std::println(std::cerr, "{}", e.what());
     } catch (...) {
