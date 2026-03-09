@@ -3778,7 +3778,7 @@ int main() {
         //test_slh_dsa();
         //
         //test_dns();
-        //test_tls();
+        test_tls();
         //test_email();
         //test_ssh2();
 
