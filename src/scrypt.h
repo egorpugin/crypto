@@ -55,37 +55,33 @@ struct scrypt__ {
 
     int N, r, p;
     int sz{ block_size * 2 * r };
-    std::unique_ptr<u8[]> data{ new
-#ifdef __GNUC__
-        alignas(block_size)
-#endif
-        u8[sz * (N + 2)] };
+    std::unique_ptr<u8[]> data{ new u8[sz * (N + 2)] };
     u8 *V{ &data[sz * 2] }, *X{ &data[0] }, *Y{ &data[sz] };
 
-    void BlockMix(u8 *B) {
-        alignas(block_size) u8 X[block_size];
-        memcpy(X, B + block_size * (2 * r - 1), block_size);
+    void BlockMix() {
+        alignas(block_size) u8 Z[block_size];
+        memcpy(Z, X + block_size * (2 * r - 1), block_size);
         for (int i = 0; i < 2 * r; ++i) {
             for (int j = 0; j < block_size; ++j) {
-                X[j] ^= B[i * block_size + j];
+                Z[j] ^= X[i * block_size + j];
             }
-            salsa_block((u32 *)X, (u32 *)X, 8);
-            memcpy(Y + block_size * (i / 2 + (i % 2) * r), X, block_size);
+            salsa_block((u32 *)Z, (u32 *)Z, 8);
+            memcpy(Y + block_size * (i / 2 + (i % 2) * r), Z, block_size);
         }
-        memcpy(B, Y, sz);
+        memcpy(X, Y, sz);
     }
     void ROMix(u8 *B) {
         memcpy(X, B, sz);
         for (int i = 0; i < N; ++i) {
             memcpy(V + sz * i, X, sz);
-            BlockMix(X);
+            BlockMix();
         }
         for (int i = 0; i < N; ++i) {
             auto j = *(u32 *)&X[(2 * r - 1) * 64] % N;
             for (int k = 0; k < sz; ++k) {
                 X[k] ^= V[j * sz + k];
             }
-            BlockMix(X);
+            BlockMix();
         }
         memcpy(B, X, sz);
     }

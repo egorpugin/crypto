@@ -196,6 +196,7 @@ struct x509_storage {
         return p;
     }
 
+    // TODO: add enum with error codes? (success, no_cert_in_chain (not found) etc.)
     bool verify(auto &&trusted_storage, auto &&in_data, const time_point &now) {
         auto &v = add(in_data);
         if (v.trusted) {
