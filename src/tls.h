@@ -206,9 +206,9 @@ struct tls13_ {
     template <typename T>
     struct something_plus_MLKEM768 {
         using mlkem_type = mlkem<768>;
-        static inline constexpr auto key_size = sizeof(T::public_key_type) + sizeof(mlkem_type::public_key_type);
+        static inline constexpr auto key_size = sizeof(typename T::public_key_type) + sizeof(mlkem_type::public_key_type);
         using public_key_type = array<key_size>;
-        static inline constexpr auto peer_key_size = sizeof(T::public_key_type) + mlkem_type::kem_cipher_text_len;
+        static inline constexpr auto peer_key_size = sizeof(typename T::public_key_type) + mlkem_type::kem_cipher_text_len;
         using peer_key_type = array<peer_key_size>;
 
         mlkem_type m;
@@ -220,13 +220,13 @@ struct tls13_ {
         }
         void public_key(auto &&key) {
             memcpy(key.data(), m.public_key_.data(), m.public_key_.size());
-            ec.public_key(bytes_concept{key.data() + m.public_key_.size(), sizeof(T::public_key_type)});
+            ec.public_key(bytes_concept{key.data() + m.public_key_.size(), sizeof(typename T::public_key_type)});
         }
         auto shared_secret(const peer_key_type &peer_public_key) {
             array<32 + 32> shared_secret;
             array<mlkem_type::shared_secret_byte_len> ss;
             m.decapsulate(std::span{peer_public_key}.first<mlkem_type::kem_cipher_text_len>(), ss);
-            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len, sizeof(T::public_key_type)});
+            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len, sizeof(typename T::public_key_type)});
             memcpy(shared_secret.data(), ss.data(), 32);
             memcpy(shared_secret.data() + 32, ss2.data(), 32);
             return shared_secret;
