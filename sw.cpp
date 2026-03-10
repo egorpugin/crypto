@@ -42,6 +42,7 @@ void build(Solution &s) {
         //t += "pub.egorpugin.primitives.http"_dep;
         t += "pub.egorpugin.primitives.sw.main"_dep;
         t += "org.sw.demo.zeux.pugixml"_dep;
+        t += crypto;
     }
 
     auto &test2 = s.addTarget<Executable>("test2");

@@ -1,5 +1,6 @@
 // generator from https://www.iana.org/assignments/tls-parameters/tls-parameters.xml
 
+#include "http.h"
 //#include <primitives/http.h>
 #include <primitives/sw/main.h>
 #include <pugixml.hpp>
@@ -33,8 +34,16 @@ struct emitter {
 };
 
 int main(int argc, char *argv[]) {
+    auto &ts = crypto::x509_trusted_storage();
+    crypto::load_system_certificates(ts);
+    crypto::http_client t{ "https://www.iana.org/assignments/tls-parameters/tls-parameters.xml" };
+    t.run();
+    if (!t.m) {
+        throw std::runtime_error{"cannot get tls-parameters.xml file"};
+    }
+
     pugi::xml_document doc;
-    pugi::xml_parse_result result = doc.load_file("d:/dev/crypto/tls-parameters.xml");
+    pugi::xml_parse_result result = doc.load_buffer(t.m.body.data(), t.m.body.size());
     if (!result) {
         throw SW_RUNTIME_ERROR("Load result: "s + result.description());
     }
@@ -60,6 +69,10 @@ int main(int argc, char *argv[]) {
                 name[i] = tolower(name[i]);
             }
             name2 += name[i];
+        }
+        // skip some
+        if (name2 == "exporter_labels") {
+            continue;
         }
         auto en = e.enum_(name2);
         for (auto &&q : n.select_nodes("./record[*]")) {
