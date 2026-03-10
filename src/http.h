@@ -24,6 +24,7 @@ struct http_client {
     bool follow_location{true}; // for now
     bool redirected{};
     bool tls{true};
+    std::vector<std::pair<std::string, std::string>> headers;
 
     struct http_message {
         static inline constexpr auto line_delim = "\r\n"sv;
@@ -112,6 +113,7 @@ struct http_client {
     // http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {}
     // http_client(auto &&url) : http_client{default_io_context(), url} {}
     http_client(const std::string &url) : url_internal{url} {
+        headers.emplace_back("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36");
     }
     void run() {
         // run(default_io_context());
@@ -204,6 +206,9 @@ struct http_client {
         string req = std::format("GET {} HTTP/1.1\r\n", path);
         req += "Host: "s + host + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
+        for (auto &&[k,v] : headers) {
+            req += k + ": "s + v + "\r\n";
+        }
         req += "\r\n";
         auto resp = co_await http_query(req);
         co_return resp;
