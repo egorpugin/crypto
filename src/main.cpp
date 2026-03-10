@@ -2875,13 +2875,13 @@ void test_tls() {
              tls13::CipherSuite::TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S,
              tls13::CipherSuite::TLS_GOSTR341112_256_WITH_MAGMA_MGM_S,
          }) {
-        run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A);
-        run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B);
-        run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C);
-        run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D);
-        run_with_params("91.244.183.22:15072", s, parameters::supported_groups::GC512A);
-        run_with_params("91.244.183.22:15082", s, parameters::supported_groups::GC512B);
-        run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C);
+        run_with_params("91.244.183.22:15002", s, parameters::supported_groups::GC256A, true);
+        run_with_params("91.244.183.22:15012", s, parameters::supported_groups::GC256B, true);
+        run_with_params("91.244.183.22:15022", s, parameters::supported_groups::GC256C, true);
+        run_with_params("91.244.183.22:15032", s, parameters::supported_groups::GC256D, true);
+        run_with_params("91.244.183.22:15072", s, parameters::supported_groups::GC512A, true);
+        run_with_params("91.244.183.22:15082", s, parameters::supported_groups::GC512B, true);
+        run_with_params("91.244.183.22:15092", s, parameters::supported_groups::GC512C, true);
 
         // run_with_params("91.244.183.22:15083", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
         // run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
