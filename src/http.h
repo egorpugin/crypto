@@ -31,11 +31,15 @@ struct http_client {
         static inline constexpr auto body_delim = "\r\n\r\n"sv;
 
         std::string header, body;
-        string_view code;
+        string_view code_raw;
+        int code{};
         std::map<string_view, string_view> headers;
 
         http_message() {
             header.reserve(10'000'000);
+        }
+        explicit operator bool() const {
+            return code >= 200 && code < 300;
         }
         awaitable<void> receive(auto &&s, auto &&transport) {
             auto receive = [&]() -> awaitable<std::string> {
@@ -56,7 +60,13 @@ struct http_client {
             // read headers
             auto hdrs = header | std::views::split(line_delim);
             auto cod = *std::begin(hdrs);
-            code = std::string_view{cod.begin(), cod.end()};
+            code_raw = std::string_view{cod.begin(), cod.end()};
+            if (auto p = code_raw.find(' '); p != -1) {
+                auto c = code_raw.substr(p + 1);
+                if (c.size() >= 3) {
+                    std::from_chars(&c[0], &c[3], code);
+                }
+            }
             for (auto &&h : hdrs | std::views::drop(1)) {
                 std::string_view s{h.begin(), h.end()};
                 auto p = s.find(':');
