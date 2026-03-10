@@ -2825,7 +2825,7 @@ void test_tls() {
 
     auto run0 = [](auto &&t, auto &&url, SRCLOC) {
         t.follow_location = false;
-        t.tls_layer.ignore_server_hostname_check = true;
+        //t.tls_layer.ignore_server_hostname_check = true;
 #ifndef CI_TESTS
         std::cout << "connecting to " << url << "\n";
 #endif
@@ -2847,10 +2847,11 @@ void test_tls() {
         http_client t{url};
         run0(t, url, loc);
     };
-    auto run_with_params = [&](auto &&url, auto suite, auto kex, SRCLOC) {
+    auto run_with_params = [&](auto &&url, auto suite, auto kex, bool ignore_host_check = false, SRCLOC) {
         http_client t{url};
         t.tls_layer.force_suite = suite;
         t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
+        t.tls_layer.ignore_server_hostname_check = ignore_host_check;
 #ifndef CI_TESTS
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
 #endif
@@ -2888,6 +2889,8 @@ void test_tls() {
 #endif
 
     run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+    // not implemented yet
+    //run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2MLKEM768);
 
     run("software-network.org");
     run("letsencrypt.org");
@@ -3748,7 +3751,7 @@ int main() {
         //test_pbkdf2();
         //test_chacha20();
         //test_chacha20_aead();
-        test_scrypt();
+        //test_scrypt();
         // test_argon2();
         //test_x509();
         //test_pki();
@@ -3762,7 +3765,7 @@ int main() {
         //test_mldsa();
         //test_slh_dsa();
         //test_dns();
-        //test_tls();
+        test_tls();
         //test_email();
         //test_ssh2();
 
