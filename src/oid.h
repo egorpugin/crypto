@@ -57,7 +57,7 @@ constexpr auto sm2sm3                       = make_oid<1, 2, 156, 10197, 1, 501>
 //constexpr auto ecPublicKey = make_oid<1, 2, 840, 10045, 2, 1>();
 //constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
 
-constexpr auto prime256v1 = make_oid<1, 2, 840, 10045, 3, 1, 7>();
-constexpr auto secp384r1 = make_oid<1, 3, 132, 0, 34>();
+constexpr auto prime256v1                   = make_oid<1, 2, 840, 10045, 3, 1, 7>();
+constexpr auto secp384r1                    = make_oid<1, 3, 132, 0, 34>();
 
 }
