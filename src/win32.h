@@ -99,7 +99,7 @@ struct certificate_store {
     HANDLE h;
 
     certificate_store(const std::string &name) {
-        if (!(h = CertOpenSystemStore(0, name.c_str()))) {
+        if (!(h = CertOpenSystemStoreW(0, std::filesystem::path{name}.wstring().c_str()))) {
             throw std::runtime_error{"can't open cert store" + name};
         }
     }
