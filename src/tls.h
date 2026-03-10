@@ -203,15 +203,16 @@ struct tls13_ {
             return private_key.shared_secret(peer_public_key);
         }
     };
-    struct X25519MLKEM768 {
+    template <typename T>
+    struct something_plus_MLKEM768 {
         using mlkem_type = mlkem<768>;
-        static inline constexpr auto key_size = sizeof(curve25519::public_key_type) + sizeof(mlkem_type::public_key_type);
+        static inline constexpr auto key_size = sizeof(T::public_key_type) + sizeof(mlkem_type::public_key_type);
         using public_key_type = array<key_size>;
-        static inline constexpr auto peer_key_size = sizeof(curve25519::public_key_type) + mlkem_type::kem_cipher_text_len;
+        static inline constexpr auto peer_key_size = sizeof(T::public_key_type) + mlkem_type::kem_cipher_text_len;
         using peer_key_type = array<peer_key_size>;
 
         mlkem_type m;
-        curve25519 ec;
+        T ec;
 
         void private_key() {
             m.private_key();
@@ -219,18 +220,19 @@ struct tls13_ {
         }
         void public_key(auto &&key) {
             memcpy(key.data(), m.public_key_.data(), m.public_key_.size());
-            ec.public_key(bytes_concept{key.data() + m.public_key_.size(), sizeof(curve25519::public_key_type)});
+            ec.public_key(bytes_concept{key.data() + m.public_key_.size(), sizeof(T::public_key_type)});
         }
         auto shared_secret(const peer_key_type &peer_public_key) {
             array<32 + 32> shared_secret;
             array<mlkem_type::shared_secret_byte_len> ss;
             m.decapsulate(std::span{peer_public_key}.first<mlkem_type::kem_cipher_text_len>(), ss);
-            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len, sizeof(curve25519::public_key_type)});
+            auto ss2 = ec.shared_secret(bytes_concept{peer_public_key.data() + mlkem_type::kem_cipher_text_len, sizeof(T::public_key_type)});
             memcpy(shared_secret.data(), ss.data(), 32);
             memcpy(shared_secret.data() + 32, ss2.data(), 32);
             return shared_secret;
         }
     };
+    struct X25519MLKEM768 : something_plus_MLKEM768<curve25519> {};
     template <typename KeyExchange, typename... KeyExchanges>
     struct key_exchanges : types<KeyExchange, KeyExchanges...> {
         static constexpr auto size() {
@@ -272,8 +274,12 @@ struct tls13_ {
                       key_exchange<ec::gost::r34102012::ec512c, parameters::supported_groups::GC512C>,
                       // cn
                       key_exchange<ec::sm2, parameters::supported_groups::curveSM2>,
+                      // not tested, see https://datatracker.ietf.org/doc/draft-yang-tls-hybrid-sm2-mlkem/
+                      // sm2 data + mlkem or mlkem + sm2 (like for X25519MLKEM768)
+                      //key_exchange<something_plus_MLKEM768<ec::sm2>, parameters::supported_groups::curveSM2MLKEM768>,
                       // ml-kem
-                      key_exchange<X25519MLKEM768, parameters::supported_groups::X25519MLKEM768>>;
+                      key_exchange<X25519MLKEM768, parameters::supported_groups::X25519MLKEM768>
+        >;
     static inline constexpr parameters::signature_scheme all_signature_algorithms[] = {
         parameters::signature_scheme::ecdsa_secp256r1_sha256, // mandatory
         parameters::signature_scheme::rsa_pkcs1_sha256,       // mandatory
