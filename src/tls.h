@@ -857,16 +857,14 @@ struct tls13_ {
                                 auto s = seq.get<asn1_set>();
                                 auto s2 = s.get<asn1_sequence>();
                                 auto string_name = s2.get<asn1_oid>(0);
-                                constexpr auto commonName = make_oid<2, 5, 4, 3>();
-                                if (string_name == commonName) {
+                                if (string_name == oid::common_name) {
                                     check_name(s2.subsequence(1));
                                 }
                             }
                             if (!servername_ok) {
                                 auto cert = a.get<asn1_sequence>(x509::main, x509::tbs_certificate);
                                 if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-                                    constexpr auto subjectAltName = make_oid<2, 5, 29, 17>();
-                                    if (auto sk = exts->get_extension(subjectAltName)) {
+                                    if (auto sk = exts->get_extension(oid::subjectAltName)) {
                                         auto names = sk->get<asn1_sequence>(0, 1, 0);
                                         for (auto &&name : names.data_as_strings()) {
                                             servername_ok |= compare_servername(name);

@@ -7,6 +7,7 @@
 #include "bigint.h"
 #include "sha2.h"
 #include "hmac.h"
+#include "oid.h"
 
 namespace crypto::rsa {
 
@@ -61,9 +62,7 @@ struct public_key {
         asn1 a{data};
         auto pka = a.get<asn1_oid>(pkcs8::public_key::main,pkcs8::public_key::algorithm,pkcs8::public_key::algorithm_oid);
 
-        //rsaEncryption (PKCS #1)
-        auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
-        if (pka != rsaEncryption) {
+        if (pka != oid::rsaEncryption) {
             throw std::runtime_error{"unknown pkcs8::public_key_algorithm"};
         }
 
@@ -203,9 +202,7 @@ struct private_key : public_key {
         if (type == pkcs8) {
             auto pka = a.get<asn1_oid>(pkcs8::private_key::main,pkcs8::private_key::algorithm,pkcs8::private_key::algorithm_oid);
 
-            //rsaEncryption (PKCS #1)
-            auto rsaEncryption = make_oid<1,2,840,113549,1,1,1>();
-            if (pka != rsaEncryption) {
+            if (pka != oid::rsaEncryption) {
                 throw std::runtime_error{"unknown pkcs8::private_key_algorithm"};
             }
 

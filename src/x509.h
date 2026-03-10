@@ -217,9 +217,7 @@ struct x509_storage {
             return false;
         }
         if (auto exts = cert.get_next<asn1_x509_extensions>()) {
-            constexpr auto old_authority_keyid = make_oid<2, 5, 29, 1>();
-            constexpr auto authority_keyid = make_oid<2, 5, 29, 35>();
-            if (auto sk = exts->get_extension(authority_keyid)) {
+            if (auto sk = exts->get_extension(oid::authority_keyid)) {
                 auto keyid = extract_keyid(sk);
                 bytes_concept issuer_cert_data;
                 auto find = [&](auto &&store) {
@@ -245,24 +243,6 @@ struct x509_storage {
                 auto alg = current_cert.get<asn1_oid>(x509::main, x509::certificate_signature_algorithm, 0);
                 auto sig = current_cert.get<asn1_bit_string>(x509::main, x509::certificate_signature).data.subspan(1);
 
-                // https://www.rfc-editor.org/rfc/rfc8017 pkcs #1
-                // 1.3.6.1.5.5.7.3.1 serverAuth
-
-                constexpr auto sha256WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 11>();
-                constexpr auto sha384WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 12>();
-                constexpr auto sha512WithRSAEncryption = make_oid<1, 2, 840, 113549, 1, 1, 13>();
-                constexpr auto ecdsa_with_SHA256 = make_oid<1,2,840,10045,4,3,2>();
-                constexpr auto ecdsa_with_SHA384 = make_oid<1,2,840,10045,4,3,3>();
-                constexpr auto ecdsa_with_SHA512 = make_oid<1,2,840,10045,4,3,4>();
-                constexpr auto sm2sm3 = make_oid<1, 2, 156, 10197, 1, 501>();
-
-                // rsaEncryption (PKCS #1)
-                //constexpr auto rsaEncryption = make_oid<1, 2, 840, 113549, 1, 1, 1>();
-                //constexpr auto ecPublicKey = make_oid<1, 2, 840, 10045, 2, 1>();
-                //constexpr auto Ed25519 = make_oid<1, 3, 101, 112>();
-                //constexpr auto GOST_R3410_12_256 = make_oid<1, 2, 643, 7, 1, 1, 1, 1>();
-                //constexpr auto GOST_R3410_12_512 = make_oid<1, 2, 643, 7, 1, 1, 1, 2>();
-
                 x509 issuer_cert{issuer_cert_data};
                 auto pubk_info = issuer_cert.get_tbs_field<asn1_sequence>(x509::subject_public_key_info);
                 auto issuer_pubkey = pubk_info.get<asn1_bit_string>(x509::subject_public_key);
@@ -277,8 +257,6 @@ struct x509_storage {
                     return false;
                 };
                 auto ecdsa_sha2 = [&]<auto Bits>() {
-                    constexpr auto prime256v1 = make_oid<1,2,840,10045,3,1,7>();
-                    constexpr auto secp384r1 = make_oid<1,3,132,0,34>();
                     auto curve = pubk_info.get<asn1_oid>(0, 1);
 
                     auto r = asn1_sequence{sig}.get<asn1_integer>(0,0).data;
@@ -294,11 +272,11 @@ struct x509_storage {
                         return false;
                     };
 
-                    if (curve == prime256v1) {
+                    if (curve == oid::prime256v1) {
                         if (!f((ec::secp256r1 **)nullptr)) {
                             return false;
                         }
-                    } else if (curve == secp384r1) {
+                    } else if (curve == oid::secp384r1) {
                         if (!f((ec::secp384r1 **)nullptr)) {
                             return false;
                         }
@@ -309,17 +287,18 @@ struct x509_storage {
                     return true;
                 };
 
-                if (alg == sha256WithRSAEncryption) {
+                if (0) {
+                } else if (alg == oid::sha256WithRSAEncryption) {
                     return rsa_sha2.template operator()<256>();
-                } else if (alg == sha384WithRSAEncryption) {
+                } else if (alg == oid::sha384WithRSAEncryption) {
                     return rsa_sha2.template operator()<384>();
-                } else if (alg == sha512WithRSAEncryption) {
+                } else if (alg == oid::sha512WithRSAEncryption) {
                     return rsa_sha2.template operator()<512>();
-                } else if (alg == ecdsa_with_SHA256) {
+                } else if (alg == oid::ecdsa_with_SHA256) {
                     return ecdsa_sha2.template operator()<256>();
-                } else if (alg == ecdsa_with_SHA384) {
+                } else if (alg == oid::ecdsa_with_SHA384) {
                     return ecdsa_sha2.template operator()<384>();
-                } else if (alg == ecdsa_with_SHA512) {
+                } else if (alg == oid::ecdsa_with_SHA512) {
                     return ecdsa_sha2.template operator()<512>();
                 } else if (alg == oid::gost2012Signature256) {
                     auto param_set = pubk_info.get<asn1_oid>(0, 1, 0);
@@ -343,7 +322,7 @@ struct x509_storage {
                     }
                 } else if (alg == oid::gost2012Signature512) {
                     throw std::runtime_error{"gost2012Signature512 is not impl"};
-                } else if (alg == sm2sm3) {
+                } else if (alg == oid::sm2sm3) {
                     auto r = asn1_sequence{sig}.get<asn1_integer>(0,0).data;
                     auto s = asn1_sequence{sig}.get<asn1_integer>(0,1).data;
                     if (!(0
@@ -365,8 +344,8 @@ struct x509_storage {
                     std::cerr << "unknown x509::signature_algorithm: " << s << "\n";
                     throw std::runtime_error{"unknown x509::signature_algorithm"};
                 }
-            } else if (auto sk = exts->get_extension(old_authority_keyid)) {
-                throw std::runtime_error{"not impl"}; // old_authority_keyid?
+            } else if (auto sk = exts->get_extension(oid::old_authority_keyid)) {
+                throw std::runtime_error{"not impl"};
             } else {
                 throw std::runtime_error{"not impl"};
             }

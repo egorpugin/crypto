@@ -138,13 +138,6 @@ struct public_key_infrastructure {
     std::map<key, std::string> certs;
 
     static auto make_subject(const subject_type &s) {
-        constexpr auto c = make_oid<2,5,4,6>();
-        constexpr auto st = make_oid<2,5,4,8>();
-        constexpr auto l = make_oid<2,5,4,7>();
-        constexpr auto o = make_oid<2,5,4,10>();
-        constexpr auto ou = make_oid<2,5,4,11>();
-        constexpr auto cn = make_oid<2,5,4,3>();
-
         std::string str;
         auto f = [&](auto &&s, auto &&oid) {
             if (s.empty()) {
@@ -156,12 +149,12 @@ struct public_key_infrastructure {
                 )
             );
         };
-        f(s.common_name, cn);
-        f(s.organization_unit, ou);
-        f(s.organization, o);
-        f(s.locality, l);
-        f(s.state, st);
-        f(s.country, c);
+        f(s.common_name, oid::common_name);
+        f(s.organization_unit, oid::organization_unit);
+        f(s.organization, oid::organization);
+        f(s.locality, oid::locality);
+        f(s.state, oid::state);
+        f(s.country, oid::country);
 
         return asn1_sequence::make(str);
     }
