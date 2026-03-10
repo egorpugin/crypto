@@ -91,9 +91,9 @@ enum class cipher_suites : uint16_t {
     TLS_DHE_DSS_WITH_CAMELLIA_128_CBC_SHA                                  = 0x0044         ,     // not recommended
     TLS_DHE_RSA_WITH_CAMELLIA_128_CBC_SHA                                  = 0x0045         ,     // not recommended
     TLS_DH_anon_WITH_CAMELLIA_128_CBC_SHA                                  = 0x0046         ,     // not recommended
-    // Reserved to avoid conflicts with deployed implementations           = 0x0047-4F      ,
+    // Reserved to avoid conflicts with     deployed implementations       = 0x0047-4F      ,
     // Reserved to avoid conflicts                                         = 0x0050-58      ,
-    // Reserved to avoid conflicts with deployed implementations           = 0x0059-5C      ,
+    // Reserved to avoid conflicts with     deployed implementations       = 0x0059-5C      ,
     // Unassigned                                                          = 0x005D-5F      ,
     // Reserved to avoid conflicts with widely deployed implementations    = 0x0060-66      ,
     TLS_DHE_RSA_WITH_AES_128_CBC_SHA256                                    = 0x0067         ,     // not recommended
@@ -732,46 +732,6 @@ enum class hash_algorithm : uint8_t {
     Intrinsic                                                              = 8              ,     // recommended
     // Reserved                                                            = 9-223          ,
     // Reserved for Private Use                                            = 224-255        ,
-};
-
-enum class exporter_labels : uint8_t {
-    // client finished                                                                      ,     // recommended
-    // server finished                                                                      ,     // recommended
-    // master secret                                                                        ,     // recommended
-    // key expansion                                                                        ,     // recommended
-    // client EAP encryption                                                                ,     // recommended
-    // ttls keying material                                                                 ,     // not recommended
-    // ttls challenge                                                                       ,     // not recommended
-    // EXTRACTOR-dtls_srtp                                                                  ,     // recommended
-    EXPORTER_DTLS_OVER_SCTP                                                                 ,     // recommended
-    // EXPORTER-ETSI-TC-M2M-Bootstrap                                                       ,     // not recommended
-    // EXPORTER-ETSI-TC-M2M-Connection                                                      ,     // not recommended
-    TLS_MK_Extr                                                                             ,     // not recommended
-    EXPORTER_GBA_Digest                                                                     ,     // not recommended
-    // EXPORTER: teap session key seed                                                      ,     // recommended
-    // EXPORTER-oneM2M-Bootstrap                                                            ,     // not recommended
-    // EXPORTER-oneM2M-Connection                                                           ,     // not recommended
-    // EXPORTER-oneM2M-ESCertKE                                                             ,     // not recommended
-    // EXPORTER-Token-Binding                                                               ,     // recommended
-    // EXPORTER-BBF-Dying-Gasp                                                              ,     // not recommended
-    // EXPORTER-network-time-security                                                       ,     // recommended
-    EXPORTER_3GPP_N32_MASTER                                                                ,     // not recommended
-    // EXPORTER-ACE-MQTT-Sign-Challenge                                                     ,     // not recommended
-    EXPORTER_EAP_TLS_Key_Material                                                           ,     // recommended
-    // EXPORTER_EAP_TLS_Method-Id                                                           ,     // recommended
-    // EXPORTER-BBF-USP-Record                                                              ,     // not recommended
-    // EXPORTER-client authenticator handshake context                                      ,     // recommended
-    // EXPORTER-server authenticator handshake context                                      ,     // recommended
-    // EXPORTER-client authenticator finished key                                           ,     // recommended
-    // EXPORTER-server authenticator finished key                                           ,     // recommended
-    // EXPORTER-Channel-Binding                                                             ,     // recommended
-    // EXPORTER: teap session key seed                                                      ,     // recommended
-    // EXPORTER: Inner Methods Compound Keys                                                ,     // recommended
-    // EXPORTER: Session Key Generating Function                                            ,     // recommended
-    // EXPORTER: Extended Session Key Generating Function                                   ,     // recommended
-    TEAPbindkey@ietf.org                                                                    ,     // recommended
-    // EXPORTER-HTTP-Concealed-Authentication                                               ,     // recommended
-    EXPORTER_3GPP_MRI_AESCCM_8                                                              ,     // not recommended
 };
 
 enum class authorization_data_formats : uint8_t {
