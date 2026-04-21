@@ -5,8 +5,6 @@
 
 #include "sha3.h"
 
-// TODO: SLH-DSA?
-
 namespace crypto {
 
 // Prime field arithmetic over Z_q s.t. q = 2^23 - 2^13 + 1
