@@ -18,7 +18,7 @@ struct keccak_p {
     static inline constexpr auto state_size = state_square_size * state_square_size;
     static inline constexpr auto w = b / state_size;
     static consteval unsigned log2floor(auto x) {
-        return x == 1 ? 0 : 1+log2floor(x >> 1);
+        return x == 1 ? 0 : 1 + log2floor(x >> 1);
     }
     static inline constexpr auto l = log2floor(w);
     using state_type = std::conditional_t<
@@ -88,11 +88,11 @@ struct keccak_p {
 
 // Padding: bits are counted from right to left (01234567), not as usual (76543210)!
 // So, 0b10 in code means 0b01000000
-template <auto Capacity, auto Padding>
-struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding>> {
+template <auto Capacity, auto Padding, auto PaddingLength>
+struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding, PaddingLength>> {
     static inline constexpr auto rate = StateBits - Capacity;
 
-    using hash_traits_type = hash_traits<keccak<Capacity, Padding>>;
+    using hash_traits_type = hash_traits<keccak<Capacity, Padding, PaddingLength>>;
     using hash_traits_type::update;
 
     int blockpos{};
@@ -117,16 +117,16 @@ struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding>> {
     }
     void pad() noexcept {
         auto *d = (u8 *)A;
-        d[blockpos++] ^= Padding | (1 << (log2floor(Padding) + 1));
-        blockpos += (rate - (bitlen % rate)) / 8 - 2;
+        d[blockpos++] ^= Padding | (1 << PaddingLength);
+        blockpos += (rate - (bitlen % rate)) / 8 - 1 - 1;
         d[blockpos++] ^= 0x80;
         permute();
     }
 };
 
 template <auto DigestSizeBits>
-struct sha3_base : keccak<2 * DigestSizeBits, 0b10> {
-    using base = keccak<2 * DigestSizeBits, 0b10>;
+struct sha3_base : keccak<2 * DigestSizeBits, 0b10, 2> {
+    using base = keccak<2 * DigestSizeBits, 0b10, 2>;
     static inline constexpr auto digest_size_bytes = DigestSizeBits / 8;
 
     auto digest() noexcept {
@@ -142,9 +142,11 @@ struct sha3_base : keccak<2 * DigestSizeBits, 0b10> {
     }
 };
 
-template <auto ShakeType>
-struct shake_base : keccak<2 * ShakeType, 0b1111> {
-    using base = keccak<2 * ShakeType, 0b1111>;
+// RawSHAKE(J, d) = KECCAK[*](J || 0b11, d)
+// SHAKE(M, d)    = RawSHAKE(M || 0b11, d)
+template <auto ShakeType, auto Padding = 0b1111, auto PaddingLength = 4>
+struct shake_base : keccak<2 * ShakeType, Padding, PaddingLength> {
+    using base = keccak<2 * ShakeType, Padding, PaddingLength>;
     static inline constexpr auto digest_size_bytes = base::rate / 8;
 
     size_t offset{};
@@ -184,14 +186,54 @@ struct shake_base : keccak<2 * ShakeType, 0b1111> {
     }
 };
 
+template <auto ShakeType>
+struct cshake_base : shake_base<ShakeType, 0b00, 2> {
+    using base = shake_base<ShakeType, 0b00, 2>;
+
+    // usual shake if no args
+    cshake_base(bytes_concept function_name, bytes_concept customization_string) {
+        if (function_name.empty() && customization_string.empty()) {
+            throw std::runtime_error{"empty function_name and customization_string, use usual shake"};
+        }
+        if (function_name.size() > 255 || customization_string.size() > 255) {
+            throw std::runtime_error{ "too big string" };
+        }
+        auto left_encode = [&](auto &&size) { // up to 256 bytes
+            u8 size1{};
+            auto sz = size;
+            while (sz) {
+                sz >>= 8;
+                ++size1;
+            }
+            if (size1 == 0) size1 = 1;
+            base::update(&size1, sizeof(size1));
+            base::update((u8*)&size, 1);
+            };
+        auto encode = [&](auto &&x) {
+            left_encode(x.size() * 8);
+            base::update(x);
+            };
+        left_encode(base::rate / 8);
+        encode(function_name);
+        encode(customization_string);
+        array<base::rate / 8> z{};
+        base::update(z.data(), z.size() - base::blockpos);
+    }
+};
+
 template <auto DigestSizeBits> struct sha3;
 template <auto ShakeType> struct shake;
+template <auto ShakeType> struct cshake;
 
 template <> struct sha3<224> : sha3_base<224> {};
 template <> struct sha3<256> : sha3_base<256> {};
 template <> struct sha3<384> : sha3_base<384> {};
 template <> struct sha3<512> : sha3_base<512> {};
+
 template <> struct shake<128> : shake_base<128> {};
 template <> struct shake<256> : shake_base<256> {};
+
+template <> struct cshake<128> : cshake_base<128> {using base = cshake_base<128>; using base::base;};
+template <> struct cshake<256> : cshake_base<256> {using base = cshake_base<256>; using base::base;};
 
 } // namespace crypto
