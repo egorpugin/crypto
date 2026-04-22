@@ -34,10 +34,13 @@
 #include "ed25519.h"
 #include "ed448.h"
 #include "ssh2.h"
+#include "cshake.h"
 
 // TODO: dns - doh dot (port 853)?
 // curveSM2MLKEM768
 // ML-DSA-MU
+
+// see https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values for examples
 
 #define LOG_TEST()                                                                                                                                             \
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
@@ -547,14 +550,296 @@ void test_sha3() {
 
     // cshake
     {
-        cshake<128> s(""sv, "t"sv);
+        shake<128> s1;
+        s1.finalize();
+        cshake<128> s;
+        s.finalize();
+        cmp_bytes(s.squeeze<256>(), s1.squeeze<256>());
+    }
+    {
+        shake<256> s1;
+        s1.finalize();
+        cshake<256> s;
+        s.finalize();
+        cmp_bytes(s.squeeze<512>(), s1.squeeze<512>());
+    }
+    {
+        cshake<128, ""_s, "t"_s> s;
         s.finalize();
         cmp_bytes(s.squeeze<256>(), "682c9400d38543d8aa250ccf2155b58134f40576fb9e2a23aa87545428053432"_sb);
     }
     {
-        cshake<256> s(""sv, "t"sv);
+        cshake<256, ""_s, "t"_s> s;
         s.finalize();
         cmp_bytes(s.squeeze<512>(), "57b8a3c6f4cb2d5437e6e729c8cad1c4acd7a0ae51955346544d2f8a31c6d09256be833b775e169db649a9038000b78c7676fad586e7216e6e7be39d36f2aff5"_sb);
+    }
+    {
+        cshake<128, "KMAC"_s, ""_s> s;
+        s.finalize();
+        cmp_bytes(s.squeeze<256>(), "ab1251eb2d8007e363b7f8f7655720df24baf710867e1274bf12fcaa62260eb5"_sb);
+    }
+    {
+        cshake<128, parallel_hash_function_id> s;
+        s.update("123"sv);
+        s.finalize();
+        cmp_bytes(s.squeeze<256>(), "86fa6baa7d9592706f1b3de0c1db35690c9684988988030bf193a8cda3b4600c"_sb);
+    }
+
+    // kmac
+    {
+        kmac<128> s;
+        cmp_bytes(s.digest<256>(), "5c135c615152fb4d9784dd1155f9b6034e013fd77165c327dfa4d36701983ef7"_sb);
+    }
+    {
+        kmac<128, "t"_s> s;
+        cmp_bytes(s.digest<256>(), "bfb1042adc1c3b9de967a9e431a728029ec3fb37b3c87b26f282297f2f4633f8"_sb);
+    }
+    {
+        kmac<128, "t"_s> s("123"sv);
+        cmp_bytes(s.digest<256>(), "3e46cfb9b41a1c19712b28a33482c287996b9d93068b9bd555d8b86b25200e77"_sb);
+    }
+    {
+        kmac<128, ""_s> s("123"sv);
+        cmp_bytes(s.digest<256>(), "6a793a54a59b599b05ac14a400208d58ac3dd1cc602f6d4448d5b6d8d0cb26a2"_sb);
+    }
+    {
+        kmac<128, ""_s> s("1234567890ABCDEF"sv);
+        cmp_bytes(s.digest<512>(), "3b374f9c39cdd3b1ca7c5058b0a4d0922d8b6f042d052d21e8ddaed7eb9cf27979bc3f44230fd3b877edde747cbb98bacdc49d252fb5c0ad94ca6badfe924909"_sb);
+    }
+    {
+        kmac_xof<128, "My Tagged Application"_s> s(R"(
+            40 41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F
+            50 51 52 53 54 55 56 57 58 59 5A 5B 5C 5D 5E 5F
+)"_sb);
+        s.update(R"(
+            00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+            10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F
+            20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F
+            30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F
+            40 41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F
+            50 51 52 53 54 55 56 57 58 59 5A 5B 5C 5D 5E 5F
+            60 61 62 63 64 65 66 67 68 69 6A 6B 6C 6D 6E 6F
+            70 71 72 73 74 75 76 77 78 79 7A 7B 7C 7D 7E 7F
+            80 81 82 83 84 85 86 87 88 89 8A 8B 8C 8D 8E 8F
+            90 91 92 93 94 95 96 97 98 99 9A 9B 9C 9D 9E 9F
+            A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 AA AB AC AD AE AF
+            B0 B1 B2 B3 B4 B5 B6 B7 B8 B9 BA BB BC BD BE BF
+            C0 C1 C2 C3 C4 C5 C6 C7
+)"_sb);
+        s.finalize();
+        cmp_bytes(s.squeeze<32 * 8>(), R"(
+            47 02 6C 7C D7 93 08 4A A0 28 3C 25 3E F6 58 49
+            0C 0D B6 14 38 B8 32 6F E9 BD DF 28 1B 83 AE 0F
+)"_sb);
+    }
+    {
+        kmac_xof<256, "My Tagged Application"_s> s(R"(
+            40 41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F
+            50 51 52 53 54 55 56 57 58 59 5A 5B 5C 5D 5E 5F
+)"_sb);
+        s.update(R"(
+            00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F
+            10 11 12 13 14 15 16 17 18 19 1A 1B 1C 1D 1E 1F
+            20 21 22 23 24 25 26 27 28 29 2A 2B 2C 2D 2E 2F
+            30 31 32 33 34 35 36 37 38 39 3A 3B 3C 3D 3E 3F
+            40 41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F
+            50 51 52 53 54 55 56 57 58 59 5A 5B 5C 5D 5E 5F
+            60 61 62 63 64 65 66 67 68 69 6A 6B 6C 6D 6E 6F
+            70 71 72 73 74 75 76 77 78 79 7A 7B 7C 7D 7E 7F
+            80 81 82 83 84 85 86 87 88 89 8A 8B 8C 8D 8E 8F
+            90 91 92 93 94 95 96 97 98 99 9A 9B 9C 9D 9E 9F
+            A0 A1 A2 A3 A4 A5 A6 A7 A8 A9 AA AB AC AD AE AF
+            B0 B1 B2 B3 B4 B5 B6 B7 B8 B9 BA BB BC BD BE BF
+            C0 C1 C2 C3 C4 C5 C6 C7
+)"_sb);
+        s.finalize();
+        cmp_bytes(s.squeeze<64 * 8>(), R"(
+            D5 BE 73 1C 95 4E D7 73 28 46 BB 59 DB E3 A8 E3
+            0F 83 E7 7A 4B FF 44 59 F2 F1 C2 B4 EC EB B8 CE
+            67 BA 01 C6 2E 8A B8 57 8D 2D 49 9B D1 BB 27 67
+            68 78 11 90 02 0A 30 6A 97 DE 28 1D CC 30 30 5D
+)"_sb);
+    }
+
+    // tuple_hash
+    {
+        tuple_hash<128> s;
+        s.update("The quick brown fox jumps over the lazy dog"sv, "01"sv, "abc"sv);
+        cmp_bytes(s.digest<8*8>(), "44c308cc8d74b30a"_sb);
+    }
+    {
+        tuple_hash<256> s;
+        s.update("The quick brown fox jumps over the lazy dog"sv, "01"sv, "abc"sv);
+        cmp_bytes(s.digest<8 * 8>(), "0ce02eb315e730a2"_sb);
+    }
+    {
+        tuple_hash<128> s;
+        s.update("The quick brown fox jumps over the lazy dog"sv, "01"sv, "abc"sv);
+        cmp_bytes(s.digest<64 * 8>(), "25b05b4adb59a4dacb89015d45e988bace35f9cd22886bde5e16eb7e6aad3499349da07f3e161687b1ae975af4c5d6778e626c9fe78a0ecaf59f5a9bc39d4c1c"_sb);
+    }
+    {
+        tuple_hash<256> s;
+        s.update("The quick brown fox jumps over the lazy dog"sv, "01"sv, "abc"sv);
+        cmp_bytes(s.digest<64 * 8>(), "939fa46706b6f12f5699933cbdf068c80ae8f7d1469280b0b6a23e07ecc54cf3938bb5d821f546f2fcf56aa5e8ea008989566404ca838335c0a0928889a87ca8"_sb);
+    }
+    {
+        tuple_hash<128, "123"_s> s;
+        s.update("The quick brown fox jumps over the lazy dog"sv, "01"sv, "abc"sv);
+        cmp_bytes(s.digest<32 * 8>(), "8abb30d4eba7c4ad23d41db75cc0abd4a6e1175b50f945f936742940d4d85b7e"_sb);
+    }
+    {
+        tuple_hash<256, "123"_s> s;
+        s.update("The quick brown fox jumps over the lazy dog"sv, "01"sv, "abc"sv);
+        cmp_bytes(s.digest<32 * 8>(), "5b2bc45995fa5b4da5c87500ff6a1adb7200bd09a72f5a83068897aa3c278acd"_sb);
+    }
+    {
+        tuple_hash_xof<128, "My Tuple App"_s> s;
+        s.update("00 01 02"_sb, "10 11 12 13 14 15 "_sb, "20 21 22 23 24 25 26 27 28 "_sb);
+        s.finalize();
+        cmp_bytes(s.squeeze<32 * 8>(), R"(
+            90 0F E1 6C AD 09 8D 28 E7 4D 63 2E D8 52 F9 9D
+            AA B7 F7 DF 4D 99 E7 75 65 78 85 B4 BF 76 D6 F8
+)"_sb);
+    }
+    {
+        tuple_hash_xof<256, "My Tuple App"_s> s;
+        s.update("00 01 02"_sb, "10 11 12 13 14 15 "_sb, "20 21 22 23 24 25 26 27 28 "_sb);
+        s.finalize();
+        cmp_bytes(s.squeeze<64 * 8>(), R"(
+            0C 59 B1 14 64 F2 33 6C 34 66 3E D5 1B 2B 95 0B
+            EC 74 36 10 85 6F 36 C2 8D 1D 08 8D 8A 24 46 28
+            4D D0 98 30 A6 A1 78 DC 75 23 76 19 9F AE 93 5D
+            86 CF DE E5 91 3D 49 22 DF D3 69 B6 6A 53 C8 97
+)"_sb);
+    }
+
+    // parallel hash
+    {
+        parallel_hash<256> s;
+        s.update("123"sv, 8);
+        cmp_bytes(s.digest<32 * 8>(), "f1f36fe0efc37af58623f674226b63e17505db387c5b288e15edd105f87e89ce"_sb);
+    }
+    {
+        parallel_hash<256> s;
+        s.update("123"sv, 1);
+        cmp_bytes(s.digest<32 * 8>(), "a9d62596898571a7c417cab887eeff81fd930a0ca2cf1679d13c68a40e860a40"_sb);
+    }
+    {
+        parallel_hash<128> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
+            20 21 22 23 24 25 26 27
+        )"_sb, 8);
+        cmp_bytes(s.digest<32 * 8>(), R"(
+            BA 8D C1 D1 D9 79 33 1D 3F 81 36 03 C6 7F 72 60
+            9A B5 E4 4B 94 A0 B8 F9 AF 46 51 44 54 A2 B4 F5
+        )"_sb);
+    }
+    {
+        parallel_hash<128, "Parallel Data"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
+            20 21 22 23 24 25 26 27
+        )"_sb, 8);
+        cmp_bytes(s.digest<32 * 8>(), R"(
+            FC 48 4D CB 3F 84 DC EE DC 35 34 38 15 1B EE 58
+            15 7D 6E FE D0 44 5A 81 F1 65 E4 95 79 5B 72 06
+        )"_sb);
+    }
+    {
+        parallel_hash<128, "Parallel Data"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
+            14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
+            28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
+            40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
+            54 55 56 57 58 59 5A 5B
+        )"_sb, 12);
+        cmp_bytes(s.digest<32 * 8>(), R"(
+            F7 FD 53 12 89 6C 66 85 C8 28 AF 7E 2A DB 97 E3
+            93 E7 F8 D5 4E 3C 2E A4 B9 5E 5A CA 37 96 E8 FC
+        )"_sb);
+    }
+    // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/ParallelHash_samples.pdf
+    // example #1 for 256 bits
+    // probably incorrect there
+    /*
+    * their result
+    *       BC 1E F1 24 DA 34 49 5E 94 8E AD 20 7D D9 84 22
+            35 DA 43 2D 2B BC 54 B4 C1 10 E6 4C 45 11 05 53
+            1B 7F 2A 3E 0C E0 55 C0 28 05 E7 C2 DE 1F B7 46
+            AF 97 A1 DD 01 F4 3B 82 4E 31 B8 76 12 41 04 29
+    */
+    {
+        parallel_hash<256, "(null)"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
+            20 21 22 23 24 25 26 27
+        )"_sb, 8);
+        cmp_bytes(s.digest<64 * 8>(), R"(
+            218ac4043be83ec9fe4d743d4c7dc512c727547019cbdc9695708a1dc89407a5e5adf5309a757235e359a9ddc5b3d42f14ceea586247a3a14e8cb4f0ebee973d
+        )"_sb);
+    }
+    {
+        parallel_hash<256, "Parallel Data"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
+            20 21 22 23 24 25 26 27
+        )"_sb, 8);
+        cmp_bytes(s.digest<64 * 8>(), R"(
+            CD F1 52 89 B5 4F 62 12 B4 BC 27 05 28 B4 95 26
+            00 6D D9 B5 4E 2B 6A DD 1E F6 90 0D DA 39 63 BB
+            33 A7 24 91 F2 36 96 9C A8 AF AE A2 9C 68 2D 47
+            A3 93 C0 65 B3 8E 29 FA E6 51 A2 09 1C 83 31 10
+        )"_sb);
+    }
+    {
+        parallel_hash<256, "Parallel Data"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
+            14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
+            28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
+            40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
+            54 55 56 57 58 59 5A 5B
+        )"_sb, 12);
+        cmp_bytes(s.digest<64 * 8>(), R"(
+            69 D0 FC B7 64 EA 05 5D D0 93 34 BC 60 21 CB 7E
+            4B 61 34 8D FF 37 5D A2 62 67 1C DE C3 EF FA 8D
+            1B 45 68 A6 CC E1 6B 1C AD 94 6D DD E2 7F 6C E2
+            B8 DE E4 CD 1B 24 85 1E BF 00 EB 90 D4 38 13 E9
+        )"_sb);
+    }
+    {
+        parallel_hash_xof<128, "Parallel Data"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
+            14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
+            28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
+            40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
+            54 55 56 57 58 59 5A 5B
+        )"_sb, 12);
+        s.finalize();
+        cmp_bytes(s.squeeze<32 * 8>(), R"(
+            01 27 AD 97 72 AB 90 46 91 98 7F CC 4A 24 88 8F
+            34 1F A0 DB 21 45 E8 72 D4 EF D2 55 37 66 02 F0
+        )"_sb);
+    }
+    {
+        parallel_hash_xof<256, "Parallel Data"_s> s;
+        s.update(R"(
+            00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
+            14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
+            28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
+            40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
+            54 55 56 57 58 59 5A 5B
+        )"_sb, 12);
+        s.finalize();
+        cmp_bytes(s.squeeze<64 * 8>(), R"(
+            6B 3E 79 0B 33 0C 88 9A 20 4C 2F BC 72 8D 80 9F
+            19 36 73 28 D8 52 F4 00 2D C8 29 F7 3A FD 6B CE
+            FB 7F E5 B6 07 B1 3A 80 1C 0B E5 C1 17 0B DB 79
+            4E 33 94 58 FD B0 E6 2A 6A F3 D4 25 58 97 02 49
+        )"_sb);
     }
 }
 

@@ -186,44 +186,8 @@ struct shake_base : keccak<2 * ShakeType, Padding, PaddingLength> {
     }
 };
 
-template <auto ShakeType>
-struct cshake_base : shake_base<ShakeType, 0b00, 2> {
-    using base = shake_base<ShakeType, 0b00, 2>;
-
-    // usual shake if no args
-    cshake_base(bytes_concept function_name, bytes_concept customization_string) {
-        if (function_name.empty() && customization_string.empty()) {
-            throw std::runtime_error{"empty function_name and customization_string, use usual shake"};
-        }
-        if (function_name.size() > 255 || customization_string.size() > 255) {
-            throw std::runtime_error{ "too big string" };
-        }
-        auto left_encode = [&](auto &&size) { // up to 256 bytes
-            u8 size1{};
-            auto sz = size;
-            while (sz) {
-                sz >>= 8;
-                ++size1;
-            }
-            if (size1 == 0) size1 = 1;
-            base::update(&size1, sizeof(size1));
-            base::update((u8*)&size, 1);
-            };
-        auto encode = [&](auto &&x) {
-            left_encode(x.size() * 8);
-            base::update(x);
-            };
-        left_encode(base::rate / 8);
-        encode(function_name);
-        encode(customization_string);
-        array<base::rate / 8> z{};
-        base::update(z.data(), z.size() - base::blockpos);
-    }
-};
-
 template <auto DigestSizeBits> struct sha3;
 template <auto ShakeType> struct shake;
-template <auto ShakeType> struct cshake;
 
 template <> struct sha3<224> : sha3_base<224> {};
 template <> struct sha3<256> : sha3_base<256> {};
@@ -232,8 +196,5 @@ template <> struct sha3<512> : sha3_base<512> {};
 
 template <> struct shake<128> : shake_base<128> {};
 template <> struct shake<256> : shake_base<256> {};
-
-template <> struct cshake<128> : cshake_base<128> {using base = cshake_base<128>; using base::base;};
-template <> struct cshake<256> : cshake_base<256> {using base = cshake_base<256>; using base::base;};
 
 } // namespace crypto
