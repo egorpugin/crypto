@@ -11,10 +11,20 @@ namespace crypto {
 
 // limits are 2^2040 usually
 
+template <auto ShakeType>
+using shake_for_cshake = shake_base<ShakeType, 0b00, 2>;
+
+consteval bool is_usual_cshake(auto FunctionName, auto CustomizationString) {
+    return FunctionName.empty() && CustomizationString.empty();
+}
+
 template <auto ShakeType, auto FunctionName = ""_s, auto CustomizationString = ""_s>
-struct cshake_base : std::conditional_t<FunctionName.empty() && CustomizationString.empty(), shake_base<ShakeType>, shake_base<ShakeType, 0b00, 2>> {
-    static inline constexpr auto usual_shake = FunctionName.empty() && CustomizationString.empty();
-    using base = std::conditional_t<usual_shake, shake_base<ShakeType>, shake_base<ShakeType, 0b00, 2>>;
+using conditional_cshake = std::conditional_t<is_usual_cshake(FunctionName, CustomizationString), shake_base<ShakeType>, shake_for_cshake<ShakeType>>;
+
+template <auto ShakeType, auto FunctionName = ""_s, auto CustomizationString = ""_s>
+struct cshake_base : conditional_cshake<ShakeType, FunctionName, CustomizationString> {
+    using base = conditional_cshake<ShakeType, FunctionName, CustomizationString>;
+    static inline constexpr auto usual_shake = is_usual_cshake(FunctionName, CustomizationString);
 
     // usual shake if no args
     cshake_base() requires (usual_shake) = default;
@@ -58,10 +68,10 @@ protected:
         base::update(x);
     }
     auto bytepad(auto &&f) {
-        left_encode(base::rate / 8);
+        left_encode(base::rate_bytes);
         f();
         if (base::blockpos) {
-            array<base::rate / 8> z{};
+            array<base::rate_bytes> z{};
             base::update(z.data(), z.size() - base::blockpos);
         }
     }

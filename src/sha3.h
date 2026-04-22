@@ -32,6 +32,7 @@ struct keccak_p {
     >;
     static inline constexpr auto n_rounds = 12 + 2 * l;
 
+    // precalc?
     static constexpr int index(int x) {
         return x < 0 ? index(x + state_square_size) : x % state_square_size;
     }
@@ -91,6 +92,7 @@ struct keccak_p {
 template <auto Capacity, auto Padding, auto PaddingLength>
 struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding, PaddingLength>> {
     static inline constexpr auto rate = StateBits - Capacity;
+    static inline constexpr auto rate_bytes = rate / 8;
 
     using hash_traits_type = hash_traits<keccak<Capacity, Padding, PaddingLength>>;
     using hash_traits_type::update;
@@ -109,7 +111,7 @@ struct keccak : keccak_p<1600>, hash_traits<keccak<Capacity, Padding, PaddingLen
         auto *d = (u8 *)A;
         for (int i = 0; i < len; ++i) {
             d[blockpos++] ^= buf[i];
-            if (blockpos == rate / 8) {
+            if (blockpos == rate_bytes) {
                 permute();
                 blockpos = 0;
             }
@@ -147,7 +149,7 @@ struct sha3_base : keccak<2 * DigestSizeBits, 0b10, 2> {
 template <auto ShakeType, auto Padding = 0b1111, auto PaddingLength = 4>
 struct shake_base : keccak<2 * ShakeType, Padding, PaddingLength> {
     using base = keccak<2 * ShakeType, Padding, PaddingLength>;
-    static inline constexpr auto digest_size_bytes = base::rate / 8;
+    static inline constexpr auto digest_size_bytes = base::rate_bytes;
 
     size_t offset{};
 
