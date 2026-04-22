@@ -289,15 +289,24 @@ std::ostream &operator<<(std::ostream &o, const bytes_concept &b) {
 
 template<std::size_t N>
 struct static_string {
-    char p[N]{};
+    using value_type = char;
+
+    value_type p[N]{};
     constexpr static_string(char const(&pp)[N]) {
         std::ranges::copy(pp, p);
     }
     operator auto() const { return &p[0]; }
-    operator string_view() const { return string_view{p, N-1}; }
+    operator string_view() const { return string_view{p, size()}; }
+    constexpr auto data() const { return p; }
     constexpr auto size() const { return N-1; }
     constexpr auto begin() const {return p;}
     constexpr auto end() const {return p+size();}
+    constexpr bool empty() const {return size() == 0;}
+    template <std::size_t N2>
+    constexpr bool operator==(const static_string<N2> &s) const {
+        if (N != N2) return false;
+        return std::ranges::equal(p, s.p);
+    }
 };
 template<static_string s>
 constexpr auto operator""_s() { return s; }
