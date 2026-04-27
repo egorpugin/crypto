@@ -229,7 +229,7 @@ struct private_key : public_key {
 
     template <auto Bits>
     auto sign_pss_mgf1(auto &&m) {
-        static constexpr unsigned char zeroes[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        static constexpr unsigned char zeroes[8]{};
 
         // PKCS1_PSS_mgf1
         // RSA_PKCS1_PSS_PADDING; salt size = hash size
