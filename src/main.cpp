@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
 
+//#include <boost/asio.hpp>
+//#include <boost/asio/experimental/awaitable_operators.hpp>
+
 #include "aes.h"
 #include "argon2.h"
 #include "asn1.h"
@@ -226,10 +229,8 @@ auto cacert_pem() {
     auto name = "roots.pem";
     if (!std::filesystem::exists(name)) {
         crypto::http_client t{"https://curl.se/ca/cacert.pem"};
-        t.tls_layer.ignore_server_certificate_check = true;
-        t.run(
-            // crypto::default_io_context()
-        );
+        t.ignore_server_certificate_check = true;
+        t.run(crypto::default_io_context());
         write_file(name, t.m.body);
     }
     auto &tcs = crypto::x509_trusted_storage();
@@ -3148,9 +3149,9 @@ void test_tls() {
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex, bool ignore_host_check = false, SRCLOC) {
         http_client t{url};
-        t.tls_layer.force_suite = suite;
-        t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
-        t.tls_layer.ignore_server_hostname_check = ignore_host_check;
+        //t.tls_layer.force_suite = suite;
+        //t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
+        //t.tls_layer.ignore_server_hostname_check = ignore_host_check;
 #ifndef CI_TESTS
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
 #endif
@@ -3186,6 +3187,8 @@ void test_tls() {
         // run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
     }
 #endif
+
+    run("software-network.org");
 
     run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
     // not implemented yet
@@ -4038,7 +4041,7 @@ int main() {
         // test_aes();
         //test_sha1();
         //test_sha2();
-        test_sha3();
+        //test_sha3();
         // test_blake2();
         // test_blake3();
         // test_sm3();
@@ -4064,7 +4067,7 @@ int main() {
         //test_mldsa();
         //test_slh_dsa();
         //test_dns();
-        //test_tls();
+        test_tls();
         //test_email();
         //test_ssh2();
 

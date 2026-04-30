@@ -31,7 +31,7 @@
 
 namespace crypto {
 
-template <typename RawSocket, template <typename> typename Awaitable> // tcp or udp
+template <typename RawSocket> // tcp (or udp?)
 struct tls13_ {
     template <typename Cipher, typename Hash, auto SuiteId, typename suite_type = void>
     struct suite_ {
@@ -331,15 +331,13 @@ struct tls13_ {
         buf_type() {
             data.resize(41'000);
         }
-        Awaitable<void> receive(auto &s) {
-            using boost::asio::use_awaitable;
-
-            co_await async_read(s, boost::asio::buffer(&header(), sizeof(header_type)), use_awaitable);
+        awaitable<> receive(auto &s) {
+            co_await s.async_read(bytes_concept(&header(), sizeof(header_type)));
             if (header().size() > 40'000) {
                 throw std::runtime_error{"too big tls packet"};
             }
             data.resize(sizeof(header_type) + header().size());
-            auto n = co_await async_read(s, boost::asio::buffer(data.data() + sizeof(header_type), header().size()), use_awaitable);
+            auto n = co_await s.async_read(bytes_concept(data.data() + sizeof(header_type), header().size()));
 
             // after we get stable memory
             auto &h = header();
@@ -360,7 +358,7 @@ struct tls13_ {
             case parameters::content_type::application_data:
                 break;
             default:
-                throw std::logic_error{format("content is not implemented: {}", (int)h.type)};
+                throw std::logic_error{std::format("content is not implemented: {}", (int)h.type)};
             }
         }
         header_type &header() {
@@ -381,9 +379,9 @@ struct tls13_ {
         }
         void handle_alert(tls13::alert &a) {
             if (a.level == tls13::alert::level_type::fatal) {
-                throw std::runtime_error{format("fatal tls error: {}", std::to_underlying(a.description))};
+                throw std::runtime_error{std::format("fatal tls error: {}", std::to_underlying(a.description))};
             } else if (a.level == tls13::alert::level_type::warning) {
-                throw std::runtime_error{format("tls warning: {}", std::to_underlying(a.description))};
+                throw std::runtime_error{std::format("tls warning: {}", std::to_underlying(a.description))};
             }
         }
     };
@@ -435,7 +433,7 @@ struct tls13_ {
         return *s;
     }
 
-    Awaitable<std::string> receive_tls_message() {
+    awaitable<std::string> receive_tls_message() {
         co_await buf.receive(socket());
         auto dec = visit(suite, [&](auto &&s) {
             return decrypt(s.traffic);
@@ -458,15 +456,12 @@ struct tls13_ {
         dec.resize(dec.size() - 1);
         co_return dec;
     }
-    Awaitable<void> send_message(bytes_concept in) {
-        using namespace tls13;
-        using boost::asio::use_awaitable;
-
+    awaitable<> send_message(bytes_concept in) {
         std::string buf;
         buf.append(in.begin(), in.end());
         buf += (char)parameters::content_type::application_data;
 
-        TLSPlaintext msg;
+        tls13::TLSPlaintext msg;
         msg.type = parameters::content_type::application_data;
         msg.length = buf.size() + visit(suite, [](auto &&s) {
                          return std::decay_t<decltype(s)>::cipher::tag_size_bytes;
@@ -476,14 +471,13 @@ struct tls13_ {
             return encrypt(s.traffic, buf, std::span<u8>((u8 *)&msg, sizeof(msg)));
         });
 
-        std::vector<boost::asio::const_buffer> buffers;
+        std::vector<bytes_concept> buffers;
         buffers.emplace_back(&msg, sizeof(msg));
         buffers.emplace_back(out.data(), out.size());
-        co_await socket().async_send(buffers, use_awaitable);
+        co_await socket().async_send(buffers);
     }
-    Awaitable<void> init_ssl() {
+    awaitable<> init_ssl() {
         using namespace tls13;
-        using boost::asio::use_awaitable;
 
         buf = buf_type{};
 
@@ -593,9 +587,9 @@ struct tls13_ {
                 cookie.clear();
             }
 
-            /*renegotiation_info &reneg = w;
-            reneg.length += 1;
-            u8 &_ = w;*/
+            //renegotiation_info &reneg = w;
+            //reneg.length += 1;
+            //u8 &_ = w;
 
             padding &p = w;
             auto msg_size = (w.p - w.buf + 511) / 512 * 512;
@@ -612,7 +606,7 @@ struct tls13_ {
                 s.h.update((u8 *)&client_hello, msg.length);
             });
 
-            co_await socket().async_send(boost::asio::buffer(w.buf, msg_size + sizeof(msg)), use_awaitable);
+            co_await socket().async_send(bytes_concept(w.buf, msg_size + sizeof(msg)));
 
             if (hello_retry_request) {
                 hello_retry_request = false;
@@ -639,7 +633,7 @@ struct tls13_ {
 
         // send client Finished
         {
-            std::vector<boost::asio::const_buffer> buffers;
+            std::vector<bytes_concept> buffers;
             buffers.reserve(20);
 
             TLSPlaintext msg;
@@ -669,7 +663,7 @@ struct tls13_ {
                 return encrypt(s.handshake, hma, std::span<u8>((u8 *)&msg, sizeof(msg)));
             });
             buffers.emplace_back(out.data(), out.size());
-            co_await socket().async_send(buffers, use_awaitable);
+            co_await socket().async_send(buffers);
         }
     }
     void read_extensions(auto &&in) {
@@ -822,7 +816,7 @@ struct tls13_ {
 
                         /*auto write_cert = [&]() {
                             static int d = 0;
-                            path fn = format("d:/dev/crypto/.sw/cert/{}.der", ++d);
+                            path fn = std::format("d:/dev/crypto/.sw/cert/{}.der", ++d);
                             fs::create_directories(fn.parent_path());
                             std::ofstream of{fn, std::ios::binary};
                             of.write((const char *)data.data(), data.size());
@@ -879,7 +873,7 @@ struct tls13_ {
                                 }
                             }
                             if (!servername_ok && !ignore_server_hostname_check) {
-                                throw std::runtime_error{format("cannot match servername")};
+                                throw std::runtime_error{std::format("cannot match servername")};
                             }
                         }
                         certs.add(data);
@@ -891,7 +885,7 @@ struct tls13_ {
                         break;
                     }
                     default:
-                        throw std::logic_error{format("cert type is not implemented: {}", (int)type)};
+                        throw std::logic_error{std::format("cert type is not implemented: {}", (int)type)};
                     }
                 }
                 if (!certs.verify(x509_trusted_storage(), server_certificate, std::chrono::system_clock::now()) && !ignore_server_certificate_check) {
@@ -1048,14 +1042,14 @@ struct tls13_ {
                 break;
             }
             default:
-                throw std::logic_error{format("msg_type is not implemented: {}", std::to_string((int)h.msg_type))};
+                throw std::logic_error{std::format("msg_type is not implemented: {}", std::to_string((int)h.msg_type))};
             }
             visit(suite, [&](auto &&s) {
                 s.h.update((u8 *)&h, (u32)h.length + sizeof(h));
             });
         }
     }
-    Awaitable<void> handle_handshake_application_data() {
+    awaitable<> handle_handshake_application_data() {
         auto d = [&]() {
             auto dec = visit(suite, [&](auto &&s) {
                 return decrypt(s.handshake);
@@ -1080,7 +1074,8 @@ struct tls13_ {
 };
 
 auto &default_io_context() {
-    static boost::asio::io_context ctx;
+    //static boost::asio::io_context ctx;
+    static win32::executor ctx;
     return ctx;
 }
 

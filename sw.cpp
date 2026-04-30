@@ -8,7 +8,7 @@ void build(Solution &s) {
         t += "src/.*\\.h"_rr;
         t.Public += "src/.*\\.natvis"_rr;
 
-        t.Public += "org.sw.demo.boost.asio"_dep;
+        //t.Public += "org.sw.demo.boost.asio"_dep;
 
         if (t.getCompilerType() == CompilerType::MSVC) {
             t.Public.CompileOptions.push_back("/bigobj");
@@ -16,6 +16,7 @@ void build(Solution &s) {
         if (t.getBuildSettings().TargetOS.Type == OSType::Windows || t.getBuildSettings().TargetOS.Type == OSType::Mingw) {
             t += "bcrypt.lib"_slib;
             t += "Crypt32.lib"_slib;
+            t += "ws2_32.lib"_slib;
         }
         if (t.getBuildSettings().TargetOS.isApple()) {
             t += "CoreFoundation"_framework;

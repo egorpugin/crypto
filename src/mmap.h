@@ -7,7 +7,6 @@
 #pragma once
 
 #include "win32.h"
-#include "helpers.h"
 
 #include <string.h>
 
@@ -19,10 +18,6 @@
 #endif
 
 namespace crypto {
-
-#ifdef _WIN32
-namespace win32 = ::win32;
-#endif
 
 template <typename T = u8>
 struct mmap_file {

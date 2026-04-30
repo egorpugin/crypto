@@ -11,8 +11,8 @@
 namespace crypto {
 
 struct ssh2 {
-    template <typename T = void> using awaitable = boost::asio::awaitable<T>;
-    static inline constexpr auto use_awaitable = boost::asio::use_awaitable;
+    //template <typename T = void> using awaitable = boost::asio::awaitable<T>;
+    //static inline constexpr auto use_awaitable = boost::asio::use_awaitable;
 
     enum class message_id : u8 {
          SSH_MSG_DISCONNECT                    =   1,
@@ -103,7 +103,7 @@ struct ssh2 {
         packet p;
         message_id packet_type;
         u8 padding[16]{};
-        std::vector<boost::asio::const_buffer> buffers;
+        std::vector<bytes_concept> buffers;
 
         send_buffers(message_id m) {
             packet_type = m;
@@ -136,7 +136,8 @@ struct ssh2 {
         awaitable<void> send(auto &&s) {
             p.set_length(size());
             emplace_back(padding, p.padding_length);
-            co_await s.async_send(buffers, use_awaitable);
+            throw;
+            //co_await s.async_send(buffers, use_awaitable);
         }
         // chacha
         awaitable<void> send_chacha20_poly1305(auto &&s, auto &&length_cipher, auto &&cipher) {
@@ -159,9 +160,10 @@ struct ssh2 {
             data.resize(data.size() + tag_size_bytes);
             poly1305_auth((u8*)data.data() + data.size() - tag_size_bytes, (u8*)data.data(), data.size() - tag_size_bytes, otk.data());
 
-            std::vector<boost::asio::const_buffer> buffers;
-            buffers.emplace_back(data.data(), data.size());
-            co_await s.async_send(buffers, use_awaitable);
+            throw;
+            //std::vector<boost::asio::const_buffer> buffers;
+            //buffers.emplace_back(data.data(), data.size());
+            //co_await s.async_send(buffers, use_awaitable);
         }
         void payload_hash(auto &&h) {
             auto e = buffers.size() - 1;
@@ -210,17 +212,19 @@ struct ssh2 {
         auto &dns = get_default_dns();
         //ip = dns.query_one<dns_packet::a>(address);
 
-        boost::asio::io_context ctx;
-        boost::asio::co_spawn(ctx, run(), [](auto eptr) {
-            if (eptr) {
-                std::rethrow_exception(eptr);
-            }
-        });
-        ctx.run();
+        throw;
+        //boost::asio::io_context ctx;
+        //boost::asio::co_spawn(ctx, run(), [](auto eptr) {
+        //    if (eptr) {
+        //        std::rethrow_exception(eptr);
+        //    }
+        //});
+        //ctx.run();
     }
 
     awaitable<> run() {
-        using socket_type = boost::asio::ip::tcp::socket;
+        co_await dummy_awaitable{};
+        /*using socket_type = boost::asio::ip::tcp::socket;
         auto ex = co_await boost::asio::this_coro::executor;
 
         auto addr = "178.208.90.175"sv;
@@ -412,10 +416,11 @@ struct ssh2 {
         }
 
         int a = 5;
-        a++;
+        a++;*/
     }
     awaitable<std::string> receive_hello(auto &s) {
-        recvbuf_bytes = co_await s.async_read_some(boost::asio::mutable_buffer(recvbuf, sizeof(recvbuf)), boost::asio::use_awaitable);
+        co_await dummy_awaitable{};
+        /*recvbuf_bytes = co_await s.async_read_some(boost::asio::mutable_buffer(recvbuf, sizeof(recvbuf)), boost::asio::use_awaitable);
         if (recvbuf_bytes > 35000) {
             throw std::runtime_error{ "too big packet" };
         }
@@ -428,10 +433,11 @@ struct ssh2 {
         auto off = pos + rn.size();
         str.resize(off);
         memmove(recvbuf, recvbuf + off, recvbuf_bytes -= off);
-        co_return str;
+        co_return str;*/
     }
     awaitable<std::string> receive_packet(auto &s) {
-        auto lensz = sizeof(packet::length);
+        co_await dummy_awaitable{};
+        /*auto lensz = sizeof(packet::length);
         if (recvbuf_bytes == 0) {
             co_await s.async_receive(boost::asio::mutable_buffer(recvbuf, lensz), boost::asio::use_awaitable);
         }
@@ -447,7 +453,7 @@ struct ssh2 {
         }
         co_await s.async_receive(boost::asio::mutable_buffer(recvbuf + lensz, to_recv), boost::asio::use_awaitable);
         ++sequence.server_to_client;
-        co_return std::string{ (char*)recvbuf, p.length };
+        co_return std::string{ (char*)recvbuf, p.length };*/
     }
     awaitable<std::string> expect_packet(auto &s, auto type) {
         auto pkt = co_await receive_packet(s);

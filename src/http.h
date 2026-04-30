@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "dns.h"
 #include "tls.h"
 
 namespace crypto {
@@ -13,17 +14,17 @@ namespace crypto {
  * http header size limit = 8K
  */
 struct http_client {
-    using socket_type = boost::asio::ip::tcp::socket;
+    using socket_type = win32::tcp_socket; // boost::asio::ip::tcp::socket;
     template <typename T>
-    using awaitable = boost::asio::awaitable<T>;
+    using awaitable = awaitable<T>;
 
-    boost::asio::io_context ctx;
     std::string url_internal;
-    socket_type s{ctx};
-    tls13_<socket_type, awaitable> tls_layer{&s};
+    //boost::asio::io_context ctx;
+    //socket_type s{default_io_context()};
+    //tls13_<socket_type, awaitable> tls_layer{&s};
     bool follow_location{true}; // for now
     bool redirected{};
-    bool tls{true};
+    bool ignore_server_certificate_check{};
     std::vector<std::pair<std::string, std::string>> headers;
 
     struct http_message {
@@ -43,7 +44,7 @@ struct http_client {
         }
         awaitable<void> receive(auto &&s, auto &&transport) {
             auto receive = [&]() -> awaitable<std::string> {
-                co_return co_await transport.receive_some();
+                co_return co_await transport.receive_some(s);
             };
 
             size_t pos{SIZE_MAX};
@@ -126,17 +127,15 @@ struct http_client {
         headers.emplace_back("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36");
     }
     void run() {
-        // run(default_io_context());
-        // run(ctx);
-        //}
-        // void run(auto &&ctx) {
-        boost::asio::co_spawn(ctx, run_coro(), [](auto eptr) {
-            if (eptr) {
-                std::rethrow_exception(eptr);
-            }
+        run(crypto::default_io_context());
+    }
+    void run(auto &ctx) {
+        std::exception_ptr eptr;
+        ctx.co_spawn(run_coro(), [&](auto &&e) {
+            eptr = e;
         });
         ctx.run();
-        // ctx.restart();
+        std::rethrow_exception(eptr);
     }
     awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
@@ -146,14 +145,14 @@ struct http_client {
         }
     }
     awaitable<http_message> open_url(std::string_view url) {
-        using boost::asio::use_awaitable;
-        auto ex = co_await boost::asio::this_coro::executor;
+        //auto ex = co_await boost::asio::this_coro::executor;
 
         string host{url_internal};
-        string port = "443";
+        uint16_t port = 443;
+        bool tls{ true };
         if (host.starts_with("http://")) {
             host = host.substr(7);
-            port = "80";
+            port = 80;
             tls = false;
         }
         if (host.starts_with("https://")) {
@@ -176,84 +175,79 @@ struct http_client {
         }
 
         if (auto p = host.rfind(':'); p != -1) {
-            port = host.substr(p + 1);
+            port = std::stoi(host.substr(p + 1));
             host = host.substr(0, p);
         }
 
-        boost::asio::ip::tcp::resolver r{ex};
-        auto result = co_await r.async_resolve(host, port, use_awaitable);
+        auto &r = get_default_dns();
+        auto &&result = co_await r.query_async<dns_packet::a>(default_io_context(), host);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
-        s.close();
-        co_await s.async_connect(result.begin()->endpoint(), use_awaitable);
-        /*for (int i = 0; auto &&e : result) {
-            try {
-                co_await s.async_connect(e.endpoint(), use_awaitable);
-            } catch (std::exception &) {
-                if (i == result.size() - 1) {
-                    throw;
-                }
-            }
-            ++i;
-        }*/
+        socket_type s{default_io_context()};
+        co_await s.async_connect(endpoint{result.begin()->address,port});
+        //for (int i = 0; auto &&e : result) {
+        //    try {
+        //        co_await s.async_connect(e.endpoint(), use_awaitable);
+        //    } catch (std::exception &) {
+        //        if (i == result.size() - 1) {
+        //            throw;
+        //        }
+        //    }
+        //    ++i;
+        //}
 
-        auto remote_ep = s.remote_endpoint();
-        auto remote_ad = remote_ep.address();
-        std::string ss = remote_ad.to_string();
+        //auto remote_ep = s.remote_endpoint();
+        //auto remote_ad = remote_ep.address();
+        //std::string ss = remote_ad.to_string();
         // std::cout << ss << "\n";
 
-        tls_layer = decltype(tls_layer){
+        tls13_<socket_type> tls_layer{
             .s = &s,
-            .servername = host,
-            .ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
-            .ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
-            .force_suite = tls_layer.force_suite,
-            .force_kex = tls_layer.force_kex,
+                .servername = host,
+                //.ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
+                //.ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
+                //.force_suite = tls_layer.force_suite,
+                //.force_kex = tls_layer.force_kex,
         };
+        co_await tls_layer.init_ssl();
 
         // http layer
         string req = std::format("GET {} HTTP/1.1\r\n", path);
         req += "Host: "s + host + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
-        for (auto &&[k,v] : headers) {
+        for (auto &&[k, v] : headers) {
             req += k + ": "s + v + "\r\n";
         }
         req += "\r\n";
-        auto resp = co_await http_query(req);
+        auto resp = co_await http_query(s, req);
+        co_await s.async_close();
         co_return resp;
     }
     // http layer
-    awaitable<http_message> http_query(auto &&q) {
-        co_await send_message(q);
-        co_return co_await receive_http_message();
+    awaitable<http_message> http_query(auto &s, auto &&q) {
+        co_await send_message(s, q);
+        co_return co_await receive_http_message(s);
     }
-    awaitable<http_message> receive_http_message() {
+    awaitable<http_message> receive_http_message(auto &s) {
         http_message m;
         co_await m.receive(s, *this);
         co_return m;
     }
 
-    awaitable<std::string> receive_some() {
-        if (!tls) {
-            char buf[8192];
-            auto n = co_await s.async_read_some(boost::asio::mutable_buffer(buf, sizeof(buf)), boost::asio::use_awaitable);
-            co_return std::string{buf, n};
-        } else {
-            co_return co_await tls_layer.receive_tls_message();
-        }
+    awaitable<std::string> receive_some(auto &s) {
+        co_return co_await s.async_read_some();
+        //if (!tls) {
+        //    char buf[8192];
+        //    auto n = co_await s.async_read_some(bytes_concept{buf});
+        //    co_return std::string{buf, n};
+        //} else {
+        //    co_return co_await tls_layer.receive_tls_message();
+        //}
     }
-    awaitable<void> send_message(bytes_concept data) {
-        if (!tls) {
-            co_await s.async_send(boost::asio::const_buffer(data.data(), data.size()), boost::asio::use_awaitable);
-            co_return;
-        }
-        if (!tls_layer.initialized) {
-            co_await tls_layer.init_ssl();
-        }
-        co_await tls_layer.send_message(data);
+    awaitable<void> send_message(auto &s, bytes_concept data) {
+        co_await s.async_send(data);
     }
 };
-
 
 }

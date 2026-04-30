@@ -288,9 +288,7 @@ struct input_email {
 };
 
 struct email {
-    using socket_type = boost::asio::ip::tcp::socket;
-    template <typename T>
-    using awaitable = boost::asio::awaitable<T>;
+    using socket_type = tcp_socket; //boost::asio::ip::tcp::socket;
 
     std::string from;
     std::string to;
@@ -299,8 +297,8 @@ struct email {
     std::string title;
     std::string text;
 
-    boost::asio::io_context ctx;
-    socket_type s{ctx};
+    //boost::asio::io_context ctx;
+    socket_type s{default_io_context()};
 
     void send() {
         auto p = to.rfind('@');
@@ -309,15 +307,17 @@ struct email {
         }
         auto host = to.substr(p + 1);
 
-        boost::asio::co_spawn(ctx, run_coro(host), [](auto eptr) {
-            if (eptr) {
-                std::rethrow_exception(eptr);
-            }
-        });
-        ctx.run();
+        throw;
+        //boost::asio::co_spawn(ctx, run_coro(host), [](auto eptr) {
+        //    if (eptr) {
+        //        std::rethrow_exception(eptr);
+        //    }
+        //});
+        //ctx.run();
     }
     awaitable<void> run_coro(auto host) {
-        using boost::asio::use_awaitable;
+        co_await dummy_awaitable{};
+        /*using boost::asio::use_awaitable;
         auto ex = co_await boost::asio::this_coro::executor;
 
         uint16_t relay_port = 25;
@@ -356,18 +356,20 @@ struct email {
         msg = co_await tls_command("DATA\r\n"sv);
         auto data = make_message();
         msg = co_await command(msg + ".\r\n"s);
-        msg = co_await command("QUIT\r\n"sv);
+        msg = co_await command("QUIT\r\n"sv);*/
     }
     awaitable<std::string> wait_for_message() {
-        using boost::asio::use_awaitable;
-
-        char buf[8192];
-        auto n = co_await s.async_read_some(boost::asio::mutable_buffer(buf, sizeof(buf)), boost::asio::use_awaitable);
-        co_return std::string{buf, n};
+        co_return co_await awaitable<std::string>{};
+        //using boost::asio::use_awaitable;
+        //
+        //char buf[8192];
+        //auto n = co_await s.async_read_some(boost::asio::mutable_buffer(buf, sizeof(buf)), boost::asio::use_awaitable);
+        //co_return std::string{buf, n};
     }
     awaitable<std::string> command(auto &&cmd) {
-        co_await s.async_send(boost::asio::const_buffer(cmd.data(), cmd.size()), boost::asio::use_awaitable);
-        co_return co_await wait_for_message();
+        co_return co_await awaitable<std::string>{};
+        //co_await s.async_send(boost::asio::const_buffer(cmd.data(), cmd.size()), boost::asio::use_awaitable);
+        //co_return co_await wait_for_message();
     }
     std::string sign_message(auto &&signer) const {
         auto msg = make_message();

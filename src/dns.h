@@ -54,7 +54,7 @@ struct dns_packet {
 
             AAAA = 28,      // ipv6
 
-            HTTPS = 63,
+            HTTPS = 65,
         };
     };
     struct qtype : type {
@@ -328,19 +328,28 @@ struct dns_resolver {
     }
 
     auto query(auto &server, std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
-        // asio transport for now
+        return query(default_io_context(), server, domain, type, class_);
+    }
+    auto query(auto &ctx, auto &server, std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         results_type results;
-        boost::asio::io_context ctx;
-        boost::asio::co_spawn(ctx, query_udp(results, server, domain, type, class_), [](auto eptr) {
+        ctx.co_spawn(query_udp(ctx, results, server, domain, type, class_), [](auto eptr) {
             if (eptr) {
                 std::rethrow_exception(eptr);
             }
-        });
+            });
         ctx.run();
         return results;
     }
+    awaitable<results_type> query_async(auto &ctx, auto &server, std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+        results_type results;
+        co_await query_udp(ctx, results, server, domain, type, class_);
+        co_return results;
+    }
     auto query(std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
         return query(dns_servers.at(0), domain, type, class_);
+    }
+    awaitable<results_type> query_async(auto &ctx, std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+        co_return co_await query_async(ctx, dns_servers.at(0), domain, type, class_);
     }
     // return ips?
     auto resolve(std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
@@ -353,33 +362,44 @@ struct dns_resolver {
         }
         throw std::runtime_error{std::format("server not found: {}", domain)};
     }
+    awaitable<array<4>> resolve_async(auto &ctx, std::string_view domain, uint16_t type = dns_packet::qtype::A, uint16_t class_ = dns_packet::qclass::INTERNET) {
+        for (auto &&s : dns_servers) {
+            for (auto &&r : co_await query_async(ctx, s, domain, type, class_)) {
+                if (auto p = std::get_if<dns_packet::a>(&r)) {
+                    co_return p->address;
+                }
+            }
+        }
+        throw std::runtime_error{ std::format("server not found: {}", domain) };
+    }
 
 private:
-    template <typename T = void> using task = boost::asio::awaitable<T>;
+    awaitable<void> query_udp(auto &ctx, auto &results, auto &server, std::string_view domain, uint16_t type, uint16_t class_) {
+        //namespace ip = boost::asio::ip;
+        //using namespace boost::asio::experimental::awaitable_operators;
 
-    task<> query_udp(auto &results, auto &server, std::string_view domain, uint16_t type, uint16_t class_) {
-        namespace ip = boost::asio::ip;
-        using namespace boost::asio::experimental::awaitable_operators;
-
-        auto ex = co_await boost::asio::this_coro::executor;
-        ip::udp::endpoint e(ip::make_address_v4(server.ip), server.port);
-        ip::udp::socket s(ex);
-        s.open(ip::udp::v4());
+        //auto ex = co_await boost::asio::this_coro::executor;
+        //ip::udp::endpoint e(ip::make_address_v4(server.ip), server.port);
+        //ip::udp::socket s(ex);
+        endpoint e{server.ip, server.port};
+        udp_socket s{ctx};
+        s.open();
         constexpr auto udp_packet_max_size = 512;
         uint8_t bq[udp_packet_max_size]{}, ba[udp_packet_max_size]{};
         auto &q = *(dns_packet *)bq;
         q.h.id = query_id++;
         q.h.rd = 1; // some queries will fail without this
         q.set_question(domain, type, class_);
-        co_await s.async_send_to(boost::asio::buffer(bq, q.size()), e, boost::asio::use_awaitable);
-        boost::asio::system_timer dt{ex, std::chrono::seconds{2}};
-        co_await (s.async_receive_from(boost::asio::buffer(ba), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
+        co_await s.async_send_to(e, bytes_concept{bq, q.size()});
+        //boost::asio::system_timer dt{ ex, std::chrono::seconds{2} };
+        //co_await(s.async_receive_from(boost::asio::buffer(ba), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
+        co_await s.async_receive_from(e, bytes_concept{ba});
         auto &a = *(dns_packet *)ba;
         if (a.h.zeros || a.h.qr == 0) {
             co_return;
         }
         if (q.h.id != a.h.id || q.h.rd != a.h.rd) {
-            throw std::runtime_error{"bad response"};
+            throw std::runtime_error{ "bad response" };
         }
         enum {
             no_error,
@@ -398,7 +418,7 @@ private:
             results = a.answers();
             break;
         case query_format_error:
-            throw std::runtime_error{"bad request"};
+            throw std::runtime_error{ "bad request" };
         }
     }
 };
@@ -442,6 +462,32 @@ struct dns_cache {
             }
         }
         return it->second.results;
+    }
+    template <typename T>
+    awaitable<std::vector<T>> query_async(auto &ctx, std::string_view domain) {
+        auto now = std::chrono::system_clock::now();
+        query_type qt{ std::string{domain}, T::type };
+        auto it = cache.find(qt);
+        if (it == cache.end() || it->second.outdated(now)) {
+            auto [it2, _] = cache.emplace(qt, results_type{});
+            it = it2;
+            auto &res = it->second;
+            res.results = co_await r.query_async(ctx, domain, T::type);
+            res.last_query = now;
+            if (!res.results.empty()) {
+                visit(res.results[0], [&](auto &&v) {res.ttl = std::chrono::seconds{ v.ttl }; });
+            } else {
+                res.ttl = 60s;
+            }
+        }
+        std::vector<T> r;
+        r.reserve(it->second.results.size());
+        for (auto &rec : it->second.results) {
+            if (auto *p = std::get_if<T>(&rec)) {
+                r.emplace_back(*p);
+            }
+        }
+        co_return r;
     }
     template <typename T>
     auto query_one(std::string_view domain) {

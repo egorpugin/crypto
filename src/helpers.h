@@ -14,10 +14,12 @@
 #include <bit>
 #include <charconv>
 #include <cmath>
+#include <coroutine>
 #include <cstring>
 #include <filesystem>
 #include <format>
 //using std::format;
+#include <functional>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -25,6 +27,7 @@
 #include <print>
 #include <ranges>
 #include <span>
+#include <source_location>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -33,9 +36,6 @@
 #ifdef _MSC_VER
 #include <__msvc_int128.hpp>
 #endif
-
-#include <boost/asio.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #ifndef FWD
 #define FWD(x) std::forward<decltype(x)>(x)
@@ -596,5 +596,120 @@ constexpr auto divceil(auto &&x, auto &&y) {
 constexpr auto ceil_to_base(auto &&x, auto &&y) {
     return divceil(x,y) * y;
 }
+
+//
+template <typename T = void> struct awaitable {
+    struct promise_void {
+        void return_void(this auto &&obj) {
+            obj.finished = true;
+        }
+    };
+    struct promise_value {
+        T value;
+        void return_value(this auto &&obj, auto &&v) {
+            obj.value = std::move(v);
+            obj.finished = true;
+        }
+    };
+    struct promise_type : std::conditional_t<std::same_as<T, void>, promise_void, promise_value> {
+        bool finished{};
+        std::coroutine_handle<> h;
+        std::exception_ptr eptr;
+        std::function<void(std::exception_ptr)> eh;
+
+        auto get_return_object() { return awaitable{this}; }
+        auto initial_suspend() {
+            struct awaitable {
+                promise_type *p{};
+
+                bool await_ready() const { return true; }
+                bool await_suspend(std::coroutine_handle<> h) {
+                    //p->h = h;
+                    return false;
+                }
+                void await_resume() {
+                    if (!p) {
+                        int a = 5;
+                        a++;
+                    }
+                }
+            };
+            return awaitable{this};
+        }
+        auto final_suspend() noexcept {
+            struct awaitable {
+                promise_type *p{};
+
+                bool await_ready() noexcept { return false; }
+                std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept {
+                    if (!p) {
+                        int a = 5;
+                        a++;
+                    }
+                    if (p->h) {
+                        return p->h;
+                    }
+                    return std::noop_coroutine();
+                }
+                void await_resume() noexcept {
+                    if (!p) {
+                        int a = 5;
+                        a++;
+                    } else
+                    if (p->eh && p->eptr) {
+                        p->eh(p->eptr);
+                    }
+                }
+            };
+            if (!h && eh && eptr) {
+                eh(eptr);
+            }
+            return awaitable{this};
+        }
+        void unhandled_exception() {
+            eptr = std::current_exception();
+        }
+    };
+
+    promise_type *p{};
+
+    bool await_ready() const {
+        if (!p) {
+            int a = 5;
+            a++;
+        }
+        if (p->eptr) {
+            std::rethrow_exception(p->eptr);
+        }
+        return p->finished;
+    }
+    void await_suspend(auto &&h) {
+        if (!p) {
+            int a = 5;
+            a++;
+        }
+        if (p->eptr) {
+            std::rethrow_exception(p->eptr);
+        }
+        p->h = h;
+    }
+    T await_resume() const requires (!std::same_as<T, void>) {
+        if (!p) {
+            int a = 5;
+            a++;
+        }
+        if (p->eptr) {
+            std::rethrow_exception(p->eptr);
+        }
+        return std::move(p->value);
+    }
+    T await_resume() const requires (std::same_as<T, void>) {
+        if (p->eptr) {
+            std::rethrow_exception(p->eptr);
+        }
+    }
+};
+
+using dummy_awaitable = awaitable<void>;
 
 } // namespace crypto
