@@ -338,10 +338,10 @@ struct asn1_oid : asn1_base {
         auto n1 = *p / 40;
         auto n2 = *p - n1 * 40;
         ++p;
-        s += format("{}.{}", n1, n2);
+        s += std::format("{}.{}", n1, n2);
         while (p - data.data() < data.size()) {
             if (*p < 0x80) {
-                s += format(".{}", *p++);
+                s += std::format(".{}", *p++);
             } else {
                 u64 v{};
                 while (*p > 0x80) {
@@ -349,7 +349,7 @@ struct asn1_oid : asn1_base {
                     v <<= 7;
                 }
                 v |= *p++;
-                s += format(".{}", v);
+                s += std::format(".{}", v);
             }
         }
         return s;

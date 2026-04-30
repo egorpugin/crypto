@@ -17,7 +17,7 @@
 #include <cstring>
 #include <filesystem>
 #include <format>
-using std::format;
+//using std::format;
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -248,27 +248,27 @@ inline auto print_buffer(bytes_concept buffer) {
 
     string space(SPACE_LEN, ' ');
     if (!buffer.data()) {
-        print(format("{:0{}d}:{}NULL", 0, ADDR_LEN, space));
+        print(std::format("{:0{}d}:{}NULL", 0, ADDR_LEN, space));
         return out;
     }
 
     size_t addr = 0;
     while (buflen > 0) {
         std::string line;
-        line += format("{:0{}x}:{}", addr, ADDR_LEN, space);
+        line += std::format("{:0{}x}:{}", addr, ADDR_LEN, space);
 
         for (i = 0; i < LINE_LEN; i++) {
             if (i < buflen) {
-                line += format("{:02x} ", buffer[i]);
+                line += std::format("{:02x} ", buffer[i]);
             } else {
-                line += format("   ", buffer[i]);
+                line += std::format("   ", buffer[i]);
             }
         }
         line += "|  ";
 
         for (i = 0; i < LINE_LEN; i++) {
             if (i < buflen) {
-                line += format("{:c}", 31 < buffer[i] && buffer[i] < 127 ? buffer[i] : '.');
+                line += std::format("{:c}", 31 < buffer[i] && buffer[i] < 127 ? buffer[i] : '.');
             }
         }
         print(line);
