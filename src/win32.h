@@ -174,12 +174,10 @@ struct executor {
             auto err = GetLastError();
             if (0) {
             } else if (err == ERROR_BROKEN_PIPE) {
-            } else if (err == ERROR_NETNAME_DELETED) {
-                o->ec = std::error_code{ (int)err, std::generic_category() };
-            } else if (err != WAIT_TIMEOUT) {
-                throw std::runtime_error{ "cannot get io completion status" };
+            } else if (err == WAIT_TIMEOUT) {
             } else {
-                return;
+                o->ec = std::error_code{ (int)err, std::generic_category() };
+                //throw std::runtime_error{ "cannot get io completion status" };
             }
         }
         if (!o) {
@@ -344,12 +342,20 @@ struct tcp_socket : socket {
         ex.register_job_wsa0(f(s, (LPOVERLAPPED)&op.cb, 0, 0));
         co_await op;
     }
-    awaitable<size_t> async_send(bytes_concept b) {
-        swap_for_wsa_buf(b);
+    awaitable<size_t> async_send(std::span<bytes_concept> b) {
+        for (auto &&bb : b) {
+            swap_for_wsa_buf(bb);
+        }
         op_awaiter op;
-        ex.register_job_wsa(WSASend(s, (LPWSABUF)&b, 1, nullptr, 0, (LPOVERLAPPED)&op.cb, nullptr));
+        ex.register_job_wsa(WSASend(s, (LPWSABUF)b.data(), b.size(), nullptr, 0, (LPOVERLAPPED)&op.cb, nullptr));
         co_await op;
         co_return op.cb.bytes;
+    }
+    awaitable<size_t> async_send(std::vector<bytes_concept> &b) {
+        co_return co_await async_send(std::span<bytes_concept>{b});
+    }
+    awaitable<size_t> async_send(bytes_concept b) {
+        co_return co_await async_send(std::span<bytes_concept>{&b,1});
     }
     awaitable<size_t> async_read(bytes_concept b) {
         co_return co_await async_read_some(b, MSG_WAITALL);

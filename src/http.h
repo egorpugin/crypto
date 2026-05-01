@@ -135,7 +135,9 @@ struct http_client {
             eptr = e;
         });
         ctx.run();
-        std::rethrow_exception(eptr);
+        if (eptr) {
+            std::rethrow_exception(eptr);
+        }
     }
     awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
@@ -220,7 +222,8 @@ struct http_client {
             req += k + ": "s + v + "\r\n";
         }
         req += "\r\n";
-        auto resp = co_await http_query(s, req);
+        //auto resp = co_await http_query(s, req);
+        auto resp = co_await http_query(tls_layer, req);
         co_await s.async_close();
         co_return resp;
     }
@@ -237,13 +240,6 @@ struct http_client {
 
     awaitable<std::string> receive_some(auto &s) {
         co_return co_await s.async_read_some();
-        //if (!tls) {
-        //    char buf[8192];
-        //    auto n = co_await s.async_read_some(bytes_concept{buf});
-        //    co_return std::string{buf, n};
-        //} else {
-        //    co_return co_await tls_layer.receive_tls_message();
-        //}
     }
     awaitable<void> send_message(auto &s, bytes_concept data) {
         co_await s.async_send(data);

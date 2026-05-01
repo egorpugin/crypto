@@ -1071,6 +1071,13 @@ struct tls13_ {
             read_handshake(dec);
         }
     }
+
+    awaitable<std::string> async_read_some() {
+        co_return co_await receive_tls_message();
+    }
+    awaitable<> async_send(bytes_concept data) {
+        co_await send_message(data);
+    }
 };
 
 auto &default_io_context() {
