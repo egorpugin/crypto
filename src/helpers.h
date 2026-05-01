@@ -60,7 +60,9 @@ using i64 = int64_t;
 template <auto N>
 using array = std::array<u8, N>;
 template <auto N>
-struct array_gost : array<N> {};
+struct array_gost : array<N> {
+    //using value_type = array<N>::value_type;
+};
 template <auto N>
 using array_little = array_gost<N>;
 
@@ -68,6 +70,32 @@ template <typename... Types>
 struct types {
     using variant_type = std::variant<Types...>;
 };
+
+template<std::size_t N>
+struct static_string {
+    using value_type = char;
+
+    value_type p[N]{};
+    constexpr static_string(char const(&pp)[N]) {
+        std::ranges::copy(pp, p);
+    }
+    operator auto() const { return &p[0]; }
+    operator string_view() const { return string_view{ p, size() }; }
+    constexpr auto data() const { return p; }
+    constexpr auto size() const { return N - 1; }
+    constexpr auto begin() const { return p; }
+    constexpr auto end() const { return p + size(); }
+    constexpr bool empty() const { return size() == 0; }
+    template <std::size_t N2>
+    constexpr bool operator==(const static_string<N2> &s) const {
+        if (N != N2) return false;
+        return std::ranges::equal(p, s.p);
+    }
+};
+template<static_string s>
+constexpr auto operator""_s() { return s; }
+
+struct bytes_concept;
 
 template <typename T>
 concept bytes_concept1 = requires (T t) {
@@ -93,37 +121,65 @@ struct bytes_concept {
     template <auto N>
     bytes_concept(const char (&d)[N]) : p{(u8*)d}, sz{N - 1} {
     }
-    bytes_concept(const std::string &s) {
-        p = (u8 *)s.data();
-        sz = s.size();
-    }
-    bytes_concept(std::string_view s) {
-        p = (u8 *)s.data();
-        sz = s.size();
-    }
+    //bytes_concept(const std::string &s) {
+    //    p = (u8 *)s.data();
+    //    sz = s.size();
+    //}
+    //bytes_concept(std::string_view s) {
+    //    p = (u8 *)s.data();
+    //    sz = s.size();
+    //}
     template <auto N>
     bytes_concept(u8 (&s)[N]) {
         p = s;
         sz = N;
     }
-    template <auto N>
-    bytes_concept(const array<N> &s) {
-        p = (u8 *)s.data();
-        sz = N;
-    }
-    template <auto N> bytes_concept(const array_gost<N> &) = delete; // bytes are reversed here, so we can't view over them
-    bytes_concept(std::span<u8> s) {
-        p = s.data();
-        sz = s.size();
-    }
-    bytes_concept(const std::vector<u8> &s) {
-        p = (u8 *)s.data();
-        sz = s.size();
-    }
+    //template <auto N>
+    //bytes_concept(const array<N> &s) {
+    //    p = (u8 *)s.data();
+    //    sz = N;
+    //}
+    //template <auto N> bytes_concept(const array_gost<N> &) = delete; // bytes are reversed here, so we can't view over them
+    //template <template <typename ... Types> typename T, typename ... Types>
+    //bytes_concept(const T<bytes_concept, Types...> &) = delete;
+    //template <auto N>
+    //bytes_concept(std::span<u8, N> s) {
+    //    p = s.data();
+    //    sz = s.size();
+    //}
+    //template <auto N>
+    //bytes_concept(std::span<const u8, N> s) {
+    //    p = (u8*)s.data();
+    //    sz = s.size();
+    //}
+    //bytes_concept(const std::vector<u8> &s) {
+    //    p = (u8 *)s.data();
+    //    sz = s.size();
+    //}
+    //template <template <typename ...> typename T, typename V, typename ... Types>
+    ////bytes_concept(bytes_concept1 auto &&s) {
+    //bytes_concept(T<V, Types...> &&s) requires (!std::same_as<V, bytes_concept>) {
+    //    p = (u8 *)s.data();
+    //    sz = s.size() * sizeof(typename std::decay_t<decltype(s)>::value_type);
+    //}
     bytes_concept(bytes_concept1 auto &&s) {
+        using value_type = typename std::decay_t<decltype(s)>::value_type;
+
+        static_assert(!std::same_as<value_type, bytes_concept>);
+
         p = (u8 *)s.data();
-        sz = s.size() * sizeof(typename std::decay_t<decltype(s)>::value_type);
+        sz = s.size() * sizeof(value_type);
     }
+    //template <template <auto N> typename T, auto N>
+    //bytes_concept(T<N> &&s) {
+    //    p = (u8 *)s.data();
+    //    sz = s.size() * sizeof(typename std::decay_t<decltype(s)>::value_type);
+    //}
+    //template <auto N>
+    //bytes_concept(const static_string<N> &s) {
+    //    p = (u8 *)s.data();
+    //    sz = s.size() * sizeof(typename std::decay_t<decltype(s)>::value_type);
+    //}
     auto begin() const { return p; }
     auto end() const { return p+sz; }
     auto data() const { return p; }
@@ -286,30 +342,6 @@ inline void print_buffer(auto &&name, auto &&buffer) {
 std::ostream &operator<<(std::ostream &o, const bytes_concept &b) {
     return o << print_buffer(b);
 }
-
-template<std::size_t N>
-struct static_string {
-    using value_type = char;
-
-    value_type p[N]{};
-    constexpr static_string(char const(&pp)[N]) {
-        std::ranges::copy(pp, p);
-    }
-    operator auto() const { return &p[0]; }
-    operator string_view() const { return string_view{p, size()}; }
-    constexpr auto data() const { return p; }
-    constexpr auto size() const { return N-1; }
-    constexpr auto begin() const {return p;}
-    constexpr auto end() const {return p+size();}
-    constexpr bool empty() const {return size() == 0;}
-    template <std::size_t N2>
-    constexpr bool operator==(const static_string<N2> &s) const {
-        if (N != N2) return false;
-        return std::ranges::equal(p, s.p);
-    }
-};
-template<static_string s>
-constexpr auto operator""_s() { return s; }
 
 template <auto Bytes>
 struct bigendian_unsigned {
