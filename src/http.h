@@ -25,7 +25,9 @@ struct http_client {
     bool follow_location{true}; // for now
     bool redirected{};
     bool ignore_server_certificate_check{};
+    std::string query_type{"GET"s};
     std::vector<std::pair<std::string, std::string>> headers;
+    std::string body;
 
     struct http_message {
         static inline constexpr auto line_delim = "\r\n"sv;
@@ -124,6 +126,8 @@ struct http_client {
     // http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {}
     // http_client(auto &&url) : http_client{default_io_context(), url} {}
     http_client(const std::string &url) : url_internal{url} {
+    }
+    void set_browser_agent() {
         headers.emplace_back("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36");
     }
     void run() {
@@ -215,13 +219,16 @@ struct http_client {
         co_await tls_layer.init_ssl();
 
         // http layer
-        string req = std::format("GET {} HTTP/1.1\r\n", path);
+        string req = std::format("{} {} HTTP/1.1\r\n", query_type, path);
         req += "Host: "s + host + "\r\n";
         // req += "Transfer-Encoding: chunked\r\n";
         for (auto &&[k, v] : headers) {
             req += k + ": "s + v + "\r\n";
         }
         req += "\r\n";
+        if (!body.empty()) {
+            req += body;
+        }
         //auto resp = co_await http_query(s, req);
         auto resp = co_await http_query(tls_layer, req);
         co_await s.async_close();

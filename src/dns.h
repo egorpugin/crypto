@@ -54,6 +54,8 @@ struct dns_packet {
 
             AAAA = 28,      // ipv6
 
+            // same format rfc9460
+            SVCB = 64,
             HTTPS = 65,
         };
     };
@@ -181,8 +183,13 @@ struct dns_packet {
             s += l;
             s += ".";
         }
+        // remove?
         if (!s.empty()) {
             s.pop_back();
+        }
+        // add last '.' (for https record)?
+        if (s.empty()) {
+            s += ".";
         }
         return s;
     }
@@ -244,7 +251,25 @@ struct dns_packet {
         std::string name;
         array<16> address; // ipv6
     };
-    using record_type = std::variant<a, cname, mx, txt, aaaa>;
+    struct https : base {
+        static inline constexpr auto type = qtype::HTTPS;
+
+        enum svc_param_key_type : uint16_t {
+            mandatory,
+            alpn,
+            no_default_alpn,
+            port,
+            ipv4hint,
+            ech,
+            ipv6hint,
+        };
+
+        be<uint16_t> svc_priority;
+        std::string target_name;
+        // can have more than one val
+        std::map<svc_param_key_type, std::string> svc_params;
+    };
+    using record_type = std::variant<a, cname, mx, txt, aaaa, https>;
     auto answers() {
         std::vector<record_type> results;
         auto p = question().end(*this);
@@ -253,6 +278,14 @@ struct dns_packet {
             auto name = string_at(p);
             auto &res = *(resource::resource_end*)p;
             p += sizeof(res);
+
+            auto parse_txt = [&](auto &r) {
+                r.ttl = res.ttl;
+                auto len = *p;
+                r.data.assign(p + 1, p + 1 + len);
+                p += res.rdlength;
+            };
+
             // see rfc1035 for more types
             switch (res.type) {
             case qtype::A: {
@@ -283,10 +316,7 @@ struct dns_packet {
             }
             case qtype::TXT: {
                 txt r;
-                r.ttl = res.ttl;
-                auto len = *p;
-                r.data.assign(p+1,p+1+len);
-                p += res.rdlength;
+                parse_txt(r);
                 results.push_back(r);
                 break;
             }
@@ -296,6 +326,39 @@ struct dns_packet {
                 r.preference = *(uint16_t*)p;
                 p += sizeof(r.preference);
                 r.exchange_host = string_at(p);
+                results.push_back(r);
+                break;
+            }
+            case qtype::HTTPS: {
+                auto base = p;
+                https r;
+                r.ttl = res.ttl;
+                r.svc_priority = *(uint16_t *)p;
+                p += sizeof(r.svc_priority);
+                r.target_name = string_at(p);
+                be<uint16_t> key, len;
+                next:
+                key = *(uint16_t *)p;
+                p += sizeof(key);
+                len = *(uint16_t *)p;
+                p += sizeof(len);
+                r.svc_params[(https::svc_param_key_type)key.value] = std::string{ p,p + len.value };
+                switch ((https::svc_param_key_type)key.value) {
+                case https::svc_param_key_type::ipv4hint:
+                    // can have more than one val
+                    break;
+                case https::svc_param_key_type::ech:
+                    break;
+                case https::svc_param_key_type::ipv6hint:
+                    // can have more than one val
+                    break;
+                default:
+                    throw std::runtime_error{"unhandled"};
+                }
+                p += len.value;
+                if (base + res.rdlength - p > 1) {
+                    goto next;
+                }
                 results.push_back(r);
                 break;
             }
@@ -373,30 +436,9 @@ struct dns_resolver {
         throw std::runtime_error{ std::format("server not found: {}", domain) };
     }
 
-private:
-    awaitable<void> query_udp(auto &ctx, auto &results, auto &server, std::string_view domain, uint16_t type, uint16_t class_) {
-        //namespace ip = boost::asio::ip;
-        //using namespace boost::asio::experimental::awaitable_operators;
-
-        //auto ex = co_await boost::asio::this_coro::executor;
-        //ip::udp::endpoint e(ip::make_address_v4(server.ip), server.port);
-        //ip::udp::socket s(ex);
-        endpoint e{server.ip, server.port};
-        udp_socket s{ctx};
-        s.open();
-        constexpr auto udp_packet_max_size = 512;
-        uint8_t bq[udp_packet_max_size]{}, ba[udp_packet_max_size]{};
-        auto &q = *(dns_packet *)bq;
-        q.h.id = query_id++;
-        q.h.rd = 1; // some queries will fail without this
-        q.set_question(domain, type, class_);
-        co_await s.async_send_to(e, bytes_concept{bq, q.size()});
-        //boost::asio::system_timer dt{ ex, std::chrono::seconds{2} };
-        //co_await(s.async_receive_from(boost::asio::buffer(ba), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
-        co_await s.async_receive_from(e, bytes_concept{ba});
-        auto &a = *(dns_packet *)ba;
+    static void parse_response(auto &results, dns_packet &q, dns_packet &a) {
         if (a.h.zeros || a.h.qr == 0) {
-            co_return;
+            return;
         }
         if (q.h.id != a.h.id || q.h.rd != a.h.rd) {
             throw std::runtime_error{ "bad response" };
@@ -421,8 +463,34 @@ private:
             throw std::runtime_error{ "bad request" };
         }
     }
+    static auto parse_response(dns_packet &q, dns_packet &a) {
+        results_type results;
+        parse_response(results, q, a);
+        return results;
+    }
+
+private:
+    awaitable<void> query_udp(auto &ctx, auto &results, auto &server, std::string_view domain, uint16_t type, uint16_t class_) {
+        //ip::udp::endpoint e(ip::make_address_v4(server.ip), server.port);
+        //ip::udp::socket s(ex);
+        endpoint e{server.ip, server.port};
+        udp_socket s{ctx};
+        s.open();
+        constexpr auto udp_packet_max_size = 512;
+        uint8_t bq[udp_packet_max_size]{}, ba[udp_packet_max_size]{};
+        auto &q = *(dns_packet *)bq;
+        q.h.id = query_id++;
+        q.h.rd = 1; // some queries will fail without this
+        q.set_question(domain, type, class_);
+        co_await s.async_send_to(e, bytes_concept{bq, q.size()});
+        //boost::asio::system_timer dt{ ex, std::chrono::seconds{2} };
+        //co_await(s.async_receive_from(boost::asio::buffer(ba), e, boost::asio::use_awaitable) || dt.async_wait(boost::asio::use_awaitable));
+        co_await s.async_receive_from(e, bytes_concept{ba});
+        parse_response(results, q, *(dns_packet *)ba);
+    }
 };
 
+template <typename DnsResolver>
 struct dns_cache {
     struct query_type {
         std::string domain;
@@ -438,7 +506,7 @@ struct dns_cache {
         bool outdated(auto &&now) const {return last_query + ttl < now;}
     };
 
-    dns_resolver r;
+    DnsResolver r;
     std::map<query_type, results_type> cache;
 
     dns_cache(std::initializer_list<const char *> list) : r{list} {
@@ -496,7 +564,7 @@ struct dns_cache {
 };
 
 auto &get_default_dns() {
-    static dns_cache serv{"178.208.90.175", "8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    static dns_cache<dns_resolver> serv{"178.208.90.175", "8.8.8.8", "8.8.4.4", "1.1.1.1"};
     return serv;
 }
 

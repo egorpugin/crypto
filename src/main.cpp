@@ -32,6 +32,7 @@
 #include "streebog.h"
 #include "tls.h"
 #include "dns.h"
+#include "doh.h"
 #include "http.h"
 #include "email.h"
 #include "ed25519.h"
@@ -230,6 +231,7 @@ auto cacert_pem() {
     if (!std::filesystem::exists(name)) {
         crypto::http_client t{"https://curl.se/ca/cacert.pem"};
         t.ignore_server_certificate_check = true;
+        t.set_browser_agent();
         t.run(crypto::default_io_context());
         write_file(name, t.m.body);
     }
@@ -3145,10 +3147,12 @@ void test_tls() {
     };
     auto run = [&](auto &&url, SRCLOC) {
         http_client t{url};
+        t.set_browser_agent();
         run0(t, url, loc);
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex, bool ignore_host_check = false, SRCLOC) {
-        http_client t{url};
+        http_client t{ url };
+        t.set_browser_agent();
         //t.tls_layer.force_suite = suite;
         //t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
         //t.tls_layer.ignore_server_hostname_check = ignore_host_check;
@@ -3187,6 +3191,9 @@ void test_tls() {
         // run_with_params("91.244.183.22:15081", s, parameters::supported_groups::GC512B); // this server or their suite does not work well
     }
 #endif
+
+    auto &doh = get_default_doh();
+    doh.query<dns_packet::https>("defo.ie"sv);
 
     run("software-network.org");
 
