@@ -75,6 +75,7 @@ enum class ExtensionType : uint16_t {
     message_hash = 254,
 
     renegotiation_info = 0xff01,
+    encrypted_client_hello = 0xfe0d,
 };
 
 enum class tls_version : uint16_t {
@@ -123,6 +124,75 @@ struct padding {
 struct renegotiation_info {
     ube16 extension_type = ExtensionType::renegotiation_info;
     ube16 length;
+};
+struct encrypted_client_hello_config {
+    struct hpke_cipher_suite {
+        ube16 kdf_id;
+        ube16 aead_id;
+    };
+    struct hpke_key_config {
+        u8 config_id;
+        uint16_t kem_id;
+        ube16 pk_length;
+        bytes_concept public_key() const {
+            return bytes_concept{(u8*)&pk_length + sizeof(pk_length), pk_length};
+        }
+        auto cipher_suites_offset() const {
+            auto pk = public_key();
+            auto base = pk.data() + pk.size();
+            auto &length = *(ube16 *)base;
+            base += sizeof(length);
+            return base;
+        }
+        std::span<hpke_cipher_suite> cipher_suites() const {
+            auto pk = public_key();
+            auto base = pk.data() + pk.size();
+            uint16_t length = *(ube16*)base;
+            base += sizeof(length);
+            if (length == 0) {
+                return {};
+            }
+            return std::span<hpke_cipher_suite>{(hpke_cipher_suite*)base, sizeof(hpke_cipher_suite) / (int)length};
+        }
+        size_t size() const {
+            auto s = cipher_suites();
+            if (s.empty()) {
+                return cipher_suites_offset() - (u8*)this;
+            }
+            return (u8*)&s.back() + sizeof(hpke_cipher_suite) - (u8*)this;
+        }
+    };
+    struct ech_config_extension {
+        ube16 type;
+        ube16 length;
+        auto data() {}
+    };
+    struct ech_config_contents {
+        hpke_key_config key_config;
+
+        u8 max_name_length() const {
+            return *((u8 *)this + key_config.size() + 1); // why extra 0 byte ?
+        }
+        std::string_view public_name() const {
+            auto base = (u8 *)this + key_config.size() + 1 + 1; // why extra 0 byte ?
+            return {(const char *)base, max_name_length()};
+        }
+        auto extensions() const {
+            auto pn = public_name();
+            auto base = pn.data() + pn.size();
+            uint16_t length = *(ube16 *)base;
+            std::vector<bytes_concept> exts;
+            if (length == 0) {
+                return exts;
+            }
+            throw;
+            return exts;
+        }
+    };
+
+    ube16 extension_type = ExtensionType::encrypted_client_hello;
+    ube16 length;
+    ech_config_contents contents;
 };
 
 struct alert {

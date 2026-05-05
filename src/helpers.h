@@ -110,6 +110,8 @@ struct bytes_concept {
     u8 *p{};
     size_t sz{};
     bytes_concept() = default;
+    bytes_concept(bytes_concept &) = default;
+    bytes_concept(const bytes_concept &) = default;
     bytes_concept(u8 *p, size_t sz) : p{p}, sz{sz} {
     }
     template <typename T>

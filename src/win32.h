@@ -408,6 +408,12 @@ using endpoint = win32::endpoint;
 using tcp_socket = win32::tcp_socket;
 using udp_socket = win32::udp_socket;
 
+auto &default_io_context() {
+    //static boost::asio::io_context ctx;
+    static win32::executor ctx;
+    return ctx;
+}
+
 } // namespace crypto
 
 #endif

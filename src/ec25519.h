@@ -21,7 +21,7 @@ void curve25519_f(const u8 *private_key, const u8 *peer_public_key, u8 *shared_k
     ec::curve25519::curve25519_donna(shared_key, private_key, peer_public_key);
 }
 
-// also x25519
+// also x25519 (x for x point only)
 struct curve25519 {
     static inline constexpr auto key_size = 32;
     using private_key_type = array<key_size>;
@@ -50,5 +50,6 @@ struct curve25519 {
         return shared_secret;
     }
 };
+using x25519 = curve25519;
 
 } // namespace crypto
