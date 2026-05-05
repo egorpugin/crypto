@@ -28,6 +28,7 @@ struct http_client {
     std::string query_type{"GET"s};
     std::vector<std::pair<std::string, std::string>> headers;
     std::string body;
+    bool prefer_encrypted_hello{};
 
     struct http_message {
         static inline constexpr auto line_delim = "\r\n"sv;
@@ -185,12 +186,25 @@ struct http_client {
             host = host.substr(0, p);
         }
 
+        socket_type s{ default_io_context() };
+        tls13_<socket_type> tls_layer{
+            .s = &s,
+                .servername = host,
+                //.ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
+                //.ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
+                //.force_suite = tls_layer.force_suite,
+                //.force_kex = tls_layer.force_kex,
+        };
+
         auto &r = get_default_dns();
         auto &&result = co_await r.query_async<dns_packet::a>(default_io_context(), host);
         if (result.empty()) {
             throw std::runtime_error{"cannot resolve"};
         }
-        socket_type s{default_io_context()};
+        if (prefer_encrypted_hello) {
+            tls_layer.prefer_encrypted_hello = prefer_encrypted_hello;
+            tls_layer.dns_records_for_ech = co_await r.query_async<dns_packet::https>(default_io_context(), host);
+        }
         co_await s.async_connect(endpoint{result.begin()->address,port});
         //for (int i = 0; auto &&e : result) {
         //    try {
@@ -208,14 +222,6 @@ struct http_client {
         //std::string ss = remote_ad.to_string();
         // std::cout << ss << "\n";
 
-        tls13_<socket_type> tls_layer{
-            .s = &s,
-                .servername = host,
-                //.ignore_server_hostname_check = tls_layer.ignore_server_hostname_check,
-                //.ignore_server_certificate_check = tls_layer.ignore_server_certificate_check,
-                //.force_suite = tls_layer.force_suite,
-                //.force_kex = tls_layer.force_kex,
-        };
         co_await tls_layer.init_ssl();
 
         // http layer

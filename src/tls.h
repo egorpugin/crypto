@@ -6,6 +6,7 @@
 #include "aes.h"
 #include "asn1.h"
 #include "chacha20_poly1305.h"
+#include "dns.h"
 #include "ec.h"
 #include "ec25519.h"
 #include "gcm.h"
@@ -315,6 +316,8 @@ struct tls13_ {
     tls13::Random random;
     std::string cookie;
     std::string server_certificate;
+    bool prefer_encrypted_hello{};
+    std::vector<dns_packet::https> dns_records_for_ech;
 
     all_suites::variant_type suite;
     all_key_exchanges::variant_type kex;
@@ -528,6 +531,30 @@ struct tls13_ {
                 sn.server_name_length += url.size();
                 sn.server_name_list_length += url.size();
                 sn.len += url.size();
+            }
+
+            if (prefer_encrypted_hello) {
+                if (dns_records_for_ech.empty()) {
+                    throw std::runtime_error{ "no ECH in HTTPS" };
+                }
+                auto d = dns_records_for_ech[0].svc_params[dns_packet::https::svc_param_key_type::ech].data();
+                auto echc = (encrypted_client_hello_config*)&d[2];
+                auto pn = echc->contents.public_name();
+                auto exts = echc->contents.extensions();
+                auto pk = echc->contents.key_config.public_key();
+                auto s = echc->contents.key_config.cipher_suites();
+
+                using hkdf_type = hkdf<sha256>;
+                hpke<dhkem<curve25519, hkdf_type>, hkdf_type, gcm<aes_ecb<128>>> h;
+
+                std::string ss{"tls ech\0"sv};
+                uint16_t len = echc->length;
+                len += 2;
+                ss += bytes_concept{&d[2], len};
+                auto enc = h.shared_secret<'S'>(pk, ss);
+
+                int a = 5;
+                a++;
             }
 
             supported_versions &sv = w;
@@ -1079,11 +1106,5 @@ struct tls13_ {
         co_await send_message(data);
     }
 };
-
-auto &default_io_context() {
-    //static boost::asio::io_context ctx;
-    static win32::executor ctx;
-    return ctx;
-}
 
 } // namespace crypto
