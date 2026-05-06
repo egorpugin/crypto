@@ -3,16 +3,34 @@
 #include "hmac.h"
 #include "ec.h"
 #include "ec25519.h"
+#include "ec448.h"
 #include "chacha20_poly1305.h"
 #include "gcm.h"
+
+// https://www.rfc-editor.org/rfc/rfc9180
+// https://datatracker.ietf.org/doc/html/draft-ietf-hpke-hpke-03#name-differences-from-rfc-9180
+
+// HPKE KEM Identifiers
+// https://www.iana.org/assignments/hpke/hpke.xhtml
+
+/*
+https://www.ietf.org/archive/id/draft-ietf-hpke-pq-04.html
+ML-KEM-512: KEM\x00\x40 (hex: 4b454d0040)
+ML-KEM-768: KEM\x00\x41 (hex: 4b454d0041)
+ML-KEM-1024: KEM\x00\x42 (hex: 4b454d0042)
+
+0x0050	MLKEM768-P256	32	1153	1249	32	no	RFCXXXX
+0x0051	MLKEM1024-P384	32	1665	1665	32	no	RFCXXXX
+0x647a	MLKEM768-X25519	32	1120	1216	32	no	RFCXXXX
+*/
 
 namespace crypto {
 
 enum class mode_type : uint8_t {
     base,
     psk,
-    auth,
-    auth_psk,
+    auth, // removed in the new rfc
+    auth_psk, // removed in the new rfc
 };
 
 template <auto n_sk>
@@ -46,7 +64,7 @@ auto hpke_derive_key_pair_edwards(auto &&obj, bytes_concept version, auto &&inpu
 template <typename Curve, typename Hkdf>
 struct dhkem_params;
 
-template <> struct dhkem_params<curve25519, hkdf<sha256>> {
+template <> struct dhkem_params<x25519, hkdf<sha2<256>>> {
     static inline constexpr uint16_t id = 0x20;
 
     template <auto n_sk>
@@ -54,8 +72,16 @@ template <> struct dhkem_params<curve25519, hkdf<sha256>> {
         return hpke_derive_key_pair_edwards<n_sk>(obj, version, input_key_material);
     }
 };
-// x448+sha512 // 64 |56  |56 |56
-template <> struct dhkem_params<ec::secp256r1, hkdf<sha256>> {
+template <> struct dhkem_params<x448, hkdf<sha2<512>>> {
+    static inline constexpr uint16_t id = 0x21;
+
+    template <auto n_sk>
+    static auto derive_key_pair(auto &&obj, bytes_concept version, auto &&input_key_material) {
+        return hpke_derive_key_pair_edwards<n_sk>(obj, version, input_key_material);
+    }
+};
+
+template <> struct dhkem_params<ec::secp256r1, hkdf<sha2<256>>> {
     static inline constexpr uint16_t id = 0x10;
 
     template <auto n_sk>
@@ -169,7 +195,7 @@ struct hpke {
     auto derive_key_pair(auto &&input_key_material) {
         return kem.derive_key_pair(version, input_key_material);
     }
-    template <char Role>
+    template <char Role> // S = Sender, R = Recipient
     auto shared_secret(bytes_concept peer_public_key) {
         auto dh = kem.c.shared_secret(peer_public_key);
         auto kem_context = Role == 'S' ? concat((bytes_concept)kem.c.public_key(), peer_public_key) : concat(peer_public_key, (bytes_concept)kem.c.public_key());
@@ -177,13 +203,13 @@ struct hpke {
     }
     template <char Role>
     auto shared_secret(bytes_concept peer_public_key, bytes_concept s_key) {
-        if constexpr (Role == 'S') { // AuthEncap
+        if constexpr (Role == 'S') { // AuthEncap, SetupBaseS
             Kem s;
             memcpy(s.c.private_key_.data(), s_key.data(), s_key.size());
             auto dh = concat(kem.c.shared_secret(peer_public_key), s.c.shared_secret(peer_public_key));
             auto kem_context = concat((bytes_concept)kem.c.public_key(), peer_public_key, (bytes_concept)s.c.public_key());
             return kem.extract_and_expand(version, dh, kem_context);
-        } else { // AuthDecap
+        } else { // AuthDecap, SetupBaseR
             auto dh = concat(kem.c.shared_secret(peer_public_key), kem.c.shared_secret(s_key));
             auto kem_context = concat(peer_public_key, (bytes_concept)kem.c.public_key(), s_key);
             return kem.extract_and_expand(version, dh, kem_context);
