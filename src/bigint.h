@@ -220,6 +220,7 @@ struct bigint {
         mpz_init_set_si(*this, p);
         return *this;
     }
+
     bool operator==(const bigint &p) const {
         return mpz_cmp(*this, p) == 0;
     }
@@ -284,7 +285,7 @@ auto operator""_bi(const char *p, size_t len) {
 }
 
 template <auto N>
-bigint bytes_to_bigint(u8 (&v)[N], int order = 1) {
+bigint bytes_to_bigint(const u8 (&v)[N], int order = 1) {
     bigint b;
     mpz_import(b, N, order, sizeof(v[0]), 0, 0, v);
     return b;
