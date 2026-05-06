@@ -66,6 +66,9 @@ struct bigint {
         mpz_powm(r, *this, e, m);
         return r;
     }
+    u8 bit(int b) const {
+        return mpz_tstbit(*this, b) == 1;
+    }
 
     operator __mpz_struct *() {
         return &p[0];
