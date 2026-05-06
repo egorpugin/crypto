@@ -52,4 +52,12 @@ void build(Solution &s) {
         t += cppstd;
         t += "src/test.cpp";
     }
+
+    auto &test3 = s.addTarget<Executable>("test3");
+    {
+        auto &t = test3;
+        t += cppstd;
+        t += "src/test3.cpp";
+        t += "org.sw.demo.randombit.botan"_dep;
+    }
 }
