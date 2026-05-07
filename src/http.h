@@ -146,9 +146,9 @@ struct http_client {
     }
     awaitable<void> run_coro() {
         m = co_await open_url(url_internal);
-        while (m.headers.contains("Location") && follow_location) {
+        while (m.headers.contains("Location"sv) && follow_location) {
             redirected = true;
-            m = co_await open_url(m.headers["Location"]);
+            m = co_await open_url(m.headers["Location"sv]);
         }
     }
     awaitable<http_message> open_url(std::string_view url) {
@@ -157,14 +157,17 @@ struct http_client {
         string host{url_internal};
         uint16_t port = 443;
         bool tls{ true };
-        if (host.starts_with("http://")) {
-            host = host.substr(7);
+        auto http_prefix = "http://"sv;
+        auto https_prefix = "https://"sv;
+        auto prefix = ""sv;
+        if (host.starts_with(http_prefix)) {
+            prefix = http_prefix;
             port = 80;
             tls = false;
+        } else if (host.starts_with(https_prefix)) {
+            prefix = https_prefix;
         }
-        if (host.starts_with("https://")) {
-            host = host.substr(8);
-        }
+        host = host.substr(prefix.size());
         auto p_slash = host.find('/');
         auto path = p_slash == -1 ? "/" : host.substr(p_slash);
         host = host.substr(0, p_slash);
@@ -176,6 +179,10 @@ struct http_client {
         }
         if (host.empty()) {
             throw std::runtime_error{"bad host"};
+        }
+        if (redirected) {
+            url_internal = std::format("{}{}{}", prefix, host, m.headers["Location"sv]);
+            path = m.headers["Location"sv];
         }
         if (auto p = host.rfind('.', host.rfind('.') - 1); p != -1) {
             // host = host.substr(p + 1);
