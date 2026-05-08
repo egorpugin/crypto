@@ -3242,11 +3242,13 @@ void test_tls() {
     }
 #endif
 
+#ifndef CI_TESTS
     {
         http_client ech{"defo.ie"s};
         ech.prefer_encrypted_hello = true;
         ech.run();
     }
+#endif
 
     run("software-network.org");
 
