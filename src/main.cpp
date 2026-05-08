@@ -3178,6 +3178,7 @@ void test_tls() {
     auto run0 = [](auto &&t, auto &&url, SRCLOC) {
         t.follow_location = true;
         //t.tls_layer.ignore_server_hostname_check = true;
+        std::cout << "connecting to " << url << "\n";
 #ifndef CI_TESTS
         std::cout << "connecting to " << url << "\n";
 #endif
