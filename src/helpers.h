@@ -16,6 +16,7 @@
 #include <cmath>
 #include <coroutine>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <format>
 //using std::format;
