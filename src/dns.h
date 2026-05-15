@@ -1,6 +1,7 @@
 #pragma once
 
 #include "helpers.h"
+#include "io.h"
 
 namespace crypto {
 
@@ -471,8 +472,6 @@ struct dns_resolver {
 
 private:
     awaitable<void> query_udp(auto &ctx, auto &results, auto &server, std::string_view domain, uint16_t type, uint16_t class_) {
-        //ip::udp::endpoint e(ip::make_address_v4(server.ip), server.port);
-        //ip::udp::socket s(ex);
         endpoint e{server.ip, server.port};
         udp_socket s{ctx};
         s.open();

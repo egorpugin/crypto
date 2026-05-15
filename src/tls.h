@@ -13,6 +13,7 @@
 #include "grasshopper.h"
 #include "helpers.h"
 #include "hmac.h"
+#include "hpke.h"
 #include "magma.h"
 #include "mgm.h"
 #include "mlkem.h"

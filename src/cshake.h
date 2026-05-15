@@ -132,7 +132,7 @@ struct kmac_base : cshake_base<ShakeType, FunctionName, CustomizationString> {
             cshake<ShakeType> s;
             s.update(bytes_concept{p,std::min(B,(decltype(B))(end-p))});
             s.finalize();
-            auto r = s.squeeze<ShakeType * 2>();
+            auto r = s.template squeeze<ShakeType * 2>();
             base::update(r.data(), r.size());
             p += B;
         }

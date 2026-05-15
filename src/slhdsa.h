@@ -146,14 +146,14 @@ struct adrs {
 struct param_set {
     using param_type = size_t;
 
-    size_t n;
-    size_t h;
-    size_t d;
-    size_t hp;
-    size_t a;
-    size_t k;
-    size_t lg_w;
-    size_t m;
+    param_type n;
+    param_type h;
+    param_type d;
+    param_type hp;
+    param_type a;
+    param_type k;
+    param_type lg_w;
+    param_type m;
 
     constexpr u32 get_len1() const {
         return ((8 * n + lg_w - 1) / lg_w);
@@ -355,7 +355,7 @@ private:
         const u8 *pi_leaf = pi_tree + i_tree_sz;
         *i_leaf = slh_dsa_detail::slh_toint(pi_leaf, i_leaf_sz);
         if ((param_set.h - param_set.hp) != 64) {
-            *i_tree &= (UINT64_C(1) << (param_set.h - param_set.hp)) - UINT64_C(1);
+            *i_tree &= (1ULL << (param_set.h - param_set.hp)) - 1;
         }
         *i_leaf &= (1 << param_set.hp) - 1;
     }

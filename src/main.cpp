@@ -1472,6 +1472,21 @@ void test_ec25519_448() {
             "0500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"_sb,
             "3f482c8a9f19b01e6c46ee9711d9dc14fd4bf67af30765c2ae2b846a4d23a8cd0db897086239492caf350b51f833868b9bc2b3bca9cf4113"_sb
         );
+        {
+            auto k = "0500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"_sb;
+            auto u = k;
+            curve448 c;
+            decltype(c.public_key()) r;
+            for (int i = 0; i < 1000; ++i) {
+                c.private_key_ = bytes_concept{ k };
+                r = c.shared_secret(u);
+                u = k;
+                memcpy(k.data(), r.data(), r.size());
+            }
+            cmp_bytes(r,
+                "aa3b4749d55b9daf1e5b00288826c467274ce3ebbdd5c17b975e09d4af6c67cf10d087202db88286e2b79fceea3ec353ef54faa26e219f38"_sb
+            );
+        }
     }
 }
 

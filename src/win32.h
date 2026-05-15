@@ -18,6 +18,7 @@
 #include <WinSock2.h>
 #include <ws2tcpip.h>
 #include <mswsock.h>
+#include <wincrypt.h>
 
 #define WINAPI_CALL(x) if (!(x)) {throw ::crypto::win32::winapi_exception{#x};}
 
@@ -407,12 +408,7 @@ struct udp_socket : socket {
 using endpoint = win32::endpoint;
 using tcp_socket = win32::tcp_socket;
 using udp_socket = win32::udp_socket;
-
-auto &default_io_context() {
-    //static boost::asio::io_context ctx;
-    static win32::executor ctx;
-    return ctx;
-}
+using executor = win32::executor;
 
 } // namespace crypto
 

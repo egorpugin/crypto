@@ -41,9 +41,9 @@ array_little<56> x448(bigint k, bigint u) {
         cond_swap(z_2, z_3);
         swap = k_t;
 
-        auto A = x_2 + z_2 % p;
+        auto A = (x_2 + z_2) % p;
         auto AA = A * A % p;
-        auto B = x_2 - z_2 % p;
+        auto B = (x_2 - z_2) % p;
         auto BB = B * B % p;
         auto E = AA - BB;
         auto C = x_3 + z_3;
@@ -59,6 +59,7 @@ array_little<56> x448(bigint k, bigint u) {
     cond_swap(x_2, x_3);
     cond_swap(z_2, z_3);
 
+    // is it correct?
     auto res = x_2 * z_2.powm(p-2, p) % p;
     return res;
 }
