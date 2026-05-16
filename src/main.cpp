@@ -2922,6 +2922,7 @@ void test_x509() {
     LOG_TEST();
 
     using namespace crypto;
+    using namespace std::chrono_literals;
 
     // chain is: data3(root) <- data2 <- data1
 
@@ -4124,7 +4125,7 @@ int main() {
         //test_base64();
         // test_aes();
         //test_sha1();
-        //test_sha2();
+        test_sha2();
         //test_sha3();
         // test_blake2();
         // test_blake3();

@@ -14,7 +14,7 @@ namespace crypto {
  * http header size limit = 8K
  */
 struct http_client {
-    using socket_type = win32::tcp_socket; // boost::asio::ip::tcp::socket;
+    using socket_type = tcp_socket; // boost::asio::ip::tcp::socket;
     template <typename T>
     using awaitable = awaitable<T>;
 

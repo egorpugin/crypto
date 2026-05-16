@@ -14,6 +14,7 @@
 #include <atomic>
 #include <bit>
 #include <charconv>
+#include <chrono>
 #include <cmath>
 #include <coroutine>
 #include <cstring>
@@ -299,24 +300,22 @@ inline auto print_buffer(bytes_concept buffer) {
     // maybe make this 2? but seems 3 is more readable
     constexpr int SPACE_LEN = 3; // addr | ':' | space
     int ADDR_LEN = std::max<int>(5, std::log2(buffer.size()) / 4);
+    auto addr_fmt = std::format("{{:0{}x}}:{}{{}}", ADDR_LEN, string(SPACE_LEN, ' '));
+    int addr = 0;
     /* addr:   00..0F | chars...chars\0 */
 
     std::string out;
     auto print = [&](auto &&s) {
-        out += s + "\n";
+        out += std::vformat(addr_fmt, std::make_format_args(addr, s)) + "\n"s;
     };
 
-    string space(SPACE_LEN, ' ');
     if (!buffer.data()) {
-        print(std::format("{:0{}d}:{}NULL", 0, ADDR_LEN, space));
+        print("NULL"sv);
         return out;
     }
 
-    size_t addr = 0;
     while (buflen > 0) {
         std::string line;
-        line += std::format("{:0{}x}:{}", addr, ADDR_LEN, space);
-
         for (i = 0; i < LINE_LEN; i++) {
             if (i < buflen) {
                 line += std::format("{:02x} ", buffer[i]);

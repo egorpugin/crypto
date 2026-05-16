@@ -375,7 +375,7 @@ struct tcp_socket : socket {
         co_await op;
         co_return op.cb.bytes;
     }
-    const endpoint &remote_endpoint() const {return remote;}
+    const endpoint &remote_endpoint() const { return remote; }
 };
 
 struct udp_socket : socket {
