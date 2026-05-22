@@ -131,13 +131,16 @@ struct json_raw {
         a.push_back(v);
     }
     //auto operator<=>(const this_type &) const = default;
-    bool operator==(const this_type &rhs) const {return value == rhs.value;}
-    auto &operator[](const string_type &key) {
+    bool operator==(const this_type &rhs) const { return value == rhs.value; }
+    auto &operator[](auto &&key) {
         return std::get<object_type>(value)[key];
     }
-    auto &operator[](const string_type &key) const {
+    const auto &operator[](auto &&key) const {
         return std::get<object_type>(value).at(key);
     }
+    //auto &operator[](this auto &&self, auto &&key) {
+    //    return std::get<object_type>(self.value).at(key);
+    //}
     auto &object(this auto &&self) {return std::get<object_type>(self.value);}
     auto &array(this auto &&self) {return std::get<array_type>(self.value);}
     bool contains(const string_type &key) const {
@@ -185,7 +188,10 @@ struct json_raw {
         return v;
     }*/
     operator std::string() const {
-        return std::get<string_type>(std::get<simple_value>(value));
+        return std::string{std::get<string_type>(std::get<simple_value>(value))};
+    }
+    operator int64_t() const {
+        return std::get<int64_t>(std::get<simple_value>(value));
     }
 
     template <bool ToJson>

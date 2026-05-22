@@ -165,6 +165,9 @@ struct sm3 : hash_traits<sm3> {
         this->h[6] ^= g;
         this->h[7] ^= h;
     }
+#undef W1
+#undef W2
+#undef I
 #undef P0
 #undef P1
 #undef R

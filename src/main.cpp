@@ -39,6 +39,7 @@
 #include "ed448.h"
 #include "ssh2.h"
 #include "cshake.h"
+#include "io.h"
 
 // TODO: dns - doh dot (port 853)?
 // curveSM2MLKEM768
@@ -200,17 +201,6 @@ auto fox = [](auto &&sha, auto &&h1, auto &&h2) {
     to_string2(type{}, "The quick brown fox jumps over the lazy dog.", h2);
 };
 
-auto read_file(const std::filesystem::path &fn) {
-    if (!std::filesystem::exists(fn)) {
-        throw std::runtime_error{"file does not exist: " + fn.string()};
-    }
-    // better mmap?
-    std::ifstream i{fn, std::ios::binary};
-    auto sz = std::filesystem::file_size(fn);
-    std::string s(sz, 0);
-    i.read(s.data(), sz);
-    return s;
-}
 auto read_file_mmap(const std::filesystem::path &fn) {
     if (!std::filesystem::exists(fn)) {
         throw std::runtime_error{ "file does not exist: " + fn.string() };
@@ -218,14 +208,7 @@ auto read_file_mmap(const std::filesystem::path &fn) {
     crypto::mmap_file<> f{fn};
     return std::string((const char *)f.p,(const char *)f.p+f.sz);
 }
-void write_file(const std::filesystem::path &fn, auto &&s) {
-    std::ofstream o{fn, std::ios::binary};
-    if constexpr (requires {s.data();}) {
-        o.write((const char *)s.data(), s.size());
-    } else {
-        o << s;
-    }
-}
+
 auto cacert_pem() {
     auto name = "roots.pem";
     if (!std::filesystem::exists(name)) {
@@ -233,10 +216,10 @@ auto cacert_pem() {
         t.ignore_server_certificate_check = true;
         t.set_browser_agent();
         t.run(crypto::default_io_context());
-        write_file(name, t.m.body);
+        crypto::write_file(name, t.m.body);
     }
     auto &tcs = crypto::x509_trusted_storage();
-    auto n = tcs.load_pem(read_file(name), true);
+    auto n = tcs.load_pem(crypto::read_file(name), true);
     std::println("loaded {} certs", n);
     return name;
 }
@@ -253,7 +236,7 @@ void load_test_certs() {
     static auto once = [](){
         auto &tcs = crypto::x509_trusted_storage();
         auto n_loaded = load_system_certificates(tcs);
-        tcs.load_der(read_file(infotecs_ca()), true);
+        tcs.load_der(crypto::read_file(infotecs_ca()), true);
         ++n_loaded;
         //std::println("loaded {} certs", n_loaded);
         return n_loaded;

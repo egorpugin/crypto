@@ -11,6 +11,7 @@ void build(Solution &s) {
         //t.Public += "org.sw.demo.boost.asio"_dep;
 
         if (t.getCompilerType() == CompilerType::MSVC) {
+            t.Public += "WIN32_LEAN_AND_MEAN"_def;
             t.Public.CompileOptions.push_back("/bigobj");
         }
         if (t.getBuildSettings().TargetOS.Type == OSType::Windows || t.getBuildSettings().TargetOS.Type == OSType::Mingw) {
