@@ -138,6 +138,9 @@ struct http_client {
         std::exception_ptr eptr;
         ctx.co_spawn(run_coro(), [&](auto &&e) {
             eptr = e;
+            if (eptr) {
+                std::rethrow_exception(eptr);
+            }
         });
         ctx.run();
         if (eptr) {
@@ -154,7 +157,7 @@ struct http_client {
     awaitable<http_message> open_url(std::string_view url) {
         //auto ex = co_await boost::asio::this_coro::executor;
 
-        string host{url_internal};
+        string host{url};
         uint16_t port = 443;
         bool tls{ true };
         auto http_prefix = "http://"sv;
@@ -181,8 +184,10 @@ struct http_client {
             throw std::runtime_error{"bad host"};
         }
         if (redirected) {
-            url_internal = std::format("{}{}{}", prefix, host, m.headers["Location"sv]);
-            path = m.headers["Location"sv];
+            if (url.starts_with('/')) {
+                url_internal = std::format("{}{}{}", prefix, host, m.headers["Location"sv]);
+                path = m.headers["Location"sv];
+            }
         }
         if (auto p = host.rfind('.', host.rfind('.') - 1); p != -1) {
             // host = host.substr(p + 1);

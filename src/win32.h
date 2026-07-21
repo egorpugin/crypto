@@ -194,12 +194,20 @@ struct executor {
     }
 
     void co_spawn(auto &&coro, auto &&eh) {
-        coro.p->eh = eh;
+        //coro.p->eh = eh;
+        if (coro.p->eptr) {
+            eh(coro.p->eptr);
+        } else {
+            coro.p->eh = eh;
+        }
     }
 
     // rename to work?
     void register_job() {
         ++jobs;
+    }
+    void unregister_job() {
+        --jobs;
     }
     void register_job(auto r, auto &&cmp, auto &&err, auto &&fmt) {
         register_job();
@@ -222,9 +230,6 @@ struct executor {
     }
     void register_job_wsa(auto r) {
         register_job_wsa0(r, [](auto r) {return r != 0; });
-    }
-    void unregister_job() {
-        --jobs;
     }
 };
 
