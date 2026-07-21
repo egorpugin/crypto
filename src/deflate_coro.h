@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2022-2025 Egor Pugin <egor.pugin@gmail.com>
 
+#include "helpers.h"
+
 #include <array>
 #include <coroutine>
 #include <stdexcept>
 #include <string>
 
 //#include <iostream>
+
+namespace crypto {
 
 struct deflater_coro {
     template <auto MaxSize>
@@ -481,3 +485,5 @@ struct deflater_coro {
         }
     }
 };
+
+}

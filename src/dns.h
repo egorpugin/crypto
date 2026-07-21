@@ -563,7 +563,10 @@ struct dns_cache {
 };
 
 auto &get_default_dns() {
-    static dns_cache<dns_resolver> serv{"178.208.90.175", "8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    static dns_cache<dns_resolver> serv{
+        //"178.208.90.175",
+        "8.8.8.8", "8.8.4.4", "1.1.1.1"
+    };
     return serv;
 }
 
