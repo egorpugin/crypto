@@ -20,6 +20,60 @@ namespace crypto {
 namespace macos {
 
 struct executor {
+    struct callback {
+        int fd;
+        bytes_concept b;
+        size_t bytes{};
+        void *data;
+        std::error_code ec;
+        std::coroutine_handle<> h;
+
+        void f() {
+            h();
+        }
+
+        int read() {
+            while (1) {
+                auto count = ::read(fd, b.data() + bytes, b.size() - bytes);
+                if (count <= -1) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+                    //perror("read failed");
+                    //exit(1);
+                    return -1;
+                } else if (count == 0) {
+                    break;
+                } else if (count == b.size()) {
+                    bytes += count;
+                    break;
+                }
+                bytes += count;
+            }
+            return bytes;
+        }
+        int write() {
+            while (1) {
+                auto count = ::write(fd, b.data() + bytes, b.size() - bytes);
+                if (count <= -1) {
+                    if (errno == EINTR) {
+                        continue;
+                    }
+                    //perror("read failed");
+                    //exit(1);
+                    return -1;
+                } else if (count == 0) {
+                    break;
+                } else if (count == b.size()) {
+                    bytes += count;
+                    break;
+                }
+                bytes += count;
+            }
+            return bytes;
+        }
+    };
+
     int kfd;
     std::atomic_bool stopped{ false };
     std::atomic_int jobs{ 0 };
@@ -29,7 +83,7 @@ struct executor {
     executor() {
         kfd = kqueue();
         if (kfd == -1) {
-            throw std::runtime_error{ "can create kqueue" };
+            throw std::runtime_error{ "cant create kqueue" };
         }
     }
     ~executor() {
@@ -70,7 +124,42 @@ struct executor {
         }
     }
 
-    void register_read_handle(auto &&fd, auto &&f) {
+    void co_spawn(auto &&coro, auto &&eh) {
+        if (coro.p->eptr) {
+            eh(coro.p->eptr);
+        } else {
+            coro.p->eh = eh;
+        }
+    }
+    // rename to work?
+    void register_job() {
+        ++jobs;
+    }
+    void unregister_job() {
+        --jobs;
+    }
+    void register_job(auto &&cb, auto &&flags) {
+        struct kevent ev {};
+        EV_SET(&ev, cb.fd, flags | EV_ONESHOT | EV_CLEAR, EV_ADD | EV_ENABLE, 0, 0, &cb);
+        if (kevent(kfd, &ev, 1, 0, 0, 0) == -1) {
+            throw std::runtime_error{ "error kevent queue" };
+        }
+        register_job();
+    }
+    void register_job_sock_in(auto &&cb) {
+        register_job(cb, EVFILT_READ);
+    }
+    void register_job_sock_out(auto &&cb) {
+        register_job(cb, EVFILT_WRITE);
+    }
+    void register_job_sock_send(auto &&cb) {
+        register_job_sock_out(cb);
+    }
+    void register_job_sock_recv(auto &&cb) {
+        register_job_sock_in(cb);
+    }
+
+    /*void register_read_handle(auto &&fd, auto &&f) {
         struct kevent ev {};
         EV_SET(&ev, fd, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, 0);
         if (kevent(kfd, &ev, 1, 0, 0, 0) == -1) {
@@ -92,9 +181,8 @@ struct executor {
             throw std::runtime_error{ "error kevent queue" };
         }
         process_callbacks.emplace(pid, std::move(f));
-    }
+    }*/
 };
-
 
 struct endpoint {
     sockaddr_in addr{};
@@ -114,6 +202,14 @@ struct endpoint {
         addr.sin_port = htons(port);
     }
 };
+
+struct io_callback : executor::callback {
+};
+
+std::string last_error_to_string(auto e) {
+    std::string r = std::to_string(e);
+    return r;
+}
 
 struct op_awaiter {
     io_callback cb;
@@ -147,6 +243,21 @@ struct socket {
             //
         }
     }
+
+    static int set_nonblocking(int fd) {
+        int flags = fcntl(fd, F_GETFL, 0);
+        return flags == -1 ? -1 : fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+    int set_nonblocking() {
+        return set_nonblocking(s);
+    }
+
+    auto make_awaiter(bytes_concept b) {
+        op_awaiter op;
+        op.cb.fd = s;
+        op.cb.b = b;
+        return op;
+    }
 };
 
 struct tcp_socket : socket {
@@ -165,18 +276,53 @@ struct tcp_socket : socket {
         localAddr.sin_family = AF_INET;
         localAddr.sin_addr.s_addr = INADDR_ANY;
         localAddr.sin_port = 0;
-        if (bind(s, &localAddr, sizeof(localAddr)) == -1) {
+        if (bind(s, (const sockaddr *)&localAddr, sizeof(localAddr)) == -1) {
             throw std::runtime_error{ std::format("cannot bind") };
         }
 
+        if (connect(s, (struct sockaddr*)&remote.addr, remote.addrlen) == -1) {
+            if (errno == EINPROGRESS) {
+                op_awaiter op;
+                op.cb.fd = s;
+                ex.register_job_sock_send(op.cb);
+                co_await op;
+                co_return;
+            }
+            throw std::runtime_error{ std::format("cannot connect") };
+        }
+
         op_awaiter op;
-        co_await op;
+        //co_await op;
+        co_return;
     }
     awaitable<> async_close() {
         close();
+        co_return;
     }
-    awaitable<size_t> async_send(std::span<bytes_concept> b) {
-        co_return 0;
+    awaitable<size_t> async_send(std::span<bytes_concept> in) {
+        size_t bytes_out{};
+        for (auto &&b : in) {
+            auto op = make_awaiter(b);
+            again:
+            int r = send(s, b.data(), b.size(), 0);
+            if (r == -1) {
+                if (errno == EINTR) {
+                    goto again;
+                }
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                    ex.register_job_sock_send(op.cb);
+                    co_await op;
+                    op.cb.write();
+                    co_return op.cb.bytes;
+                }
+                throw std::runtime_error{"error during send"};
+            }
+            if (r != b.size()) {
+                throw std::runtime_error{"error during send - not enough size"};
+            }
+            bytes_out += r;
+        }
+        co_return bytes_out;
     }
     awaitable<size_t> async_send(std::vector<bytes_concept> &b) {
         co_return co_await async_send(std::span<bytes_concept>{b});
@@ -185,7 +331,33 @@ struct tcp_socket : socket {
         co_return co_await async_send(std::span<bytes_concept>{&b, 1});
     }
     awaitable<size_t> async_read(bytes_concept b) {
-        co_return 0;
+        auto op = make_awaiter(b);
+        again:
+        auto r = recv(s, b.data() + op.cb.bytes, b.size() - op.cb.bytes, 0);
+        while (r == -1) {
+            if (errno == EINTR) {
+                goto again;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                ex.register_job_sock_send(op.cb);
+                co_await op;
+                r = op.cb.read();
+                if (r == -1) {
+                    if (errno == EAGAIN) {
+                        continue;
+                    }
+                    throw std::runtime_error{"error during recvfrom"};
+                }
+                co_return op.cb.bytes;
+            }
+            throw std::runtime_error{"error during recv"};
+        }
+        op.cb.bytes += r;
+        if (op.cb.bytes < b.size()) {
+            goto again;
+            //throw std::runtime_error{"error during recv - not enough size"};
+        }
+        co_return op.cb.bytes;
     }
     awaitable<std::string> async_read_some() {
         std::string buf;
@@ -209,10 +381,46 @@ struct udp_socket : socket {
     void open() {
     }
     awaitable<size_t> async_send_to(const endpoint &e, bytes_concept b) {
-        co_return 0;
+        auto op = make_awaiter(b);
+        //ex.register_job_sock_send(op.cb);
+        int r = sendto(s, b.data(), b.size(), 0, (struct sockaddr*)&e.addr, e.addrlen);
+        if (r == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                ex.register_job_sock_send(op.cb);
+                co_await op;
+                op.cb.write();
+                co_return op.cb.bytes;
+            }
+            throw std::runtime_error{"error during sendto"};
+        }
+        if (r != b.size()) {
+            throw std::runtime_error{"error during sendto - not enough size"};
+        }
+        //co_await op;
+        //op.cb.write();
+        op.cb.bytes = r;
+        co_return op.cb.bytes;
     }
     awaitable<size_t> async_receive_from(endpoint &e, bytes_concept b) {
-        co_return 0;
+        auto op = make_awaiter(b);
+        //ex.register_job_sock_send(op.cb);
+        int r = recvfrom(s, b.data(), b.size(), 0, (struct sockaddr*)&e.addr, (socklen_t*)&e.addrlen);
+        while (r == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                ex.register_job_sock_recv(op.cb);
+                co_await op;
+                op.cb.read();
+                co_return op.cb.bytes;
+            }
+            throw std::runtime_error{"error during recvfrom"};
+        }
+        if (r != b.size()) {
+            //throw std::runtime_error{"error during sendto - not enough size"};
+        }
+        //co_await op;
+        //op.cb.write();
+        op.cb.bytes = r;
+        co_return op.cb.bytes;
     }
 };
 

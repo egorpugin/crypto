@@ -84,7 +84,7 @@ struct executor {
     executor() {
         efd = epoll_create1(EPOLL_CLOEXEC);
         if (efd == -1) {
-            throw std::runtime_error{ "can create epoll" };
+            throw std::runtime_error{ "cant create epoll" };
         }
     }
     ~executor() {
