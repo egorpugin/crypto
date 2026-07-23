@@ -15,9 +15,9 @@ jobs:
     - uses: actions/checkout@v1
     - uses: egorpugin/sw-action@master
     - name: build
-      run: ./sw -Dci-build=true build --target test-0.0.1
+      run: ./sw -config d -Dci-build=true build --target test-0.0.1
     - name: test
-      run: ./sw -Dci-build=true run test-0.0.1
+      run: ./sw -config d -Dci-build=true run test-0.0.1
       #run: ./sw run test-0.0.1
 
   linux:
