@@ -51,6 +51,8 @@
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
     std::flush(std::cout);                                                                                                                                     \
     scoped_timer ____timer;
+#define LOG_TEST_TRY() LOG_TEST() try {
+#define LOG_TEST_TRY_END() } catch (...) {cmp_base(1, 0);}
 
 #define SRCLOC std::source_location loc = std::source_location::current()
 
@@ -3122,11 +3124,14 @@ void test_gost() {
 }
 
 void test_dns() {
-    LOG_TEST();
+    LOG_TEST_TRY();
 
     using namespace crypto;
 
-    dns_resolver serv{"178.208.90.175", "8.8.8.8", "8.8.4.4", "1.1.1.1"};
+    dns_resolver serv{
+        //"178.208.90.175",
+        "8.8.8.8", "8.8.4.4", "1.1.1.1"
+    };
     bool ok{true};
     auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A, SRCLOC) {
         try {
@@ -3165,6 +3170,8 @@ void test_dns() {
 
     auto &doh = get_default_doh();
     cmp_bool(!doh.query<dns_packet::https>("defo.ie"sv).empty());
+
+    LOG_TEST_TRY_END();
 }
 
 void test_tls() {
