@@ -917,7 +917,7 @@ struct tls13_ {
                     }
                 }
                 if (!certs.verify(x509_trusted_storage(), server_certificate, std::chrono::system_clock::now()) && !ignore_server_certificate_check) {
-                    throw std::runtime_error{"certificate verification failed"};
+                    throw std::runtime_error{std::format("certificate verification failed: {}", servername)};
                 }
                 break;
             }
