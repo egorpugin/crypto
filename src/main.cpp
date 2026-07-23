@@ -3130,6 +3130,8 @@ void test_dns() {
 
     using namespace crypto;
 
+    load_test_certs();
+
     dns_resolver serv{
         //"178.208.90.175",
         "8.8.8.8", "8.8.4.4", "1.1.1.1"
@@ -4145,7 +4147,7 @@ int main() {
         // test_mlkem();
         //test_mldsa();
         //test_slh_dsa();
-        //test_dns();
+        test_dns();
         test_tls();
         //test_email();
         //test_ssh2();
