@@ -139,7 +139,7 @@ struct http_client {
         ctx.co_spawn(run_coro(), [&](auto &&e) {
             eptr = e;
             if (eptr) {
-                std::rethrow_exception(eptr);
+                //std::rethrow_exception(eptr);
             }
         });
         ctx.run();
