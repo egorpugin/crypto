@@ -59,7 +59,7 @@ jobs:
         export PATH="/opt/homebrew/opt/m4/bin:$PATH"
         export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
         export PATH="/opt/homebrew/opt/gcc/bin:$PATH"
-        ./sw -Dci-build=true build --target test-0.0.1
+        ./sw -compiler gcc -Dci-build=true build --target test-0.0.1
     - name: test
       run: |
         export PATH="/opt/homebrew/opt/bison/bin:$PATH"
