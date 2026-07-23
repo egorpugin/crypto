@@ -52,7 +52,9 @@
     std::flush(std::cout);                                                                                                                                     \
     scoped_timer ____timer;
 #define LOG_TEST_TRY() LOG_TEST() try {
-#define LOG_TEST_TRY_END() } catch (...) {cmp_base(1, 0);}
+#define LOG_TEST_TRY_END() \
+    } catch (std::exception &e) {std::cout << e.what() << "\n"; std::flush(std::cout); cmp_base(1, 0);} \
+    } catch (...) {cmp_base(1, 0);}
 
 #define SRCLOC std::source_location loc = std::source_location::current()
 
