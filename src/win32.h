@@ -171,11 +171,13 @@ struct executor {
             auto err = GetLastError();
             if (0) {
             } else if (err == ERROR_BROKEN_PIPE) {
+                unregister_job();
             } else if (err == WAIT_TIMEOUT) {
-            } else {
+            } else if (o) {
                 o->ec = std::error_code{ (int)err, std::generic_category() };
                 //throw std::runtime_error{ "cannot get io completion status" };
             }
+            return;
         }
         if (!o) {
             return; // stop signal?

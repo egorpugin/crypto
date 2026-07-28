@@ -3214,9 +3214,9 @@ void test_tls() {
     auto run_with_params = [&](auto &&url, auto suite, auto kex, bool ignore_host_check = false, SRCLOC) {
         http_client t{ url };
         t.set_browser_agent();
-        //t.tls_layer.force_suite = suite;
-        //t.tls_layer.force_kex = (decltype(t.tls_layer.force_kex))kex;
-        //t.tls_layer.ignore_server_hostname_check = ignore_host_check;
+        t.tls_settings.force_suite = suite;
+        t.tls_settings.force_kex = (decltype(t.tls_settings.force_kex))kex;
+        t.tls_settings.ignore_server_hostname_check = ignore_host_check;
 #ifndef CI_TESTS
         std::println("suite 0x{:X}, kex 0x{:X}", (int)suite, (int)kex);
 #endif

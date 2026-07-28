@@ -33,10 +33,8 @@
 
 namespace crypto {
 
-template <typename RawSocket> // tcp (or udp?)
-struct tls13_ {
-    template <typename Cipher, typename Hash, auto SuiteId, typename suite_type = void>
-    struct suite_ {
+struct tls13_types {
+    template <typename Cipher, typename Hash, auto SuiteId, typename suite_type = void> struct suite_ {
         using cipher_type = Cipher;
         using hash_type = Hash;
         static constexpr auto suite() {
@@ -140,8 +138,7 @@ struct tls13_ {
             traffic.make_keys(master_secret, h);
         }
     };
-    template <typename Cipher, typename Hash, auto SuiteId, typename suite_type>
-    struct gost_suite : suite_<Cipher, Hash, SuiteId, suite_type> {
+    template <typename Cipher, typename Hash, auto SuiteId, typename suite_type> struct gost_suite : suite_<Cipher, Hash, SuiteId, suite_type> {
         using base = suite_<Cipher, Hash, SuiteId, suite_type>;
         using hash = base::hash;
         using cipher = base::cipher;
@@ -180,8 +177,7 @@ struct tls13_ {
         // static inline constexpr u64 SNMAX = std::numeric_limits<unsigned long long>::max();
     };
 
-    template <typename T, auto Value>
-    struct key_exchange {
+    template <typename T, auto Value> struct key_exchange {
         using type = T;
         static inline constexpr auto group_name = Value;
 
@@ -205,8 +201,7 @@ struct tls13_ {
             return private_key.shared_secret(peer_public_key);
         }
     };
-    template <typename T>
-    struct something_plus_MLKEM768 {
+    template <typename T> struct something_plus_MLKEM768 {
         using mlkem_type = mlkem<768>;
         static inline constexpr auto key_size = sizeof(typename T::public_key_type) + sizeof(typename mlkem_type::public_key_type);
         using public_key_type = array<key_size>;
@@ -235,8 +230,7 @@ struct tls13_ {
         }
     };
     struct X25519MLKEM768 : something_plus_MLKEM768<curve25519> {};
-    template <typename KeyExchange, typename... KeyExchanges>
-    struct key_exchanges : types<KeyExchange, KeyExchanges...> {
+    template <typename KeyExchange, typename... KeyExchanges> struct key_exchanges : types<KeyExchange, KeyExchanges...> {
         static constexpr auto size() {
             return sizeof...(KeyExchanges) + 1;
         }
@@ -245,8 +239,7 @@ struct tls13_ {
             (f(KeyExchanges{}), ...);
         }
     };
-    template <typename DefaultSuite, typename... Suites>
-    struct suites : types<DefaultSuite, Suites...> {
+    template <typename DefaultSuite, typename... Suites> struct suites : types<DefaultSuite, Suites...> {
         static constexpr auto size() {
             return sizeof...(Suites) + 1;
         }
@@ -303,6 +296,18 @@ struct tls13_ {
         parameters::signature_scheme::sm2sig_sm3,
     };
 
+    struct tls_settings_type {
+        all_suites::variant_type suite;
+        all_key_exchanges::variant_type kex;
+        tls13::CipherSuite force_suite{};
+        parameters::supported_groups force_kex{};
+        bool ignore_server_hostname_check{};
+    };
+};
+
+// this is tcp at the moment
+template <typename RawSocket> // tcp (or udp?)
+struct tls13_ : tls13_types {
     static inline constexpr auto max_tls_package = 40'000;
 
     RawSocket *s{nullptr};
@@ -311,7 +316,6 @@ struct tls13_ {
     bool initialized{};
     bool hello_retry_request{};
     bytes_concept client_hello1;
-    bool ignore_server_hostname_check{};
     bool ignore_server_certificate_check{};
     u8 legacy_session_id[32];
     tls13::Random random;
@@ -319,11 +323,7 @@ struct tls13_ {
     std::string server_certificate;
     bool prefer_encrypted_hello{};
     std::vector<dns_packet::https> dns_records_for_ech;
-
-    all_suites::variant_type suite;
-    all_key_exchanges::variant_type kex;
-    tls13::CipherSuite force_suite{};
-    parameters::supported_groups force_kex{};
+    tls_settings_type tls_settings;
 
     //
     struct buf_type {
@@ -439,7 +439,7 @@ struct tls13_ {
 
     awaitable<std::string> receive_tls_message() {
         co_await buf.receive(socket());
-        auto dec = visit(suite, [&](auto &&s) {
+        auto dec = visit(tls_settings.suite, [&](auto &&s) {
             return decrypt(s.traffic);
         });
         while (dec.back() == 0) {
@@ -467,11 +467,11 @@ struct tls13_ {
 
         tls13::TLSPlaintext msg;
         msg.type = parameters::content_type::application_data;
-        msg.length = buf.size() + visit(suite, [](auto &&s) {
+        msg.length = buf.size() + visit(tls_settings.suite, [](auto &&s) {
                          return std::decay_t<decltype(s)>::cipher::tag_size_bytes;
                      });
 
-        auto out = visit(suite, [&](auto &&s) {
+        auto out = visit(tls_settings.suite, [&](auto &&s) {
             return encrypt(s.traffic, buf, std::span<u8>((u8 *)&msg, sizeof(msg)));
         });
 
@@ -505,14 +505,14 @@ struct tls13_ {
             ube16 &ciphers_len = w;
             int n_suites{};
             all_suites::for_each([&](auto &&s) {
-                if (!(int)force_suite || force_suite == s.suite()) {
+                if (!(int)tls_settings.force_suite || tls_settings.force_suite == s.suite()) {
                     ube16 &su = w;
                     su = s.suite();
                     ++n_suites;
-                    if (!hello_retry_request && visit(suite, [&](auto &&s) {
+                    if (!hello_retry_request && visit(tls_settings.suite, [&](auto &&s) {
                                                     return s.suite();
-                                                }) != force_suite) {
-                        suite = s;
+                                                }) != tls_settings.force_suite) {
+                        tls_settings.suite = s;
                     }
                 }
             });
@@ -566,13 +566,13 @@ struct tls13_ {
 
             supported_groups &sg = w;
             all_key_exchanges::for_each([&, i = 0](auto &&s) mutable {
-                if (!(int)force_kex || force_kex == (decltype(force_kex))s.group_name) {
+                if (!(int)tls_settings.force_kex || tls_settings.force_kex == (decltype(tls_settings.force_kex))s.group_name) {
                     ube16 &v = w;
                     v = s.group_name;
                     sg.length += sizeof(v);
                     sg.len += sizeof(v);
-                    if ((int)force_kex) {
-                        kex = s;
+                    if ((int)tls_settings.force_kex) {
+                        tls_settings.kex = s;
                     }
                 }
             });
@@ -587,7 +587,7 @@ struct tls13_ {
 
             key_share &k = w;
             {
-                visit(kex, [&](auto &&ke) {
+                visit(tls_settings.kex, [&](auto &&ke) {
                     using key_exchange_type = std::decay_t<decltype(ke)>::type;
 
                     ube16 &len = w;
@@ -630,7 +630,7 @@ struct tls13_ {
             msg.length = msg_size;
 
             client_hello1 = bytes_concept{(u8 *)&client_hello, msg.length};
-            visit(suite, [&](auto &&s) {
+            visit(tls_settings.suite, [&](auto &&s) {
                 s.h.update((u8 *)&client_hello, msg.length);
             });
 
@@ -652,9 +652,9 @@ struct tls13_ {
                 [&](auto &&s, auto &&k) {
                     s.make_handshake_keys(k.shared_secret());
                 },
-                suite, kex);
+                tls_settings.suite, tls_settings.kex);
             co_await handle_handshake_application_data();
-            visit(suite, [&](auto &&s) {
+            visit(tls_settings.suite, [&](auto &&s) {
                 s.make_master_keys();
             });
         }
@@ -668,26 +668,26 @@ struct tls13_ {
             msg.type = parameters::content_type::application_data;
             buffers.emplace_back(&msg, sizeof(msg));
 
-            auto hash_size = visit(suite, [&](auto &&s) {
+            auto hash_size = visit(tls_settings.suite, [&](auto &&s) {
                 return std::decay_t<decltype(s)>::hash::digest_size_bytes;
             });
 
             std::string hma;
             hma.resize(sizeof(Handshake) + hash_size + 1);
             hma[sizeof(Handshake) + hash_size] = (u8)parameters::content_type::handshake;
-            msg.length = hma.size() + visit(suite, [](auto &&s) {
+            msg.length = hma.size() + visit(tls_settings.suite, [](auto &&s) {
                              return std::decay_t<decltype(s)>::cipher::tag_size_bytes;
                          });
 
             Handshake &client_hello = *(Handshake *)hma.data();
             client_hello.msg_type = parameters::handshake_type::finished;
             client_hello.length = hash_size;
-            visit(suite, [&](auto &&s) {
+            visit(tls_settings.suite, [&](auto &&s) {
                 using hash = std::decay_t<decltype(s)>::hash;
                 auto hm = hmac<hash>(hkdf_expand_label<hash>(s.handshake.client.secret, "finished"), hash{s.h}.digest());
                 memcpy(hma.data() + sizeof(Handshake), hm.data(), hm.size());
             });
-            auto out = visit(suite, [&](auto &&s) {
+            auto out = visit(tls_settings.suite, [&](auto &&s) {
                 return encrypt(s.handshake, hma, std::span<u8>((u8 *)&msg, sizeof(msg)));
             });
             buffers.emplace_back(out.data(), out.size());
@@ -716,11 +716,11 @@ struct tls13_ {
                 parameters::supported_groups group = s.read();
                 len2 -= sizeof(group);
                 bool changed_key{};
-                visit(kex, [&](auto &&k) {
+                visit(tls_settings.kex, [&](auto &&k) {
                     if (group != k.group_name) {
                         all_key_exchanges::for_each([&](auto &&k) {
                             if (group == k.group_name) {
-                                kex = k;
+                                tls_settings.kex = k;
                                 changed_key = true;
                             }
                         });
@@ -730,7 +730,7 @@ struct tls13_ {
                     }
                 });
                 if (len2) {
-                    visit(kex, [&](auto &&k) {
+                    visit(tls_settings.kex, [&](auto &&k) {
                         uint16_t len = s.read();
                         if (len != 0 && !hello_retry_request) {
                             if (len != k.peer_public_key.size()) {
@@ -777,7 +777,7 @@ struct tls13_ {
                 if ((uint16_t)sh.legacy_version != (uint16_t)tls_version::tls12) {
                     throw std::runtime_error{"not a tls13"};
                 }
-                visit(suite, [&](auto &&s) {
+                visit(tls_settings.suite, [&](auto &&s) {
                     if ((uint16_t)sh.cipher_suite != (uint16_t)s.suite()) {
                         bool changed_suite{};
                         all_suites::for_each([&](auto &&s2) {
@@ -794,7 +794,7 @@ struct tls13_ {
                                     s2.h.update(str);
                                 }
 
-                                suite = s2;
+                                tls_settings.suite = s2;
                                 changed_suite = true;
                             }
                         });
@@ -900,7 +900,7 @@ struct tls13_ {
                                     }
                                 }
                             }
-                            if (!servername_ok && !ignore_server_hostname_check) {
+                            if (!servername_ok && !tls_settings.ignore_server_hostname_check) {
                                 throw std::runtime_error{std::format("cannot match servername")};
                             }
                         }
@@ -932,7 +932,7 @@ struct tls13_ {
                 auto pubkey_data = pubkey.data.subspan(1);
 
                 asn1 a{data};
-                auto hs = visit(suite, [&](auto &&s) {
+                auto hs = visit(tls_settings.suite, [&](auto &&s) {
                     const auto context_string = "TLS 1.3, server CertificateVerify"s;
                     // constexpr auto context_string = "TLS 1.3, client CertificateVerify"s;
                     auto h = s.h;
@@ -1034,7 +1034,7 @@ struct tls13_ {
             }
             case parameters::handshake_type::finished: {
                 // verify_data
-                visit(suite, [&](auto &&suit) {
+                visit(tls_settings.suite, [&](auto &&suit) {
                     using hash = std::decay_t<decltype(suit)>::hash;
                     auto l = hmac<hash>(hkdf_expand_label<hash>(suit.handshake.server.secret, "finished"), hash{suit.h}.digest());
                     auto r = s.span(hash::digest_size_bytes);
@@ -1063,7 +1063,7 @@ struct tls13_ {
                     // "update_not_requested" prior to sending its next Application Data record.
                     throw std::logic_error{"not impl"};
                 } else {
-                    visit(suite, [](auto &&s) {
+                    visit(tls_settings.suite, [](auto &&s) {
                         s.traffic.server.update_keys();
                     });
                 }
@@ -1072,14 +1072,14 @@ struct tls13_ {
             default:
                 throw std::logic_error{std::format("msg_type is not implemented: {}", std::to_string((int)h.msg_type))};
             }
-            visit(suite, [&](auto &&s) {
+            visit(tls_settings.suite, [&](auto &&s) {
                 s.h.update((u8 *)&h, (u32)h.length + sizeof(h));
             });
         }
     }
     awaitable<> handle_handshake_application_data() {
         auto d = [&]() {
-            auto dec = visit(suite, [&](auto &&s) {
+            auto dec = visit(tls_settings.suite, [&](auto &&s) {
                 return decrypt(s.handshake);
             });
             while (dec.back() == 0) {

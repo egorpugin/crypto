@@ -29,6 +29,7 @@ struct http_client {
     std::vector<std::pair<std::string, std::string>> headers;
     std::string body;
     bool prefer_encrypted_hello{};
+    tls13_types::tls_settings_type tls_settings;
 
     struct http_message {
         static inline constexpr auto line_delim = "\r\n"sv;
@@ -207,6 +208,7 @@ struct http_client {
                 //.force_suite = tls_layer.force_suite,
                 //.force_kex = tls_layer.force_kex,
         };
+        tls_layer.tls_settings = tls_settings;
 
         auto &r = get_default_dns();
         auto &&result = co_await r.query_async<dns_packet::a>(default_io_context(), host);
