@@ -3264,7 +3264,9 @@ void test_tls() {
 
     run("software-network.org");
 
-    run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+    // not working with this suite anymore?
+    //run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
+    //run_with_params("aliexpress.com", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
     // not implemented yet
     //run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2MLKEM768);
 
