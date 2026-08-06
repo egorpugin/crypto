@@ -33,111 +33,131 @@
 
 namespace crypto {
 
-struct tls13_types {
-    template <typename Cipher, typename Hash, auto SuiteId, typename suite_type = void> struct suite_ {
-        using cipher_type = Cipher;
-        using hash_type = Hash;
-        static constexpr auto suite() {
-            return SuiteId;
+// add namespace tls too
+
+namespace detail {
+
+template <typename U>
+struct type_v {
+    using type = U;
+};
+template <typename T>
+consteval auto pkt() {
+    if constexpr (requires { typename T::peer_key_type; }) {
+        return type_v<typename T::peer_key_type>{};
+    } else {
+        return type_v<typename T::public_key_type>{};
+    }
+}
+
+} // namespace detail
+
+template <typename Cipher, typename Hash, auto SuiteId, typename suite_type = void> struct suite_ {
+    using cipher_type = Cipher;
+    using hash_type = Hash;
+    static constexpr auto suite() {
+        return SuiteId;
+    }
+
+    using hash = hash_type;
+    using cipher = cipher_type;
+
+    template <auto Peer, auto Type>
+    struct peer_data {
+        // FIXME: gost uses 128 bits sequence number
+        using sequence_number = u64;
+        array<hash::digest_size_bytes> secret;
+        sequence_number record_id{};
+        array<cipher::key_size_bytes> base_key, key;
+        array<cipher::iv_size_bytes> iv;
+        cipher c;
+
+        auto bump_nonce() {
+            auto v = record_id++;
+            v = std::byteswap(v);
+            auto iv = this->iv;
+            (*(u64 *)&iv[cipher::iv_size_bytes - sizeof(sequence_number)]) ^= v;
+            return iv;
         }
-
-        using hash = hash_type;
-        using cipher = cipher_type;
-
-        template <auto Peer, auto Type>
-        struct peer_data {
-            // FIXME: gost uses 128 bits sequence number
-            using sequence_number = u64;
-            array<hash::digest_size_bytes> secret;
-            sequence_number record_id{};
-            array<cipher::key_size_bytes> base_key, key;
-            array<cipher::iv_size_bytes> iv;
-            cipher c;
-
-            auto bump_nonce() {
-                auto v = record_id++;
-                v = std::byteswap(v);
-                auto iv = this->iv;
-                (*(u64 *)&iv[cipher::iv_size_bytes - sizeof(sequence_number)]) ^= v;
-                return iv;
-            }
-            array<cipher::iv_size_bytes> next_nonce() {
-                return bump_nonce();
-            }
-            void make_keys(auto &&input_secret, auto &&h) {
-                using namespace tls13;
-
-                auto s = std::format("{} {} traffic", (string_view)Peer, (string_view)Type);
-                secret = derive_secret<hash>(input_secret, s, h);
-                key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
-                iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
-                if constexpr (requires { suite_type::init_keys(*this); }) {
-                    suite_type::init_keys(*this);
-                } else {
-                    c = cipher{key};
-                }
-            }
-            void update_keys() {
-                using namespace tls13;
-
-                record_id = 0;
-                secret = hkdf_expand_label<hash, hash::digest_size_bytes>(secret, "traffic upd");
-                key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
-                iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
-                if constexpr (requires { suite_type::init_keys(*this); }) {
-                    suite_type::init_keys(*this);
-                } else {
-                    c = cipher{key};
-                }
-            }
-            auto encrypt(auto &&plain_text, auto &&auth_data) {
-                if constexpr (requires { suite_type::make_keys(*this); }) {
-                    suite_type::make_keys(*this);
-                }
-                return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
-            }
-            auto decrypt(auto &&ciphered_text, auto &&auth_data) {
-                if constexpr (requires { suite_type::make_keys(*this); }) {
-                    suite_type::make_keys(*this);
-                }
-                return this->c.decrypt_with_tag(this->next_nonce(), ciphered_text, auth_data);
-            }
-        };
-        template <auto Type>
-        struct peer_pair {
-            array<hash::digest_size_bytes> secret;
-            peer_data<"s"_s, Type> server;
-            peer_data<"c"_s, Type> client;
-
-            void make_keys(auto &&input_secret, auto &&h) {
-                secret = input_secret;
-                server.make_keys(input_secret, h);
-                client.make_keys(input_secret, h);
-            }
-        };
-
-        Hash h;
-        peer_pair<"hs"_s> handshake;
-        peer_pair<"ap"_s> traffic;
-
-        auto make_handshake_keys(auto &&shared) {
+        array<cipher::iv_size_bytes> next_nonce() {
+            return bump_nonce();
+        }
+        void make_keys(auto &&input_secret, auto &&h) {
             using namespace tls13;
 
-            std::array<u8, hash::digest_size_bytes> zero_bytes{};
-            auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
-            auto derived = derive_secret<hash>(early_secret, "derived"s);
-            auto handshake_secret = hkdf_extract<hash>(derived, shared);
-            handshake.make_keys(handshake_secret, h);
+            auto s = std::format("{} {} traffic", (string_view)Peer, (string_view)Type);
+            secret = derive_secret<hash>(input_secret, s, h);
+            key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
+            if constexpr (requires { suite_type::init_keys(*this); }) {
+                suite_type::init_keys(*this);
+            } else {
+                c = cipher{key};
+            }
         }
-        auto make_master_keys() {
+        void update_keys() {
             using namespace tls13;
 
-            std::array<u8, hash::digest_size_bytes> zero_bytes{};
-            auto derived = derive_secret<hash>(handshake.secret, "derived"s);
-            auto master_secret = hkdf_extract<hash>(derived, zero_bytes);
-            traffic.make_keys(master_secret, h);
+            record_id = 0;
+            secret = hkdf_expand_label<hash, hash::digest_size_bytes>(secret, "traffic upd");
+            key = hkdf_expand_label<hash, cipher::key_size_bytes>(secret, "key");
+            iv = hkdf_expand_label<hash, cipher::iv_size_bytes>(secret, "iv");
+            if constexpr (requires { suite_type::init_keys(*this); }) {
+                suite_type::init_keys(*this);
+            } else {
+                c = cipher{key};
+            }
+        }
+        auto encrypt(auto &&plain_text, auto &&auth_data) {
+            if constexpr (requires { suite_type::make_keys(*this); }) {
+                suite_type::make_keys(*this);
+            }
+            return this->c.encrypt_and_tag(this->next_nonce(), plain_text, auth_data);
+        }
+        auto decrypt(auto &&ciphered_text, auto &&auth_data) {
+            if constexpr (requires { suite_type::make_keys(*this); }) {
+                suite_type::make_keys(*this);
+            }
+            return this->c.decrypt_with_tag(this->next_nonce(), ciphered_text, auth_data);
         }
     };
+    template <auto Type>
+    struct peer_pair {
+        array<hash::digest_size_bytes> secret;
+        peer_data<"s"_s, Type> server;
+        peer_data<"c"_s, Type> client;
+
+        void make_keys(auto &&input_secret, auto &&h) {
+            secret = input_secret;
+            server.make_keys(input_secret, h);
+            client.make_keys(input_secret, h);
+        }
+    };
+
+    Hash h;
+    peer_pair<"hs"_s> handshake;
+    peer_pair<"ap"_s> traffic;
+
+    auto make_handshake_keys(auto &&shared) {
+        using namespace tls13;
+
+        std::array<u8, hash::digest_size_bytes> zero_bytes{};
+        auto early_secret = hkdf_extract<hash>(zero_bytes, zero_bytes);
+        auto derived = derive_secret<hash>(early_secret, "derived"s);
+        auto handshake_secret = hkdf_extract<hash>(derived, shared);
+        handshake.make_keys(handshake_secret, h);
+    }
+    auto make_master_keys() {
+        using namespace tls13;
+
+        std::array<u8, hash::digest_size_bytes> zero_bytes{};
+        auto derived = derive_secret<hash>(handshake.secret, "derived"s);
+        auto master_secret = hkdf_extract<hash>(derived, zero_bytes);
+        traffic.make_keys(master_secret, h);
+    }
+};
+
+struct tls13_types {
     template <typename Cipher, typename Hash, auto SuiteId, typename suite_type> struct gost_suite : suite_<Cipher, Hash, SuiteId, suite_type> {
         using base = suite_<Cipher, Hash, SuiteId, suite_type>;
         using hash = base::hash;
@@ -181,18 +201,7 @@ struct tls13_types {
         using type = T;
         static inline constexpr auto group_name = Value;
 
-        template <typename U>
-        struct type_v {
-            using type = U;
-        };
-        static consteval auto pkt() {
-            if constexpr (requires { typename type::peer_key_type; }) {
-                return type_v<typename type::peer_key_type>{};
-            } else {
-                return type_v<typename type::public_key_type>{};
-            }
-        }
-        using peer_key_type = decltype(pkt())::type;
+        using peer_key_type = typename decltype(detail::pkt<type>())::type;
 
         type private_key;
         peer_key_type peer_public_key;
