@@ -98,7 +98,7 @@ struct ed_base {
         auto A = c.point_decompress(pubk);
         auto R = c.point_decompress(sig.subspan(0,key_size));
         auto s = bytes_to_bigint(sig.subspan(key_size), -1);
-        if (s > c.q) {
+        if (s >= c.q) {
             return false;
         }
         auto h = bytes_to_bigint(hash(sig.subspan(0,key_size), pubk, ph(msg)), -1) % c.q;
