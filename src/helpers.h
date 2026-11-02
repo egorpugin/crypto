@@ -694,8 +694,7 @@ template <typename T = void> struct awaitable {
                     if (!p) {
                         int a = 5;
                         a++;
-                    } else
-                    if (p->eh && p->eptr) {
+                    } else if (p->eh && p->eptr) {
                         p->eh(p->eptr);
                     }
                 }
