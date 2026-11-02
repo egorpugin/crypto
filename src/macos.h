@@ -335,7 +335,7 @@ struct tcp_socket : socket {
                 goto again;
             }
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                ex.register_job_sock_send(op.cb);
+                ex.register_job_sock_recv(op.cb);
                 co_await op;
                 r = op.cb.read();
                 if (r == -1) {
