@@ -230,7 +230,7 @@ inline constexpr std::array<ml_kem_field::zq_t, N / 2> POLY_MUL_ZETA_EXP = []() 
 // See algorithm 9 of ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
 constexpr void ntt(std::span<ml_kem_field::zq_t, N> poly) {
     for (size_t l = LOG2N - 1; l >= 1; l--) {
-        const size_t len = 1ul << l;
+        const size_t len = 1zu << l;
         const size_t lenx2 = len << 1;
         const size_t k_beg = N >> (l + 1);
 
@@ -264,7 +264,7 @@ constexpr void ntt(std::span<ml_kem_field::zq_t, N> poly) {
 // See algorithm 10 of ML-KEM specification https://doi.org/10.6028/NIST.FIPS.203.
 constexpr void intt(std::span<ml_kem_field::zq_t, N> poly) {
     for (size_t l = 1; l < LOG2N; l++) {
-        const size_t len = 1ul << l;
+        const size_t len = 1zu << l;
         const size_t lenx2 = len << 1;
         const size_t k_beg = (N >> l) - 1;
 

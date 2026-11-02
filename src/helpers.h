@@ -11,6 +11,8 @@
 #endif
 #undef small
 
+//#define _CRT_USE_CONFORMING_ANNEX_K_TIME 1
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -204,7 +206,7 @@ struct bytes_concept {
         p += s;
         sz -= s;
     }
-    auto &operator[](int i) { return data()[i]; }
+    auto &operator[](auto i) { return data()[i]; }
     auto operator[](int i) const { return data()[i]; }
     void operator+=(int i) { p += i; }
     /*bool operator==(const bytes_concept &rhs) const {

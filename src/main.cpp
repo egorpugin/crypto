@@ -3148,6 +3148,7 @@ void test_dns() {
     res_and_print("gql.twitch.tv"s);
     res_and_print("twitch.tv"s);
     res_and_print("www.youtube.com"s);
+    res_and_print("youtube.com"s);
     res_and_print("google.com"s);
     res_and_print("google.com"s, dns_packet::qtype::MX);
     res_and_print("google.com"s, dns_packet::qtype::AAAA);
@@ -3287,6 +3288,7 @@ void test_tls() {
     run("youtube.com");
     run("twitch.tv");
 #endif
+    run("akamai.io");
     run("tls13.akamai.io");
     // this one sends some cryptic headers and expect something from us
     // X-TLS-ClientRandom-Challenge: try="0xDEADDEADDEADC0DE0[0...]-in-Random"

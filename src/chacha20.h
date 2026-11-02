@@ -95,10 +95,10 @@ struct chacha {
         chacha_block(s, (u32*)block, N);
     }
     void cipher(u8 *in, u8 *out, u32 inlen) {
-        for (int i = 0; i < inlen; i += 64) {
+        for (u32 i = 0; i < inlen; i += 64) {
             chacha_block(s, (u32*)block, N);
             ++counter;
-            for (int j = i; j < i + 64; j++) {
+            for (u32 j = i; j < i + 64; j++) {
                 if (j >= inlen) {
                     break;
                 }

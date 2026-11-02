@@ -425,6 +425,8 @@ struct asn1_generalized_time : asn1_base {
         return t;
     }
     static auto make(time_t t) {
+        //struct tm x;
+        //auto ptm = gmtime_s(&t, &x);
         auto ptm = gmtime(&t);
         if (!ptm) {
             throw std::runtime_error{"bad time"};

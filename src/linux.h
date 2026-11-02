@@ -273,13 +273,11 @@ struct tcp_socket : socket {
 
     tcp_socket(executor &e) : socket(AF_INET, SOCK_STREAM, IPPROTO_TCP), ex{ e } {
         set_nonblocking();
-        //ex.register_handle(s);
     }
 
     awaitable<> async_connect(const endpoint &e) {
         remote = e;
 
-        // ConnectEx requires a bound socket (can bind to INADDR_ANY, port 0)
         sockaddr_in localAddr;
         localAddr.sin_family = AF_INET;
         localAddr.sin_addr.s_addr = INADDR_ANY;
@@ -298,10 +296,6 @@ struct tcp_socket : socket {
             }
             throw std::runtime_error{ std::format("cannot connect") };
         }
-
-        op_awaiter op;
-        //co_await op;
-        co_return;
     }
     awaitable<> async_close() {
         close();

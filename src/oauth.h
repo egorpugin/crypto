@@ -57,7 +57,7 @@ struct google_oauth {
                 auto j = json::parse(resp);
                 throw std::runtime_error{ "cant get oauth token: "s +
                                          (std::string)json::parse(resp)["error"] };
-            } catch (std::exception &e) {
+            } catch (std::exception &) {
                 throw std::runtime_error{ "oauth request error: "s + token_uri + ": " + resp };
             }
         }
