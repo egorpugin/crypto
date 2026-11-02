@@ -3140,9 +3140,13 @@ void test_dns() {
     auto res_and_print = [&](auto &&what, uint16_t type = dns_packet::qtype::A, SRCLOC) {
         try {
             auto res = serv.query(what, type);
-            cmp_base(!res.empty(), ok, loc);
+            if (!cmp_base(!res.empty(), ok, loc)) {
+                std::println("cannot resolve {}", what);
+            }
         } catch (...) {
-            cmp_base(1, 0, loc);
+            if (!cmp_base(1, 0, loc)) {
+                std::println("cannot resolve {}", what);
+            }
         }
     };
     res_and_print("gql.twitch.tv"s);
@@ -3288,8 +3292,11 @@ void test_tls() {
     run("youtube.com");
     run("twitch.tv");
 #endif
-    run("akamai.io");
-    run("tls13.akamai.io");
+    run("akamai.com");
+    // not working anymore
+    //run("akamai.io");
+    //run("tls13.akamai.io");
+    //
     // this one sends some cryptic headers and expect something from us
     // X-TLS-ClientRandom-Challenge: try="0xDEADDEADDEADC0DE0[0...]-in-Random"
     // run("tls13.1d.pw");
