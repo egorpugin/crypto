@@ -655,6 +655,7 @@ template <typename T = void> struct awaitable {
         std::coroutine_handle<> h;
         std::exception_ptr eptr;
         std::function<void(std::exception_ptr)> eh;
+        bool needs_destruction{};
 
         auto get_return_object() { return awaitable{this, std::coroutine_handle<promise_type>::from_promise(*this)}; }
         auto initial_suspend() {
@@ -667,10 +668,6 @@ template <typename T = void> struct awaitable {
                     return false;
                 }
                 void await_resume() {
-                    if (!p) {
-                        int a = 5;
-                        a++;
-                    }
                 }
             };
             return awaitable{this};
@@ -679,22 +676,15 @@ template <typename T = void> struct awaitable {
             struct awaitable {
                 promise_type *p{};
 
-                bool await_ready() noexcept { return false; }
+                bool await_ready() noexcept { return p->needs_destruction; }
                 std::coroutine_handle<> await_suspend(std::coroutine_handle<> h) noexcept {
-                    if (!p) {
-                        int a = 5;
-                        a++;
-                    }
                     if (p->h) {
                         return p->h;
                     }
                     return std::noop_coroutine();
                 }
                 void await_resume() noexcept {
-                    if (!p) {
-                        int a = 5;
-                        a++;
-                    } else if (p->eh && p->eptr) {
+                    if (p->eh && p->eptr) {
                         p->eh(p->eptr);
                     }
                 }
@@ -710,10 +700,12 @@ template <typename T = void> struct awaitable {
     };
 
     promise_type *p{};
-    std::coroutine_handle<promise_type> h;
+    std::coroutine_handle<> h;
 
     ~awaitable() {
-        h.destroy();
+        if (h && !p->needs_destruction) {
+            h.destroy();
+        }
     }
 
     bool await_ready() const {

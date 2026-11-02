@@ -202,6 +202,7 @@ struct executor {
         } else {
             coro.p->eh = eh;
         }
+        coro.p->needs_destruction = true;
     }
 
     // rename to work?
