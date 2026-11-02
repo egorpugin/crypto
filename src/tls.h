@@ -451,7 +451,7 @@ struct tls13_ : tls13_types {
         auto dec = visit(tls_settings.suite, [&](auto &&s) {
             return decrypt(s.traffic);
         });
-        while (dec.back() == 0) {
+        while (!dec.empty() && dec.back() == 0) {
             dec.resize(dec.size() - 1);
         }
         if (dec.back() != (!auth_ok ? (u8)parameters::content_type::handshake : (u8)parameters::content_type::application_data)) {
@@ -1091,7 +1091,7 @@ struct tls13_ : tls13_types {
             auto dec = visit(tls_settings.suite, [&](auto &&s) {
                 return decrypt(s.handshake);
             });
-            while (dec.back() == 0) {
+            while (!dec.empty() && dec.back() == 0) {
                 dec.resize(dec.size() - 1);
             }
             if (dec.back() != (u8)parameters::content_type::handshake) {
