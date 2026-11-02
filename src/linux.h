@@ -372,7 +372,6 @@ struct udp_socket : socket {
 
     udp_socket(executor &e) : socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP), ex{ e } {
         set_nonblocking();
-        //ex.register_handle(s);
     }
     void open() {
     }
