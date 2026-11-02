@@ -265,6 +265,7 @@ struct tcp_socket : socket {
     endpoint remote;
 
     tcp_socket(executor &e) : socket(AF_INET, SOCK_STREAM, IPPROTO_TCP), ex{ e } {
+        set_nonblocking();
     }
 
     awaitable<> async_connect(const endpoint &e) {
@@ -370,7 +371,7 @@ struct udp_socket : socket {
     executor &ex;
 
     udp_socket(executor &e) : socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP), ex{ e } {
-        //ex.register_handle(s);
+        set_nonblocking();
     }
     void open() {
     }
