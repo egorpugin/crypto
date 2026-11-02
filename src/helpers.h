@@ -656,7 +656,7 @@ template <typename T = void> struct awaitable {
         std::exception_ptr eptr;
         std::function<void(std::exception_ptr)> eh;
 
-        auto get_return_object() { return awaitable{this}; }
+        auto get_return_object() { return awaitable{this, std::coroutine_handle<promise_type>::from_promise(*this)}; }
         auto initial_suspend() {
             struct awaitable {
                 promise_type *p{};
@@ -711,6 +711,11 @@ template <typename T = void> struct awaitable {
     };
 
     promise_type *p{};
+    std::coroutine_handle<promise_type> h;
+
+    ~awaitable() {
+        h.destroy();
+    }
 
     bool await_ready() const {
         if (!p) {
