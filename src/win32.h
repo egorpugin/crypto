@@ -174,6 +174,7 @@ struct executor {
                 unregister_job();
             } else if (err == WAIT_TIMEOUT) {
             } else if (o) {
+                unregister_job();
                 o->ec = std::error_code{ (int)err, std::generic_category() };
                 //throw std::runtime_error{ "cannot get io completion status" };
             }
