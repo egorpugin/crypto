@@ -397,8 +397,8 @@ auto load_system_certificates(auto &storage) {
             ++n_loaded;
         }
     };
-    load_certs("CA");
     load_certs("ROOT");
+    //load_certs("CA"); // not needed
 #elif defined(__APPLE__)
     CFArrayRef certificates{};
     if (auto status = SecTrustCopyAnchorCertificates(&certificates); status != errSecSuccess) {
