@@ -717,7 +717,7 @@ struct tls13_ : tls13_types {
                 auto n = len2 / sizeof(tls13::ExtensionType);
                 while (n--) {
                     parameters::supported_groups g = s.read();
-                    std::println("group: {:X}", (int)g);
+                    //std::println("group: {:X}", (int)g);
                 }
                 break;
             }
