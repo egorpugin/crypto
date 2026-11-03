@@ -100,7 +100,7 @@ struct x509_storage {
             auto decode_time = [&](int i) {
                 return visit(validity.get<asn1_utc_time,asn1_generalized_time>(i), [](auto &&at) {
                     tm t = at.decode();
-                    if (auto t2 = mktime(&t); t2 != -1) {
+                    if (auto t2 = gmtime(&t); t2 != -1) {
                         return clock::from_time_t(t2);
                     }
                     throw std::runtime_error{"bad time"};
