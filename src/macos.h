@@ -104,24 +104,9 @@ struct executor {
             process_callbacks.erase(it);
             return;
         }
-        auto it = read_callbacks.find(ev.ident);
-        char buffer[4096];
-        while (1) {
-            auto count = read(ev.ident, buffer, sizeof(buffer));
-            if (count <= -1) {
-                if (errno == EINTR) {
-                    continue;
-                }
-                //perror("read");
-                //exit(1);
-                break;
-            } else if (count == 0) {
-                break;
-            }
-            if (it != read_callbacks.end()) {
-                it->second(buffer, count);
-            }
-        }
+        auto &cb = *(callback*)ev.udata;
+        cb.f();
+        unregister_job();
     }
 
     void co_spawn(auto &&coro, auto &&eh) {
