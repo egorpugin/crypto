@@ -710,7 +710,7 @@ struct tls13_ : tls13_types {
             tls13::ExtensionType type = s.read();
             uint16_t len2 = s.read();
             if (len2 == 0) {
-                break;
+                continue;
             }
             switch (type) {
             case tls13::ExtensionType::supported_groups: {
