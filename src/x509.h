@@ -380,6 +380,8 @@ static auto &x509_trusted_storage() {
 #include "mmap.h"
 #include "win32.h"
 #if defined(__APPLE__)
+// some cringe missing macro somewhere in xpc
+#define _XPC_CHOOSE_200809(x) x
 #include <Security/Security.h>
 #endif
 namespace crypto {
