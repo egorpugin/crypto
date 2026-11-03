@@ -141,7 +141,7 @@ struct executor {
     }
     void register_job(auto &&cb, auto &&flags) {
         struct kevent ev {};
-        EV_SET(&ev, cb.fd, flags, EV_ADD | EV_ENABLE | EV_ONESHOT | EV_CLEAR, 0, 0, &cb);
+        EV_SET(&ev, cb.fd, flags, EV_ADD | EV_ONESHOT | EV_CLEAR, 0, 0, &cb);
         if (kevent(kfd, &ev, 1, 0, 0, 0) == -1) {
             throw std::runtime_error{ "error kevent queue" };
         }
