@@ -83,9 +83,7 @@ struct json_raw {
 
     using array_type = std::vector<this_type>;
     using object_type = map_type<string_type, this_type>;
-    using simple_value = variant<string_type, int64_t, double, bool
-        //, nullptr_t
-    >;
+    using simple_value = variant<string_type, int64_t, double, bool, std::nullptr_t>;
     //using simple_value = std::variant<string_type>;
     using value_type = std::variant<object_type, array_type, simple_value>;
 
@@ -323,7 +321,10 @@ struct json_raw {
         case 'f':
             eat_token(p, "false"sv);
             return {simple_value{false}};
-        // null, ...
+        case 'n':
+            eat_token(p, "null"sv);
+            return {simple_value{nullptr}};
+        // ...?
         default:
             throw std::runtime_error{"not implemented"};
         }
@@ -338,6 +339,7 @@ struct json_raw {
             , [](const simple_value &v) {
                 return visit(v
                     , [](bool v){return v ? "true"s : "false"s;}
+                    , [](std::nullptr_t v){return "null"s;}
                     , [](int64_t v){return std::format("{}",v);}
                     , [](double v){return std::format("{}",v);}
                     , [](const std::string &v){
