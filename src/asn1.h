@@ -47,7 +47,7 @@ struct asn1_container {
         }
         len = data[pos];
         u8 lenbytes = 1;
-        if (len > 0x80) {
+        if (len >= 0x80) {
             lenbytes = len ^ 0x80;
             len = 0;
             auto j = pos + 1;
