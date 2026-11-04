@@ -350,7 +350,6 @@ struct secp {
     void private_key() { get_random_secure_bytes(private_key_); }
     auto public_key() {
         auto c = parameters.curve();
-        auto q = bigint{parameters.order};
         auto m = bytes_to_bigint(private_key_);
         auto p = m * c.G;
         return key_type{4, p.x, p.y};

@@ -4246,7 +4246,7 @@ int main() {
         //test_base64();
         // test_aes();
         //test_sha1();
-        test_sha2();
+        //test_sha2();
         //test_sha3();
         // test_blake2();
         // test_blake3();
@@ -4269,7 +4269,7 @@ int main() {
         // test_mgm();
         // test_gost();
         //test_jwt();
-        //test_hpke();
+        test_hpke();
         // test_mlkem();
         //test_mldsa();
         //test_slh_dsa();
