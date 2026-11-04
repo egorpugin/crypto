@@ -362,20 +362,20 @@ struct secp {
         array<point_size_bytes> shared_secret;
         auto &k = *(key_type *)peer_public_key.data();
         auto c = parameters.curve();
-        ec_field_point p{c.ec};
-        p.x = bytes_to_bigint(k.x);
-        p.y = bytes_to_bigint(k.y);
+        ec_field_point po{c.ec};
+        po.x = bytes_to_bigint(k.x);
+        po.y = bytes_to_bigint(k.y);
 
         // on curve check
-        auto P = bigint{parameters.p};
+        auto p = bigint{parameters.p};
         auto a = bigint{parameters.a};
         auto b = bigint{parameters.b};
-        if (p.y * p.y % P != (p.x * p.x * p.x + a * p.x + b) % P) {
+        if (po.y * po.y % p != (po.x * po.x * po.x + a * po.x + b) % p) {
             throw std::runtime_error{"bad input point"};
         }
 
         auto m = bytes_to_bigint(private_key_);
-        auto p2 = m * c.cofactor * p;
+        auto p2 = m * c.cofactor * po;
         key_type k2{4, p2.x, p2.y};
         memcpy(shared_secret.data(), (u8 *)&k2.x, point_size_bytes);
         return shared_secret;
