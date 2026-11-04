@@ -36,18 +36,20 @@ struct curve25519 {
         return public_key;
     }
     auto public_key(auto &&out) { curve25519_f(private_key_.data(), out.data()); }
-    auto shared_secret(const public_key_type &peer_public_key) {
-        public_key_type shared_secret;
-        curve25519_f(private_key_.data(), peer_public_key.data(), shared_secret.data());
-        return shared_secret;
-    }
     auto shared_secret(auto &&peer_public_key) {
-        if (peer_public_key.size() != sizeof(public_key_type)) {
-            throw std::runtime_error{"invalid pubk size"};
-        }
+        check(peer_public_key);
         public_key_type shared_secret;
         curve25519_f(private_key_.data(), (u8*)peer_public_key.data(), shared_secret.data());
         return shared_secret;
+    }
+    static void check(auto &&peer_public_key) {
+        if (peer_public_key.size() != sizeof(public_key_type)) {
+            throw std::runtime_error{"invalid pubk size"};
+        }
+        public_key_type z{};
+        if (memcmp(z.data(), peer_public_key.data(), key_size) == 0) {
+            throw std::runtime_error{"invalid pubk: zero"};
+        }
     }
 };
 using x25519 = curve25519;
