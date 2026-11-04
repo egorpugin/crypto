@@ -377,7 +377,7 @@ struct bigendian_unsigned {
         return *this;
     }
     void operator=(u32 v) requires (Bytes == 3) {
-        *(u32*)data |= std::byteswap(v << 8);
+        *(u32*)data = std::byteswap(v << 8);
     }
     void operator=(internal_type v) requires (Bytes != 3) {
         *(internal_type *)data = std::byteswap(v);
