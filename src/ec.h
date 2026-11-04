@@ -368,10 +368,10 @@ struct secp {
         p.y = bytes_to_bigint(k.y);
 
         // on curve check
-        auto q = bigint{parameters.order};
+        auto P = bigint{parameters.p};
         auto a = bigint{parameters.a};
         auto b = bigint{parameters.b};
-        if (p.y * p.y % q != (p.x * p.x * p.x + a * p.x + b) % q) {
+        if (p.y * p.y % P != (p.x * p.x * p.x + a * p.x + b) % P) {
             throw std::runtime_error{"bad input point"};
         }
 
