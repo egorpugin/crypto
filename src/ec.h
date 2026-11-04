@@ -422,13 +422,18 @@ struct secp {
 
         auto hb = bytes_to_bigint(hs) % q;
         auto rb = bytes_to_bigint(r);
+        auto sb = bytes_to_bigint(s);
+
+        if (!(0 < rb && rb < q && 0 < sb && sb < q)) {
+            return false;
+        }
 
         decltype(ec.G) Q{ec.G.ec};
         Q.x = bytes_to_bigint(pubkey.x);
         Q.y = bytes_to_bigint(pubkey.y);
 
         bigint w;
-        mpz_invert(w, bytes_to_bigint(s), q);
+        mpz_invert(w, sb, q);
         auto u1 = (hb * w) % q;
         auto u2 = (rb * w) % q;
         auto ug = u1 * ec.G;
