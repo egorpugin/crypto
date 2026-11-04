@@ -18,6 +18,7 @@ struct http_client {
     template <typename T>
     using awaitable = awaitable<T>;
 
+    std::string url;
     std::string url_internal;
     //boost::asio::io_context ctx;
     //socket_type s{default_io_context()};
@@ -127,7 +128,7 @@ struct http_client {
 
     // http_client(auto &&ctx, auto &&url) : url_internal{url}, s{ctx} {}
     // http_client(auto &&url) : http_client{default_io_context(), url} {}
-    http_client(const std::string &url) : url_internal{url} {
+    http_client(const std::string &url) : url{url}, url_internal{url} {
     }
     void set_browser_agent() {
         headers.emplace_back("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36");

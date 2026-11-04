@@ -3134,6 +3134,9 @@ void test_dns() {
 
     dns_resolver serv{
         //"178.208.90.175",
+#ifndef CI_TESTS
+        "192.168.1.1",
+#endif
         "8.8.8.8", "8.8.4.4", "1.1.1.1"
     };
     bool ok{true};
@@ -3190,12 +3193,12 @@ void test_tls() {
 
     load_test_certs();
 
-    auto run0 = [](auto &&t, auto &&url, SRCLOC) {
+    auto run0 = [](auto &&t, SRCLOC) {
         t.follow_location = true;
         //t.tls_layer.ignore_server_hostname_check = true;
         //std::cout << "connecting to " << url << "\n";
 #ifndef CI_TESTS
-        std::cout << "connecting to " << url << "\n";
+        std::cout << "connecting to " << t.url << "\n";
 #endif
         try {
             t.run();
@@ -3205,7 +3208,7 @@ void test_tls() {
             cmp_base(0, 0, loc);
         } catch (std::exception &e) {
 #ifdef CI_TESTS
-            std::cout << "connecting to " << url << "\n";
+            std::cout << "connecting to " << t.url << "\n";
 #endif
             std::cout << e.what() << "\n";
             cmp_base(0, 1, loc);
@@ -3214,7 +3217,7 @@ void test_tls() {
     auto run = [&](auto &&url, SRCLOC) {
         http_client t{url};
         t.set_browser_agent();
-        run0(t, url, loc);
+        run0(t, loc);
     };
     auto run_with_params = [&](auto &&url, auto suite, auto kex, bool ignore_host_check = false, SRCLOC) {
         http_client t{ url };
@@ -3261,13 +3264,13 @@ void test_tls() {
 
 #ifndef CI_TESTS
     {
-        http_client ech{"defo.ie"s};
+        http_client ech{"defo.ie/ech-check.php"s};
         ech.prefer_encrypted_hello = true;
-        ech.run();
+        run0(ech);
     }
 #endif
 
-    run("software-network.org");
+    //run("software-network.org");
 
     // not working with this suite anymore?
     //run_with_params("aliexpress.ru", tls13::CipherSuite::TLS_SM4_GCM_SM3, parameters::supported_groups::curveSM2);
@@ -3277,21 +3280,21 @@ void test_tls() {
 
     run("software-network.org");
     run("letsencrypt.org");
-#ifndef __linux__
+//#ifndef __linux__
     run("example.com"); // not available on linux (fedora)
-#endif
+//#endif
     run("ya.ru");
     run("yandex.ru");
-#ifdef CI_TESTS
+//#ifdef CI_TESTS
     run("google.com"); // causes hangs
-#endif
+//#endif
     run("nalog.gov.ru");
     run("github.com");
     run("gmail.com");
-#ifdef CI_TESTS
+//#ifdef CI_TESTS
     run("youtube.com");
     run("twitch.tv");
-#endif
+//#endif
     run("akamai.com");
     // not working anymore
     //run("akamai.io");
@@ -4070,6 +4073,117 @@ ed 10 1d ae d5 cf e9 f8 32 06 a4 bb 2b f5 1f a2
     test_url("ffff"sv, "ZmZmZg"s);
 }
 
+// AI
+
+static void report(const char *name, bool conforms, std::string_view details = {}) {
+    if (!conforms) {
+        std::println("{:9} {}{}{}", conforms ? "OK" : "DEVIATES", name, details.empty() ? "" : " -- ", details);
+    }
+    cmp_bool(conforms);
+}
+
+// FIPS 186-5 6.4.2 step 1: reject unless 0 < r, s < n.
+static void ecdsa_s_plus_n() {
+    using namespace crypto;
+
+    auto h = sha256::digest("sample"s);
+    ec::secp256r1 c{bytes_concept{"C9AFA9D845BA75166B5C215767B1D6934E50C3DB36E89B127B8A622B120F6721"_sb}};
+    auto pubkey = c.public_key();
+    auto [r, s] = c.sign_deterministic<sha256>(h);
+    bool base = c.verify(h, bytes_concept{&pubkey, sizeof(pubkey)}, r, s);
+
+    auto n = bigint{ec::secp256r1::parameters.order};
+    auto s2 = (bytes_to_bigint(s) + n).to_string(bitlen{264});
+    bool alt = c.verify(h, bytes_concept{&pubkey, sizeof(pubkey)}, r, s2);
+    report("ecdsa p256 verify rejects s+n", base && !alt, std::format("valid sig={}, s+n accepted={}", base, alt));
+
+    auto zero = array<32>{};
+    bool z = c.verify(h, bytes_concept{&pubkey, sizeof(pubkey)}, r, zero);
+    report("ecdsa p256 verify rejects s=0", !z);
+}
+
+// RFC 7748 6.1 / RFC 8446 7.4.2: all-zero X25519 output MUST be rejected.
+static void x25519_zero_point() {
+    using namespace crypto;
+
+    x25519 k;
+    k.private_key();
+    std::vector<u8> peer(32, 0);
+    try {
+        auto ss = k.shared_secret(peer);
+        bool all_zero = std::ranges::all_of(ss, [](u8 b) { return b == 0; });
+        report("x25519 rejects low-order peer key", !all_zero, std::format("returned all-zero secret={}", all_zero));
+    } catch (std::exception &e) {
+        report("x25519 rejects low-order peer key", true, e.what());
+    }
+}
+
+// SEC 1 3.2.2.1 / SP 800-56A 5.6.2.3: peer point must lie on the curve.
+static void ecdh_off_curve() {
+    using namespace crypto;
+
+    ec::secp256r1 k;
+    k.private_key();
+    ec::secp256r1::key_type peer{};
+    peer.x[31] = 1;
+    peer.y[31] = 1; // (1, 1) is not on P-256
+    try {
+        auto ss = k.shared_secret(peer);
+        report("ecdh p256 rejects off-curve point", false, "shared secret computed without error");
+    } catch (std::exception &e) {
+        report("ecdh p256 rejects off-curve point", true, e.what());
+    }
+}
+
+// 24-bit big-endian field: second assignment must replace, not OR.
+static void be24_reassign() {
+    using namespace crypto;
+
+    bigendian_unsigned<3> v;
+    v = 0x010000u;
+    v = 0x000001u;
+    u32 got = v;
+    report("bigendian_unsigned<3> reassign", got == 1, std::format("got 0x{:06X}", got));
+}
+
+// Reading past the end must not leave a non-empty stream.
+static void be_stream_bounds() {
+    using namespace crypto;
+
+    u8 buf[4]{};
+    be_stream s{buf, 1uz};
+    try {
+        uint16_t v = s.read();
+        (void)v;
+        report("be_stream read past end", !(bool)s, std::format("len after read = {}", s.len));
+    } catch (std::exception &e) {
+        report("be_stream read past end", true, e.what());
+    }
+}
+
+// RFC 8259: null is a valid JSON value.
+static void json_null() {
+    using namespace crypto;
+
+    try {
+        auto j = json::parse(R"({"a":null})");
+        report("json parses null", true);
+    } catch (std::exception &e) {
+        report("json parses null", false, e.what());
+    }
+}
+
+void test_different() {
+    LOG_TEST();
+
+    ecdsa_s_plus_n();
+    x25519_zero_point();
+    ecdh_off_curve();
+    be24_reassign();
+    be_stream_bounds();
+    json_null();
+}
+
 int return_code() {
     return success == total ? 0 : 1;
 }
@@ -4107,6 +4221,7 @@ auto test_all() {
     test_dns();
     test_tls();
     test_email();
+    test_different();
     return return_code();
 }
 
@@ -4162,6 +4277,7 @@ int main() {
         test_tls();
         //test_email();
         //test_ssh2();
+        test_different();
 
         return return_code();
     } catch (std::exception &e) {
