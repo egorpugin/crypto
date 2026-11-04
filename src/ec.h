@@ -366,6 +366,15 @@ struct secp {
         ec_field_point p{c.ec};
         p.x = bytes_to_bigint(k.x);
         p.y = bytes_to_bigint(k.y);
+
+        // on curve check
+        auto q = bigint{parameters.order};
+        auto a = bigint{parameters.a};
+        auto b = bigint{parameters.b};
+        if (p.y * p.y % q != (p.x * p.x * p.x + a * p.x + b) % q) {
+            throw std::runtime_error{"bad input point"};
+        }
+
         auto m = bytes_to_bigint(private_key_);
         auto p2 = m * c.cofactor * p;
         key_type k2{4, p2.x, p2.y};
