@@ -413,6 +413,7 @@ struct be_stream {
         template <typename E>
             requires std::is_enum_v<E>
         operator E() {
+            check<E>();
             auto v = *(std::underlying_type_t<E> *)s.p;
             s.step(sizeof(v));
             v = std::byteswap(v);
@@ -420,15 +421,23 @@ struct be_stream {
         }
         template <typename T>
         operator T&() const {
+            check<T>();
             auto &v = *(T *)s.p;
             s.step(sizeof(T));
             return v;
         }
         operator uint16_t() const {
+            check<uint16_t>();
             auto v = *(uint16_t *)s.p;
             s.step(sizeof(v));
             v = std::byteswap(v);
             return v;
+        }
+        template <typename T>
+        void check() const {
+            if (sizeof(T) > s.len) {
+                throw std::runtime_error{"no more data"};
+            }
         }
     };
 
