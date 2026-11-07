@@ -333,6 +333,7 @@ struct tls13_ : tls13_types {
     bool prefer_encrypted_hello{};
     std::vector<dns_packet::https> dns_records_for_ech;
     tls_settings_type tls_settings;
+    parameters::handshake_type expected_cert_msg{parameters::handshake_type::certificate};
 
     //
     struct buf_type {
@@ -773,6 +774,13 @@ struct tls13_ : tls13_types {
     void read_handshake(be_stream s) {
         using namespace tls13;
 
+        auto check_cert_msg = [&](auto &&cur, auto &&next) {
+            if (expected_cert_msg != cur) {
+                throw std::runtime_error{"bad message"};
+            }
+            expected_cert_msg = (parameters::handshake_type)next;
+        };
+
         while (s) {
             Handshake &h = s.read();
             switch (h.msg_type) {
@@ -829,7 +837,13 @@ struct tls13_ : tls13_types {
                 break;
             }
             case parameters::handshake_type::certificate: {
+                check_cert_msg(parameters::handshake_type::certificate, parameters::handshake_type::certificate_verify);
+
                 auto s2 = s.substream(h.length);
+                if ((u32)h.length == 0) {
+                    // return decode error alert
+                    throw;
+                }
                 u8 certificate_request_context = s2.read();
                 s2.step(certificate_request_context);
                 length_type<3> len = s2.read();
@@ -931,6 +945,8 @@ struct tls13_ : tls13_types {
                 break;
             }
             case parameters::handshake_type::certificate_verify: {
+                check_cert_msg(parameters::handshake_type::certificate_verify, parameters::handshake_type::finished);
+
                 parameters::signature_scheme scheme = s.read();
                 uint16_t len = s.read();
                 auto data = s.span(len);
@@ -1042,6 +1058,8 @@ struct tls13_ : tls13_types {
                 break;
             }
             case parameters::handshake_type::finished: {
+                check_cert_msg(parameters::handshake_type::finished, 0);
+
                 // verify_data
                 visit(tls_settings.suite, [&](auto &&suit) {
                     using hash = std::decay_t<decltype(suit)>::hash;
