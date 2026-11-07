@@ -124,9 +124,10 @@ struct blake3 : hash_traits<blake3> {
         outlen -= to_copy;
         while (outlen > 0) {
             p += to_copy;
-            compress(h0, m, blockpos, n_chunks++, flags);
+            memcpy(h, h0, sizeof(h));
+            compress(h, m, blockpos, n_chunks++, flags);
             to_copy = std::min<size_t>(outlen, sizeof(h));
-            memcpy(p, h0, to_copy);
+            memcpy(p, h, to_copy);
             outlen -= to_copy;
         }
         return hash;
