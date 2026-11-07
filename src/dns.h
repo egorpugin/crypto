@@ -480,6 +480,9 @@ private:
         auto &q = *(dns_packet *)bq;
         q.h.id = query_id++;
         q.h.rd = 1; // some queries will fail without this
+        if (sizeof(q) + domain.size() > sizeof(bq)) {
+            throw std::runtime_error{"too long query"};
+        }
         q.set_question(domain, type, class_);
         co_await s.async_send_to(e, bytes_concept{bq, q.size()});
         //boost::asio::system_timer dt{ ex, std::chrono::seconds{2} };

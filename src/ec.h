@@ -359,6 +359,10 @@ struct secp {
         memcpy(out.data(), (u8 *)&k, key_size);
     }
     auto shared_secret(bytes_concept peer_public_key) {
+        if (peer_public_key.size() != sizeof(public_key_type)) {
+            throw std::runtime_error{"bad public key"};
+        }
+
         array<point_size_bytes> shared_secret;
         auto &k = *(key_type *)peer_public_key.data();
         auto c = parameters.curve();
