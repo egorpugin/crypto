@@ -831,12 +831,22 @@ void test_sha3() {
             4E 33 94 58 FD B0 E6 2A 6A F3 D4 25 58 97 02 49
         )"_sb);
     }
+
+    // from ai
+    {
+        parallel_hash<256> s;
+        s.update(""sv, 0);
+        cmp_bytes(s.digest<32 * 8>(), R"(
+            bc1ef124da34495e948ead207dd9842235da432d2bbc54b4c110e64c451105531b7f2a3e0ce055c02805e7c2de1fb746af97a1dd01f43b824e31b87612410429
+        )"_sb);
+    }
 }
 
 void test_blake2() {
     LOG_TEST();
 
     using namespace crypto;
+
     {
         blake2s<224> sha;
         to_string2(sha, "", "1fa1291e65248b37b3433475b2a0dd63d54a11ecc4e3e034e7bc1ef4");
@@ -4267,9 +4277,9 @@ int main() {
         // test_aes();
         //test_sha1();
         //test_sha2();
-        //test_sha3();
-        // test_blake2();
-        // test_blake3();
+        test_sha3();
+        test_blake2();
+        test_blake3();
         // test_sm3();
         // test_sm4();
         //test_ec();
@@ -4289,7 +4299,7 @@ int main() {
         // test_mgm();
         // test_gost();
         //test_jwt();
-        test_hpke();
+        //test_hpke();
         // test_mlkem();
         //test_mldsa();
         //test_slh_dsa();
