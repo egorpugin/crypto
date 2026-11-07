@@ -49,6 +49,9 @@ struct asn1_container {
         u8 lenbytes = 1;
         if (len >= 0x80) {
             lenbytes = len ^ 0x80;
+            if (lenbytes > 4) {
+                throw std::runtime_error{"too big length"};
+            }
             len = 0;
             auto j = pos + 1;
             for (int i = 0; i < lenbytes; ++i, ++j) {
