@@ -3,10 +3,7 @@
 
 #pragma once
 
-#include <array>
-#include <bit>
-#include <cstdint>
-#include <type_traits>
+#include "helpers.h"
 
 namespace crypto {
 
