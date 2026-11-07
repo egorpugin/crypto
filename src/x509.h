@@ -217,6 +217,7 @@ struct x509_storage {
         bytes_concept subject = cert.get<asn1_sequence>(x509::subject_name);
         auto root_cert = issuer == subject;
         if (root_cert) {
+            // TODO: check signature. input cert must have same public key and valid sig
             if (!trusted_storage.index[issuer][get_subject_keyid(v.data)].empty()) {
                 v.trusted = true;
                 return v.is_valid(now);

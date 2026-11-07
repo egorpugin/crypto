@@ -562,7 +562,8 @@ struct tls13_ : tls13_types {
                 uint16_t len = echc->length;
                 len += 2;
                 ss += bytes_concept{&d[2], len};
-                auto enc = h.shared_secret<'S'>(pk, ss);
+                // overflow! ss is to big too copy into priv key!
+                //auto enc = h.shared_secret<'S'>(pk, ss);
 
                 int a = 5;
                 a++;
