@@ -917,6 +917,19 @@ void test_blake2() {
                    ".",
                    "c93a777c384d3186824ad214090cecfed185f0f9a618d696c5fea2dc63096643f87eac776f4c95a2b456f21aa225a092c46807c91b8656a79941af7d4cd82668");
     }
+    // from ai
+    {
+        blake2s<256> sha{"0123456789abcdef"sv};
+        to_string2(sha,
+                   "",
+                   "cd9cf9dac0533670b231e351dbda65ced1917126d77f480124873e007fefd41f");
+    }
+    {
+        blake2b<512> sha{"0123456789abcdef"sv};
+        to_string2(sha,
+                   "",
+                   "8b3a1b469f6c6b729de307a0ba6ed220d6d178ebb451c465b984d6f73dacb816db441e05697adaf107fa5bf0f952d1b6db4e1a9ccf6d2f55045d22a85a9fa5b6");
+    }
 }
 
 void test_blake3() {

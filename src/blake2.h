@@ -49,8 +49,7 @@ struct blake2_base {
         h[0] = h[0] ^ 0x01010000 ^ (key.size() << 8) ^ output_bytes;
         if (key.size()) {
             memcpy(m, key.data(), key.size());
-            bytelen += block_bytes;
-            transform(false);
+            blockpos = block_bytes;
         }
     }
     void update(bytes_concept b) noexcept {
