@@ -537,6 +537,12 @@ void test_sha3() {
             s.squeeze<5120>(),
             "46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be141e96616fb13957692cc7edd0b45ae3dc07223c8e92937bef84bc0eab862853349ec75546f58fb7c2775c38462c5010d846c185c15111e595522a6bcd16cf86f3d122109e3b1fdd943b6aec468a2d621a7c06c6a957c62b54dafc3be87567d677231395f6147293b68ceab7a9e0c58d864e8efde4e1b9a46cbe854713672f5caaae314ed9083dab4b099f8e300f01b8650f1f4b1d8fcf3f3cb53fb8e9eb2ea203bdc970f50ae55428a91f7f53ac266b28419c3778a15fd248d339ede785fb7f5a1aaa96d313eacc890936c173cdcd0fab882c45755feb3aed96d477ff96390bf9a66d1368b208e21f7c10d04a3dbd4e360633e5db4b602601c14cea737db3dcf722632cc77851cbdde2aaf0a33a07b373445df490cc8fc1e4160ff118378f11f0477de055a81a9eda57a4a2cfb0c83929d310912f729ec6cfa36c6ac6a75837143045d791cc85eff5b21932f23861bcf23a52b5da67eaf7baae0f5fb1369db78f3ac45f8c4ac5671d85735cdddb09d2b1e34a1fc066ff4a162cb263d6541274ae2fcc865f618abe27c124cd8b074ccd516301b91875824d09958f341ef274bdab0bae316339894304e35877b0c28a9b1fd166c796b9cc258a064a8f57e27f2a5b8d548a728c9444ecb879adc19de0c1b8587de3e73e15d3ce2db7c9fa7b58ffc0e87251773faf3e8f3e3cf1d4dfa723afd4da9097cb3c866acbefab2c4e85e1918990ff93e0656b5f75b08729c60e6a9d7352b9efd2e33e3d1ba6e6d89edfa671266ece6be7bb5ac948b737e41590abe138ce1869c08680162f08863d174e77"_sb);
     }
+}
+
+void test_cshake() {
+    LOG_TEST();
+
+    using namespace crypto;
 
     // cshake
     {
@@ -705,77 +711,79 @@ void test_sha3() {
 
     // parallel hash
     {
-        parallel_hash<256> s;
-        s.update("123"sv, 8);
+        parallel_hash<256> s{8};
+        s.update("123"sv);
         cmp_bytes(s.digest<32 * 8>(), "f1f36fe0efc37af58623f674226b63e17505db387c5b288e15edd105f87e89ce"_sb);
     }
     {
-        parallel_hash<256> s;
-        s.update("123"sv, 1);
+        parallel_hash<256> s{1};
+        s.update("123"sv);
         cmp_bytes(s.digest<32 * 8>(), "a9d62596898571a7c417cab887eeff81fd930a0ca2cf1679d13c68a40e860a40"_sb);
     }
     {
-        parallel_hash<128> s;
+        parallel_hash<128> s{8};
         s.update(R"(
             00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
             20 21 22 23 24 25 26 27
-        )"_sb, 8);
+        )"_sb);
         cmp_bytes(s.digest<32 * 8>(), R"(
             BA 8D C1 D1 D9 79 33 1D 3F 81 36 03 C6 7F 72 60
             9A B5 E4 4B 94 A0 B8 F9 AF 46 51 44 54 A2 B4 F5
         )"_sb);
     }
     {
-        parallel_hash<128, "Parallel Data"_s> s;
+        parallel_hash<128, "Parallel Data"_s> s{8};
         s.update(R"(
             00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
             20 21 22 23 24 25 26 27
-        )"_sb, 8);
+        )"_sb);
         cmp_bytes(s.digest<32 * 8>(), R"(
             FC 48 4D CB 3F 84 DC EE DC 35 34 38 15 1B EE 58
             15 7D 6E FE D0 44 5A 81 F1 65 E4 95 79 5B 72 06
         )"_sb);
     }
     {
-        parallel_hash<128, "Parallel Data"_s> s;
+        parallel_hash<128, "Parallel Data"_s> s{12};
         s.update(R"(
             00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
             14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
             28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
             40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
             54 55 56 57 58 59 5A 5B
-        )"_sb, 12);
+        )"_sb);
         cmp_bytes(s.digest<32 * 8>(), R"(
             F7 FD 53 12 89 6C 66 85 C8 28 AF 7E 2A DB 97 E3
             93 E7 F8 D5 4E 3C 2E A4 B9 5E 5A CA 37 96 E8 FC
         )"_sb);
     }
     // https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Standards-and-Guidelines/documents/examples/ParallelHash_samples.pdf
-    // example #1 for 256 bits
-    // probably incorrect there
-    /*
-    * their result
-    *       BC 1E F1 24 DA 34 49 5E 94 8E AD 20 7D D9 84 22
-            35 DA 43 2D 2B BC 54 B4 C1 10 E6 4C 45 11 05 53
-            1B 7F 2A 3E 0C E0 55 C0 28 05 E7 C2 DE 1F B7 46
-            AF 97 A1 DD 01 F4 3B 82 4E 31 B8 76 12 41 04 29
-    */
     {
-        parallel_hash<256, "(null)"_s> s;
+        // NIST Example #1
+        parallel_hash<256> s{8};
         s.update(R"(
             00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
             20 21 22 23 24 25 26 27
-        )"_sb, 8);
+        )"_sb);
+        cmp_bytes(s.digest<64 * 8>(), R"(
+            bc1ef124da34495e948ead207dd9842235da432d2bbc54b4c110e64c451105531b7f2a3e0ce055c02805e7c2de1fb746af97a1dd01f43b824e31b87612410429
+        )"_sb);
+    }
+    {
+        parallel_hash<256, "(null)"_s> s{8};
+        s.update(R"(
+            00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
+            20 21 22 23 24 25 26 27
+        )"_sb);
         cmp_bytes(s.digest<64 * 8>(), R"(
             218ac4043be83ec9fe4d743d4c7dc512c727547019cbdc9695708a1dc89407a5e5adf5309a757235e359a9ddc5b3d42f14ceea586247a3a14e8cb4f0ebee973d
         )"_sb);
     }
     {
-        parallel_hash<256, "Parallel Data"_s> s;
+        parallel_hash<256, "Parallel Data"_s> s{8};
         s.update(R"(
             00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
             20 21 22 23 24 25 26 27
-        )"_sb, 8);
+        )"_sb);
         cmp_bytes(s.digest<64 * 8>(), R"(
             CD F1 52 89 B5 4F 62 12 B4 BC 27 05 28 B4 95 26
             00 6D D9 B5 4E 2B 6A DD 1E F6 90 0D DA 39 63 BB
@@ -784,14 +792,14 @@ void test_sha3() {
         )"_sb);
     }
     {
-        parallel_hash<256, "Parallel Data"_s> s;
+        parallel_hash<256, "Parallel Data"_s> s{12};
         s.update(R"(
             00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
             14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
             28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
             40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
             54 55 56 57 58 59 5A 5B
-        )"_sb, 12);
+        )"_sb);
         cmp_bytes(s.digest<64 * 8>(), R"(
             69 D0 FC B7 64 EA 05 5D D0 93 34 BC 60 21 CB 7E
             4B 61 34 8D FF 37 5D A2 62 67 1C DE C3 EF FA 8D
@@ -800,14 +808,14 @@ void test_sha3() {
         )"_sb);
     }
     {
-        parallel_hash_xof<128, "Parallel Data"_s> s;
+        parallel_hash_xof<128, "Parallel Data"_s> s{12};
         s.update(R"(
             00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
             14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
             28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
             40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
             54 55 56 57 58 59 5A 5B
-        )"_sb, 12);
+        )"_sb);
         s.finalize();
         cmp_bytes(s.squeeze<32 * 8>(), R"(
             01 27 AD 97 72 AB 90 46 91 98 7F CC 4A 24 88 8F
@@ -815,14 +823,14 @@ void test_sha3() {
         )"_sb);
     }
     {
-        parallel_hash_xof<256, "Parallel Data"_s> s;
+        parallel_hash_xof<256, "Parallel Data"_s> s{12};
         s.update(R"(
             00 01 02 03 04 05 06 07 08 09 0A 0B 10 11 12 13
             14 15 16 17 18 19 1A 1B 20 21 22 23 24 25 26 27
             28 29 2A 2B 30 31 32 33 34 35 36 37 38 39 3A 3B
             40 41 42 43 44 45 46 47 48 49 4A 4B 50 51 52 53
             54 55 56 57 58 59 5A 5B
-        )"_sb, 12);
+        )"_sb);
         s.finalize();
         cmp_bytes(s.squeeze<64 * 8>(), R"(
             6B 3E 79 0B 33 0C 88 9A 20 4C 2F BC 72 8D 80 9F
@@ -834,9 +842,16 @@ void test_sha3() {
 
     // from ai
     {
-        parallel_hash<256> s;
-        s.update(""sv, 0);
-        cmp_bytes(s.digest<32 * 8>(), R"(
+        // NIST Example #1
+        parallel_hash<256> s{8};
+        auto msg = R"(
+            00 01 02 03 04 05 06 07 10 11 12 13 14 15 16 17
+            20 21 22 23 24 25 26 27
+        )"_sb;
+        s.update(bytes_concept{msg.data(), 16});
+        s.update(bytes_concept{msg.data() + 16, 8});
+        s.update(bytes_concept{});
+        cmp_bytes(s.digest<64 * 8>(), R"(
             bc1ef124da34495e948ead207dd9842235da432d2bbc54b4c110e64c451105531b7f2a3e0ce055c02805e7c2de1fb746af97a1dd01f43b824e31b87612410429
         )"_sb);
     }
@@ -4224,6 +4239,7 @@ auto test_all() {
     test_sha1();
     test_sha2();
     test_sha3();
+    test_cshake();
     test_blake2();
     test_blake3();
     test_sm3();
@@ -4277,9 +4293,10 @@ int main() {
         // test_aes();
         //test_sha1();
         //test_sha2();
-        test_sha3();
-        test_blake2();
-        test_blake3();
+        //test_sha3();
+        test_cshake();
+        //test_blake2();
+        //test_blake3();
         // test_sm3();
         // test_sm4();
         //test_ec();

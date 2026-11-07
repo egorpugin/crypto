@@ -105,7 +105,7 @@ struct kmac_base : cshake_base<ShakeType, FunctionName, CustomizationString> {
         });
     }
     template <auto Bits> requires (!XOF)
-        auto digest() noexcept {
+    auto digest() noexcept {
         finalize1<Bits>();
         array<Bits / 8> hash;
         base::squeeze(hash);
@@ -121,24 +121,7 @@ struct kmac_base : cshake_base<ShakeType, FunctionName, CustomizationString> {
         base::encode_string(t);
         (base::encode_string(args), ...);
     }
-    // block_size_bytes also can be up to 2^2040
-    void update(auto &&data, size_t block_size_bytes) requires (ParallelHash) {
-        auto n = divceil(data.size(), block_size_bytes);
-        auto B = block_size_bytes;
-        base::left_encode(B);
-        auto p = data.data();
-        auto end = p + data.size();
-        while (p < end) {
-            cshake<ShakeType> s;
-            s.update(bytes_concept{p,std::min(B,(decltype(B))(end-p))});
-            s.finalize();
-            auto r = s.template squeeze<ShakeType * 2>();
-            base::update(r.data(), r.size());
-            p += B;
-        }
-        base::right_encode(n);
-    }
-private:
+protected:
     template <auto Bits>
     auto finalize1() noexcept {
         base::right_encode(Bits);
@@ -184,17 +167,68 @@ struct tuple_hash_xof<128, CustomizationString> : kmac_base<128, tuple_hash_func
 template <auto CustomizationString>
 struct tuple_hash_xof<256, CustomizationString> : kmac_base<256, tuple_hash_function_id, CustomizationString, true> {};
 
+template <auto ShakeType, auto CustomizationString = ""_s, bool XOF = false>
+struct parallel_hash_base : kmac_base<ShakeType, parallel_hash_function_id, CustomizationString, XOF> {
+    using base = kmac_base<ShakeType, parallel_hash_function_id, CustomizationString, XOF>;
+    using cbase = base::base;
+
+    size_t block_size_bytes;
+    size_t bytes{};
+
+    parallel_hash_base(size_t block_size_bytes) : base{}, block_size_bytes{block_size_bytes} {
+        // block_size_bytes also can be up to 2^2040
+        if (block_size_bytes == 0) {
+            throw std::runtime_error{"bad block size"};
+        }
+        auto B = block_size_bytes;
+        base::left_encode(B);
+    }
+    void update(auto &&data) {
+        if (bytes % block_size_bytes != 0) {
+            throw std::runtime_error{"invalid usage: last block was already added! call digest() now"};
+        }
+        auto p = data.data();
+        auto end = p + data.size();
+        bytes += data.size();
+        while (p < end) {
+            cshake<ShakeType> s;
+            s.update(bytes_concept{p,std::min(block_size_bytes,(decltype(block_size_bytes))(end-p))});
+            s.finalize();
+            auto r = s.template squeeze<ShakeType * 2>();
+            cbase::update(r.data(), r.size());
+            p += block_size_bytes;
+        }
+    }
+    template <auto Bits> requires (!XOF)
+    auto digest() noexcept {
+        finalize1<Bits>();
+        array<Bits / 8> hash;
+        base::squeeze(hash);
+        return hash;
+    }
+    auto finalize() noexcept requires (XOF) {
+        finalize1<0>();
+    }
+private:
+    template <auto Bits>
+    auto finalize1() noexcept {
+        auto n = divceil(bytes, block_size_bytes);
+        base::right_encode(n);
+        base::template finalize1<Bits>();
+    }
+};
+
 template <auto ShakeType, auto CustomizationString = ""_s> struct parallel_hash;
 template <auto ShakeType, auto CustomizationString = ""_s> struct parallel_hash_xof;
 
 template <auto CustomizationString>
-struct parallel_hash<128, CustomizationString> : kmac_base<128, parallel_hash_function_id, CustomizationString> {};
+struct parallel_hash<128, CustomizationString> : parallel_hash_base<128, CustomizationString> {};
 template <auto CustomizationString>
-struct parallel_hash<256, CustomizationString> : kmac_base<256, parallel_hash_function_id, CustomizationString> {};
+struct parallel_hash<256, CustomizationString> : parallel_hash_base<256, CustomizationString> {};
 
 template <auto CustomizationString>
-struct parallel_hash_xof<128, CustomizationString> : kmac_base<128, parallel_hash_function_id, CustomizationString, true> {};
+struct parallel_hash_xof<128, CustomizationString> : parallel_hash_base<128, CustomizationString, true> {};
 template <auto CustomizationString>
-struct parallel_hash_xof<256, CustomizationString> : kmac_base<256, parallel_hash_function_id, CustomizationString, true> {};
+struct parallel_hash_xof<256, CustomizationString> : parallel_hash_base<256, CustomizationString, true> {};
 
 } // namespace crypto
