@@ -226,7 +226,7 @@ struct json_raw {
     }
     static auto eat_string(std::string_view &p) {
         auto start = p.data();
-        while (!(p[0] == '\"' && *(p.data()-1) != '\\')) {
+        while (!p.empty() && !(p[0] == '\"' && *(p.data()-1) != '\\')) {
             p.remove_prefix(1);
         }
         return std::string_view{start, p.data()};
