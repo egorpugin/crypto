@@ -74,6 +74,10 @@ struct gcm {
         return out;
     }
     auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
+        bytes_concept enc{data};
+        if (enc.size() < tag_size_bytes) {
+            throw std::runtime_error{"data error"};
+        }
         set_iv(nonce);
         auto ciphered_data = data.subspan(0, data.size() - tag_size_bytes);
         std::string out(data.size() - tag_size_bytes, 0);

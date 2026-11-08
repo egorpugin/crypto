@@ -47,6 +47,11 @@ struct chacha20_poly1305_aead {
         return out;
     }
     auto decrypt_with_tag(auto &&nonce, auto &&data, auto &&auth_data) {
+        bytes_concept enc{data};
+        if (enc.size() < tag_size_bytes) {
+            throw std::runtime_error{"data error"};
+        }
+
         chacha20 c{k.data(), nonce.data()};
         c.set_counter(1);
 
