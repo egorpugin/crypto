@@ -18,7 +18,7 @@ namespace crypto {
 
 auto get_random_secure_bytes(u8 *p, size_t len) {
 #ifdef _WIN32
-    if (BCryptGenRandom(0, p, len, BCRYPT_USE_SYSTEM_PREFERRED_RNG) < 0) {
+    if (!BCRYPT_SUCCESS(BCryptGenRandom(0, p, len, BCRYPT_USE_SYSTEM_PREFERRED_RNG))) {
         throw std::runtime_error{"cannot get random bytes"};
     }
 #else
