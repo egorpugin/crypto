@@ -124,6 +124,9 @@ struct bigint {
         auto nail = 0;
         auto numb = 8 * size - nail;
         auto count1 = (mpz_sizeinbase(*this, 2) + numb - 1) / numb;
+        if (count1 > count) {
+            throw std::runtime_error{"bigint error"};
+        }
 
         std::string s(count, 0);
         auto p = s.data();
