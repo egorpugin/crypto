@@ -8,6 +8,7 @@
 #include "sha2.h"
 #include "hmac.h"
 #include "oid.h"
+#include "random.h"
 
 namespace crypto::rsa {
 

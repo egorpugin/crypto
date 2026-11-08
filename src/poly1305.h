@@ -3,6 +3,8 @@
  * poly1305-donna-unrolled.c from https://github.com/floodyberry/poly1305-donna
  */
 
+#pragma once
+
 #include <helpers.h>
 
 #define mul32x32_64(a, b) ((uint64_t)(a) * (b))
