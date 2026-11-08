@@ -18,7 +18,7 @@ struct sha1 : hash_traits<sha1> {
     u32 state[state_size] = {
         0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0,
     };
-    u8 buffer[64]{};
+    alignas(8) u8 buffer[64]{};
     int blockpos{};
     u64 n_bytes{};
 
