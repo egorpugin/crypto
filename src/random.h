@@ -22,8 +22,12 @@ auto get_random_secure_bytes(u8 *p, size_t len) {
         throw std::runtime_error{"cannot get random bytes"};
     }
 #else
-    if (getentropy(p, len) == -1) {
-        throw std::runtime_error{"cannot get entropy"};
+    while (len > 0) {
+        auto l = std::min(len, 256uz);
+        if (getentropy(p, l) == -1) {
+            throw std::runtime_error{"cannot get entropy"};
+        }
+        len -= l;
     }
 #endif
 }
