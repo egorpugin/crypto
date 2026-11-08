@@ -3616,7 +3616,7 @@ void test_jwt() {
             std::println("{}", (std::string)x);
         }
     };
-    auto check_ps512 = [&](auto &&payload, auto &&pkey, auto &&pubkey, auto &&res) {
+    auto check_ps512 = [&](auto &&payload, auto &&pkey, auto &&pubkey) {
         jwt x{payload};
         jwt::ps<512> h{};
         x.sign(h, pkey);
@@ -3624,7 +3624,7 @@ void test_jwt() {
             std::println("{}", (std::string)x);
         }
     };
-    auto verify_ps512 = [&](auto &&payload, auto &&pkey, auto &&pubkey, auto &&res) {
+    auto verify_ps512 = [&](auto &&payload, auto &&pkey, auto &&pubkey) {
         jwt x{payload};
         jwt::ps<512> h{};
         if (!cmp_base(x.verify(h, pubkey), true)) {
@@ -3655,11 +3655,11 @@ void test_jwt() {
         "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.MmNFMRvbzG6eb9kYkHXRMwOiEbkDBMXIQOk0Vrnipt4GL39Vz-y5YayzgfUOE_-xZdQGWYQWhxGnBIBQDRqkIBR1UMzL_adWd4FgpdMxaGdXScWupTj8_chBPsCzYvvImqm0b5buLHSs7FwXUVrMeEodpN3lyeuu8RV7vwTiitV3HwuQdm9z5TcOSPJjYw0tv1qNfoKscNiJK4-1VGl00rbneKevRKtlmuz8ddLMW7el-IoY9mwZyEkFpL5BsWZUiYN_64PgTmGYuBN7qU32PgWX9QAgwn6YjgwaY43pyet65jUwC7-bx2QnL6lBeja3rACuk3ph0PWNUZHZgNXbrg"_jwt);
 
     // salt is different every time, but verify will work
-    check_ps512(R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk, pubk, ""_jwt);
-    check_ps512(R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk, pubk, ""_jwt);
+    check_ps512(R"({"loggedInAs":"admin","iat":1422779638} )"_json, pk, pubk);
+    check_ps512(R"({"sub":"1234567890","name": "John Doe" ,"iat": 1516239022})"_json, pk, pubk);
     verify_ps512(
         R"(eyJhbGciOiJQUzUxMiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.V0xxUc58hL2QGsrKdeAWRCFqZULhYg98lNrHkMVqo8nB1No88-VHmti1EIVvZSV2fxMGNXbu0xNZ4qUMy8x43JieP4uvWGggX5KZTZn_dRpqtZKfC7o6pt5F2lwetnQjp9bhsYGqbOoQ9MLchRKg4oDtCYIl03yE4oiJuRQR-FobKHW-M61vkXGGvcnTL3AUyvyLgFRXYzzYPAy3JIhmLjy4IqQ8s4Vrz9sRiGw6zUpl3YSk0gq7KUdxR6DTtk5HF-WSHwNKtvmpgEFfuxHJm0amH3RQwvx-vwUjGTEogpOleeaYTUvWgzv-D9DHB5lW6uQbs2P7xf0ZWJ_wnHU2Dg)",
-        pk, pubk, ""_jwt);
+        pk, pubk);
 }
 
 void test_hpke() {
