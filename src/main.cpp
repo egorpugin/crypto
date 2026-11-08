@@ -4116,6 +4116,19 @@ ed 10 1d ae d5 cf e9 f8 32 06 a4 bb 2b f5 1f a2
     test_url("ff"sv, "ZmY"s);
     test_url("fff"sv, "ZmZm"s);
     test_url("ffff"sv, "ZmZmZg"s);
+
+    // not working atm
+    /*{
+        std::string high_bytes = "\xff\xff\xff";
+
+        auto b58_enc = base58::encode(high_bytes);
+        auto b58_dec = base58::decode(b58_enc);
+        cmp_bytes(high_bytes, b58_dec);
+
+        auto b62_enc = base62::encode(high_bytes);
+        auto b62_dec = base62::decode(b62_enc);
+        cmp_bytes(high_bytes, b62_dec);
+    }*/
 }
 
 // AI
