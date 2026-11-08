@@ -567,8 +567,11 @@ struct curve {
         }
 
         bigint k = q, r, s;
+        private_key_type rng;
         while (1) {
-            get_random_secure_bytes(k.data(), k.size());
+            get_random_secure_bytes(rng);
+            k = bytes_to_bigint(rng);
+
             if (k > 0 && k < q) {
                 auto c = k * ec.G;
                 r = c.x % q;
@@ -842,8 +845,11 @@ struct sm2_base : secp<PointSizeBits, Params...> {
         auto e = bytes_to_bigint(hash<Hash>(id, message, base::public_key()));
 
         bigint k = q, r, s;
+        typename base::private_key_type rng;
         while (1) {
-            get_random_secure_bytes(k.data(), k.size());
+            get_random_secure_bytes(rng);
+            k = bytes_to_bigint(rng);
+
             if (0 < k && k < q) {
                 auto x1 = (k * ec.G).x;
                 r = (e + x1) % q;
