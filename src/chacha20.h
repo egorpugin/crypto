@@ -77,6 +77,22 @@ void chacha_block(u32 *in, u32 *out, int num_rounds) {
 
 template <auto N>
 struct chacha {
+    // prevents UB when calling chacha_block(s,...)? C++ [expr.add]
+    //union {
+    //    u32 d[16];
+    //    struct {
+    //        u32 s[4]{
+    //            0x61707865,
+    //            0x3320646e,
+    //            0x79622d32,
+    //            0x6b206574,
+    //        };
+    //        u32 key[8];
+    //        u32 counter;
+    //        u32 nonce[3];
+    //    } s;
+    //} u;
+
     u32 s[4]{
         0x61707865,
         0x3320646e,
@@ -106,8 +122,8 @@ struct chacha {
             }
         }
     }
-    void set_counter(u32 counter) {
-        this->counter = counter;
+    void set_counter(u32 c) {
+        counter = c;
     }
 };
 using chacha20 = chacha<20>;
