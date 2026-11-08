@@ -28,8 +28,12 @@ struct base_raw {
     static inline constexpr auto can_have_tail = lcm == encoded_block_size;
     static inline constexpr auto max_tail = encoded_block_size - divceil(byte_bits, n_bits);
 
+    // our algorithm does not work for base58, base62
+    // simple test: roundtrip "\xff\xff\xff" bytes
+    static_assert(Alphabet.size() == 1 << n_bits);
+
     static consteval auto make_decoder() {
-        array<128> alph{};
+        array<256> alph{};
         for (int i = 0; auto &&c : Alphabet) {
             alph[c] = i++;
         }
@@ -72,7 +76,7 @@ struct base_raw {
             }
             sz = 0;
             if constexpr (Encode) {
-                int i = 0;
+                int i{};
                 for (; i < real_data_size * byte_bits; i += n_bits) {
                     *p++ = Alphabet[get_bits(i)];
                 }
@@ -96,9 +100,13 @@ struct base_raw {
         // 76543210 76543210 76543210 ...
         // to         1          2
         // 01234567 89012345 67890123 ...
-        u8 get_bits(auto &&start) const {
+        static auto get_bit_pos(auto &&start) {
             auto b1 = start / byte_bits;
             auto b2 = (start + n_bits - 1) / byte_bits;
+            return std::tuple{b1,b2};
+        }
+        u8 get_bits(auto &&start) const {
+            auto [b1,b2] = get_bit_pos(start);
             if (b1 == b2) {
                 auto offset = byte_bits - start % byte_bits;
                 return (data[b1] >> (offset - n_bits)) & ((1 << n_bits) - 1);
@@ -111,8 +119,7 @@ struct base_raw {
             }
         }
         static void set_bits(u8 value, auto &&start, auto &p) {
-            auto b1 = start / byte_bits;
-            auto b2 = (start + n_bits) / byte_bits;
+            auto [b1,b2] = get_bit_pos(start);
             if (b1 == b2) {
                 auto bits1 = byte_bits - start % byte_bits - n_bits;
                 p[b1] |= value << bits1;
@@ -179,8 +186,9 @@ struct base16    : base_raw<16, "0123456789ABCDEF"_s> {};
 struct base32    : base_raw<32, "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"_s> {};
 struct base32extended_hex
                  : base_raw<32, "0123456789ABCDEFGHIJKLMNOPQRSTUV"_s> {};
-struct base62    : base_raw<62, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"_s> {};
+// these has different encoding based on division
 //struct base58    : base_raw<58, "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"_s> {};
+//struct base62    : base_raw<62, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"_s> {};
 struct base64    : base_raw<64, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"_s> {};
 template <bool Pad = false>
 struct base64url : base_raw<64, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"_s, '=', Pad> {};
