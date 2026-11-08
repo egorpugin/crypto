@@ -71,6 +71,9 @@ struct jwt {
         header["typ"] = "JWT";
     }
     jwt(std::string_view s) {
+        if (std::ranges::count(s, '.') != 2) {
+            throw std::runtime_error{"bad jwt"};
+        }
         auto sp = std::views::split(s, '.');
         auto it = std::begin(sp);
         header = json::parse(b64::decode(std::string_view(*it++)));
