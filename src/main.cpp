@@ -47,14 +47,16 @@
 
 // see https://csrc.nist.gov/projects/cryptographic-standards-and-guidelines/example-values for examples
 
-#define LOG_TEST()                                                                                                                                             \
+#define LOG_TEST_1()                                                                                                                                             \
     std::print("{} ... ", __FUNCTION__);                                                                                                                       \
     std::flush(std::cout);                                                                                                                                     \
     scoped_timer ____timer;
-#define LOG_TEST_TRY() LOG_TEST() try {
+#define LOG_TEST_TRY() LOG_TEST_1() try {
 #define LOG_TEST_TRY_END() \
     } catch (std::exception &e) {std::cout << e.what() << "\n"; std::flush(std::cout); cmp_base(1, 0);} \
     catch (...) {cmp_base(1, 0);}
+#define LOG_TEST() LOG_TEST_TRY()
+#define LOG_TEST_END() LOG_TEST_TRY_END()
 
 #define SRCLOC std::source_location loc = std::source_location::current()
 
@@ -290,6 +292,8 @@ void test_aes() {
             cmp_l(plain, &out2);
         }
     }
+
+    LOG_TEST_END();
 }
 
 void test_sha1() {
@@ -332,6 +336,8 @@ void test_sha1() {
         sha1 sha;
         to_string2(sha, std::string(585, 'a'), "0eb45e04b2491c518efaf14a5735dbf0241ad7d8");
     }
+
+    LOG_TEST_END();
 }
 
 void test_sha2() {
@@ -414,6 +420,8 @@ void test_sha2() {
         to_string2(sha, "message",
                    "f8daf57a3347cc4d6b9d575b31fe6077e2cb487f60a96233c08cb479dbf31538cc915ec6d48bdbaa96ddc1a16db4f4f96f37276cfcb3510b8246241770d5952c");
     }
+
+    LOG_TEST_END();
 }
 
 void test_sha3() {
@@ -537,6 +545,8 @@ void test_sha3() {
             s.squeeze<5120>(),
             "46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762fd75dc4ddd8c0f200cb05019d67b592f6fc821c49479ab48640292eacb3b7c4be141e96616fb13957692cc7edd0b45ae3dc07223c8e92937bef84bc0eab862853349ec75546f58fb7c2775c38462c5010d846c185c15111e595522a6bcd16cf86f3d122109e3b1fdd943b6aec468a2d621a7c06c6a957c62b54dafc3be87567d677231395f6147293b68ceab7a9e0c58d864e8efde4e1b9a46cbe854713672f5caaae314ed9083dab4b099f8e300f01b8650f1f4b1d8fcf3f3cb53fb8e9eb2ea203bdc970f50ae55428a91f7f53ac266b28419c3778a15fd248d339ede785fb7f5a1aaa96d313eacc890936c173cdcd0fab882c45755feb3aed96d477ff96390bf9a66d1368b208e21f7c10d04a3dbd4e360633e5db4b602601c14cea737db3dcf722632cc77851cbdde2aaf0a33a07b373445df490cc8fc1e4160ff118378f11f0477de055a81a9eda57a4a2cfb0c83929d310912f729ec6cfa36c6ac6a75837143045d791cc85eff5b21932f23861bcf23a52b5da67eaf7baae0f5fb1369db78f3ac45f8c4ac5671d85735cdddb09d2b1e34a1fc066ff4a162cb263d6541274ae2fcc865f618abe27c124cd8b074ccd516301b91875824d09958f341ef274bdab0bae316339894304e35877b0c28a9b1fd166c796b9cc258a064a8f57e27f2a5b8d548a728c9444ecb879adc19de0c1b8587de3e73e15d3ce2db7c9fa7b58ffc0e87251773faf3e8f3e3cf1d4dfa723afd4da9097cb3c866acbefab2c4e85e1918990ff93e0656b5f75b08729c60e6a9d7352b9efd2e33e3d1ba6e6d89edfa671266ece6be7bb5ac948b737e41590abe138ce1869c08680162f08863d174e77"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_cshake() {
@@ -855,6 +865,8 @@ void test_cshake() {
             bc1ef124da34495e948ead207dd9842235da432d2bbc54b4c110e64c451105531b7f2a3e0ce055c02805e7c2de1fb746af97a1dd01f43b824e31b87612410429
         )"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_blake2() {
@@ -955,6 +967,8 @@ void test_blake2() {
                    "",
                    "8b3a1b469f6c6b729de307a0ba6ed220d6d178ebb451c465b984d6f73dacb816db441e05697adaf107fa5bf0f952d1b6db4e1a9ccf6d2f55045d22a85a9fa5b6");
     }
+
+    LOG_TEST_END();
 }
 
 void test_blake3() {
@@ -1090,6 +1104,8 @@ void test_blake3() {
         b.update("abc"sv);
         cmp_bytes(b.digest(192), "6437b3ac38465133ffb63b75273a8db548c558465d79db03fd359c6cd5bd9d851fb250ae7393f5d02813b65d521a0d492d9ba09cf7ce7f4cffd900f23374bf0bc08a1fb0b38ed276181ccbd9f7b7edbddf9f86404ad7929605f6ffa3fb1ac87983105f013384f2f11d38879c985d47003804b905f0c38975e28d36804bb60d8c3036536a35fb881af2a7b0a8bcc14e596bc521ca63d659d74324c3aa6bb259fd9f01887ead3dfec31982ac53899cd6e0d7af9cfd271a561539eb6ee2a0912017"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_sm3() {
@@ -1161,6 +1177,8 @@ void test_sm3() {
         auto [r,s] = ec.sign<sm3>(id_a, m);
         cmp_bool(ec.verify<sm3>(id_a, m, pubk, r, s), true);
     }
+
+    LOG_TEST_END();
 }
 
 void test_sm4() {
@@ -1210,6 +1228,8 @@ void test_sm4() {
                             A56834CBCF98C397B4024A2691233B8D
 83DE3541E4C2B58177E065A9BF7B62EC)"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_ec() {
@@ -1458,6 +1478,8 @@ void test_ec() {
         cmp_bytes(pubkey.x, "60FED4BA255A9D31C961EB74C6356D68C049B8923B61FA6CE669622E60F29FB6"_sb);
         cmp_bytes(pubkey.y, "7903FE1008B8BC99A41AE9E95628BC64F2F1B20C2D7E9F5177A3C294D4462299"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_ec25519_448() {
@@ -1520,6 +1542,8 @@ void test_ec25519_448() {
             );
         }
     }
+
+    LOG_TEST_END();
 }
 
 void test_ecdsa() {
@@ -2248,6 +2272,8 @@ void test_ecdsa() {
                       "1FBD0013C674AA79CB39849527916CE301C66EA7CE8B80682786AD60F98F7E78A19CA69EFF5C57400E3B3A0AD66CE0978214D13BAF4E9AC60752F7B155E2DE4DCE3"_sb,
                   });
     }
+
+    LOG_TEST_END();
 }
 
 void test_hmac() {
@@ -2267,6 +2293,8 @@ void test_hmac() {
     f(sha2<512>{}, "b42af09057bac1e2d41708e48a902e09b5ff7f12ab428a4fe86653c73dd248fb82f948a549f7b791a5b41915ee4d1ec3935357e4e2317250d0372afa2ebeeb3a"s,
       "ed9bb695a3ccfe82fea7055e79fad7d225f5cc9c9b7b1808fc7121237a47903f59d8fad228c5710c487541db2bbecb09891b96b87c8718759ca4aa302cc72598"s);
     f(sha3<256>{}, "8c6e0683409427f8931711b10ca92a506eb1fafa48fadd66d76126f47ac2c333"s, "e2f178144221853d60f7e9ddaf13ea57c6bddd54d9bd18b175fc59278f491a63"s);
+
+    LOG_TEST_END();
 }
 
 void test_hkdf() {
@@ -2366,6 +2394,8 @@ d3b4
         cmp_bytes(prk, "2adccada18779e7c2077ad2eb19d3f3e731385dd"_sb);
         cmp_bytes(okm, "2c91117204d745f3500d636a62f64f0ab3bae548aa53d423b0d1f27ebba6f5e5673a081d70cce7acfc48"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_pbkdf2() {
@@ -2423,6 +2453,8 @@ void test_pbkdf2() {
    a1 d4 25 a1 22 58 33 54 9a db 84 1b 51 c9 b3 17
    6a 27 2b de bb a1 d0 78 47 8f 62 b3 97 f3 3c 8d
 )"_sb);
+
+    LOG_TEST_END();
 }
 
 void test_scrypt() {
@@ -2546,6 +2578,8 @@ void test_scrypt() {
     f([](auto &&...args) {
         return scrypt_(args...);;
         });
+
+    LOG_TEST_END();
 }
 
 void test_argon2() {
@@ -2658,6 +2692,8 @@ e6 40 c7 91 80 e8 ed eb 36 e0 44 d7 88 e4 fa af
 69 1b 0f d4 35 a8 81 d2 ed fd cb 57 e0 bc 10 53
     )"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_chacha20() {
@@ -2861,6 +2897,8 @@ f3 9c 64 02 c4 22 34 e3 2a 35 6b 3e 76 43 12 a6
 )"_sb);
         }
     }
+
+    LOG_TEST_END();
 }
 
 void test_chacha20_aead() {
@@ -2948,6 +2986,8 @@ ee ad 9d 67 89 0c bb 22 39 23 36 fe a1 85 1f 38
 72 65 73 73 2e 2f e2 80 9d
 )"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_x509() {
@@ -3003,6 +3043,8 @@ void test_x509() {
         s.add(data2);
         cmp_bool(s.verify_all(trusted3, until1));
     }
+
+    LOG_TEST_END();
 }
 
 void test_pki() {
@@ -3067,6 +3109,8 @@ void test_pki() {
         cmp_bool(s.verify(s, p.certs[keyid3], now));
         cmp_bool(s.verify(s, p.certs[keyid4], now));
     }
+
+    LOG_TEST_END();
 }
 
 void test_streebog() {
@@ -3091,6 +3135,8 @@ void test_streebog() {
         fox(stb, "d2b793a0bb6cb5904828b5b6dcfb443bb8f33efc06ad09368878ae4cdc8245b97e60802469bed1e7c21a64ff0b179a6a1e0bb74d92965450a0adab69162c00fe",
             "fe0c42f267d921f940faa72bd9fcf84f9f1bd7e9d055e9816e4c2ace1ec83be82d2957cd59b86e123d8f5adee80b3ca08a017599a9fc1a14d940cf87c77df070");
     }
+
+    LOG_TEST_END();
 }
 
 void test_grasshopper() {
@@ -3113,6 +3159,8 @@ void test_grasshopper() {
       "88 99 aa bb cc dd ee ff 00 77 66 55 44 33 22 11"_sb, "B2135B9C8EDA608E3D16385C396CB98B"_sb);
     f("77 66 55 44 33 22 11 00 ff ee dd      cc bb aa 99 88 ef cd ab 89 67 45 23 01 10 32 54 76 98 ba dc fe      "_sb,
       "88 99 aa bb cc dd ee ff 00 77 66 55 44 33 22 11"_sb, "DF4B256B59D499A552B77EF74C590B8B"_sb);
+
+    LOG_TEST_END();
 }
 
 void test_mgm() {
@@ -3149,6 +3197,8 @@ void test_mgm() {
         cmp_base(tag, bytes_concept{"79 01 E9 EA 20 85 CD 24 7E D2 49 69 5F 9F 8A 85"_sb});
         cmp_base(P, bytes_concept{m.decrypt(nonce, E, A, tag)});
     }
+
+    LOG_TEST_END();
 }
 
 void test_gost() {
@@ -3168,6 +3218,8 @@ void test_gost() {
     cmp_bytes(gost::kdf<streebog<256>>("00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f 10 11 12 13 14 15 16 17 18 19 1a 1b 1c 1d 1e 1f"_sb, "26 bd b8 78"_sb,
                                        "af 21 43 41 45 65 63 78"_sb),
               "a1 aa 5f 7d e4 02 d7 b3 d3 23 f2 99 1c 8d 45 34 01 31 37 01 0a 83 75 4f d0 af 6d 7c d4 92 2e d9"_sb);
+
+    LOG_TEST_END();
 }
 
 void test_dns() {
@@ -3315,6 +3367,9 @@ void test_tls() {
     }
 #endif
 
+    run("example.com");
+    return;
+
     //run("software-network.org");
 
     // not working with this suite anymore?
@@ -3374,6 +3429,8 @@ void test_tls() {
     //  return tls 1.0/1.1
     // run("https://tlsgost-512.cryptopro.ru");
     // run("https://tlsgost-512.cryptopro.ru:1443");
+
+    LOG_TEST_END();
 }
 
 void test_email() {
@@ -3575,6 +3632,8 @@ Joe.
     //std::println("{}", base64::encode(s.ed.public_key()));
 
     //e.send();
+
+    LOG_TEST_END();
 }
 
 void test_ssh2() {
@@ -3584,6 +3643,8 @@ void test_ssh2() {
 
     ssh2 s;
     s.connect("fedora@software-network.org"sv);
+
+    LOG_TEST_END();
 }
 
 void test_jwt() {
@@ -3660,6 +3721,8 @@ void test_jwt() {
     verify_ps512(
         R"(eyJhbGciOiJQUzUxMiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE0MjI3Nzk2MzgsImxvZ2dlZEluQXMiOiJhZG1pbiJ9.V0xxUc58hL2QGsrKdeAWRCFqZULhYg98lNrHkMVqo8nB1No88-VHmti1EIVvZSV2fxMGNXbu0xNZ4qUMy8x43JieP4uvWGggX5KZTZn_dRpqtZKfC7o6pt5F2lwetnQjp9bhsYGqbOoQ9MLchRKg4oDtCYIl03yE4oiJuRQR-FobKHW-M61vkXGGvcnTL3AUyvyLgFRXYzzYPAy3JIhmLjy4IqQ8s4Vrz9sRiGw6zUpl3YSk0gq7KUdxR6DTtk5HF-WSHwNKtvmpgEFfuxHJm0amH3RQwvx-vwUjGTEogpOleeaYTUvWgzv-D9DHB5lW6uQbs2P7xf0ZWJ_wnHU2Dg)",
         pk, pubk);
+
+    LOG_TEST_END();
 }
 
 void test_hpke() {
@@ -3808,6 +3871,8 @@ void test_hpke() {
     //    "77c54364339fba0fa0182c1ed0165ad606e387146503619f664305cb0d8776dd"_sb,
     //    ""_sb, ""_sb,
     //    mode_type::auth_psk, psk, psk_id, ""_sb, "84f3466bd5a03bde6444324e63d7560e7ac790da4e5bbab01e7c4d575728c34a"_sb);
+
+    LOG_TEST_END();
 }
 
 void test_mlkem() {
@@ -3899,6 +3964,8 @@ void test_mlkem() {
             k.public_key_,
             "744793A77A843520C9EB8B057FF28854193916F711902B1F8B4B9C235251FBDC8040C8A38C022557DB50CB28CC8DF99A859C2EC017C24015877D2A3572571FC783BF1E984401C11158E32A95351BE407A8AE6B5E054A33C2427F4A346761559F776671095B495074AF5CAC98D94297FB05624443CAA8151AF3A497F73203EF184CC7336650427CDFD47B10245EDDE30C3075933E431DC1B1C2A77B2073257C2AB73ABE706DE138CD54922CDB09CEFA60BA473092E43BC3E3CB951939B1C4CB2AFDCB4F8A5310FE9A790E560B25A40AC9E18D35A27238A60A126B398980BE8425C8A01B930FB336CB359F58131BBEE6AC450B8C811B2DDEA836F9D0C2C72A709E134321DCA727641A1D678A8E0CAE6BD6BBDAD8021AE3C1B6067FB1ECA42D215EC2C4297F6891567712F75047775B741713097B1271AFF026323A134DC20DEBFACE46D5B01820A9A862BA93E3AFCB5AC4C2204AF2E15787D0C857896D24DCBD6393C1FDDC12CDDA6A1F337B18D6C3CCD5283B37239A80424780399281C3FF1967B3BB6DAE499D42F511997077F38A8D63EB319342B1BC749924E467C6A2A11728826BEB52A39BA7A1A03C93C613D36A3F1F544B72A8BEC24009FDE07E677101456A2B76EC3353CB8944C339081A4B59672CD1B5446FFA6FC0B468D9FC83EBF896CE12158AFAA6812028F54B7920636784D3B3854030D05A9C19D936C6FACC5B81070CD524728A96A58A2E1207C73A4C533DDB00098141158B11DB674500781F47DB9B45F3CDE244502D377886418287C22075B2BD172606CCFA6F4914844525C113BCC7C049B3D14A2DF91B6C62E0A2EE5922DA3194DFC0C506D48ECCF5697BA31BD0839A4D3B3078CB7C2936CE1C507B0B54023585CADA6BA5657726075659DE16A6403110CE38A247CA85CE02C1DAC79FD175BCAAFA116F710516A4B73D78BFC6F9854228B6C5F035946B1F61B629F31328A65556C8F0661D58622C6021F58C1ACF154C6E78BCF563352AFB89B824513A35502F117861A34C52B1011F696A85185186BBA23B518C720763529C181D902CBBB58CFEF77CD2E72F4780979FD46126C0A4BC1965A6E070FC284B1F856852110E19C268390CA9494116EB293F1A111ABEC1AF04F706B114617F0362B3DB4B99E076287AAFB7127FE2C68904F61664D63D4FB267CE07AD5A659FB81886F8E0A9C26261A0055F48F432E9F8242C439F58B5A21EB777483B2E68B3B1118562430270340243F1E87C22CB5BE2F167DC39CF4C69B8B8E9B726256CBE605342F47E23A871BA7250BDA8997FD474B3375920522F2C511B3EA35CF459342893AA12B128CC2184E304335AC7BA04653898590A664672FE744F301651442BB341D32F36262C576A50F803B02F91105FEBCABEF7030D2A76CBEC6C2CF36283590BB44842853102D3D350801167D7A96968648C0CAB9AFD39CB7F658909283CB83CA78544929AD90069CA3E660196792A654A911CAD7C23024C90E25AA61B30A4D568C5A5C12A53565A93E910D5940EF3583856017BC25B05C4473F48584C6908C13D2B19E7A3A7992976D31A464807199AE3A6307CA55765590F6B4721632D70FA47E2C1098E36898BE3125E43C61CBB7A6C246CBA0002CF325A5D337989289BCCDA54835511DE9656287363DEE85033410AEAE1"_sb);
     }
+
+    LOG_TEST_END();
 }
 
 void test_mldsa() {
@@ -3942,6 +4009,8 @@ void test_mldsa() {
     f(ml_dsa<44>{}, seed, msg, ctx, rnd, t44);
     f(ml_dsa<65>{}, seed, msg, ctx, rnd, t65);
     f(ml_dsa<87>{}, seed, msg, ctx, rnd, t87);
+
+    LOG_TEST_END();
 }
 
 void test_slh_dsa() {
@@ -4066,6 +4135,8 @@ void test_slh_dsa() {
         );
 #endif
     }
+
+    LOG_TEST_END();
 }
 
 void test_base64() {
@@ -4129,6 +4200,8 @@ ed 10 1d ae d5 cf e9 f8 32 06 a4 bb 2b f5 1f a2
         auto b62_dec = base62::decode(b62_enc);
         cmp_bytes(high_bytes, b62_dec);
     }*/
+
+    LOG_TEST_END();
 }
 
 // AI
@@ -4240,6 +4313,8 @@ void test_different() {
     be24_reassign();
     be_stream_bounds();
     json_null();
+
+    LOG_TEST_END();
 }
 
 int return_code() {
@@ -4307,7 +4382,7 @@ int main() {
         //test_sha1();
         //test_sha2();
         //test_sha3();
-        test_cshake();
+        //test_cshake();
         //test_blake2();
         //test_blake3();
         // test_sm3();
